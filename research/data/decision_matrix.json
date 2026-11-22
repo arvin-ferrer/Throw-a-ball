@@ -1,0 +1,441 @@
+{
+  "collection_date": "2026-11-22",
+  "scoring_scale": "1 (very weak / high risk) to 10 (exceptional / evidence-backed strength)",
+  "anchor_profile": "Solo indie developer (zero/small budget), late-2026 Roblox RFY (28-day window, PTR + First-Play Bounce Rate, Intentional Co-Play, Age-Cohort Weighting)",
+  "concepts": [
+    {
+      "id": "C0",
+      "name": "Preliminary Concept (GameIdea.txt As Written)",
+      "archetype": "Baseline Preliminary Concept",
+      "overall_confidence": "High",
+      "scores": {
+        "player_demand": {
+          "score": 6.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Bosses and eggs have broad casual recognition, but pure training/egg simulators are heavily saturated and declining (Pet Sim 99 -95%; training_attribute_grinding only 13.6% of top sample)."
+        },
+        "player_retention_potential": {
+          "score": 3.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "5-minute boss wait timers and stationary shooting trigger severe <60s/61-180s bounce; hatched eggs lack a defined mechanical payoff loop; unrestricted portals let veterans carry newbies past progression."
+        },
+        "development_feasibility": {
+          "score": 4.5,
+          "confidence": "High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Multiple distinct hand-crafted biomes + unique bosses per portal create an unsustainable art/content treadmill for a solo zero-budget developer."
+        },
+        "core_gameplay_appeal": {
+          "score": 3.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Standing stationary shooting targets lacks tactile kinetic skill, movement, dodging, or comedy; high risk of becoming a 3-minute killer."
+        },
+        "organic_discovery_potential": {
+          "score": 4.0,
+          "confidence": "High",
+          "evidence_tag": "Officially confirmed",
+          "rationale": "Waiting timers and stationary grinding hurt First-Play Bounce Rate, 28-day Play Days, and auto-play Gameplay Video appeal on Home RFY."
+        },
+        "viral_and_social_potential": {
+          "score": 3.5,
+          "confidence": "High",
+          "evidence_tag": "Observational correlation",
+          "rationale": "Strips away Steal An Egg's clippable PvP/heist adrenaline while offering minimal cooperative interdependence or shareable Roblox Moments peaks."
+        },
+        "competitive_differentiation": {
+          "score": 3.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Indistinguishable from hundreds of generic simulator/egg templates; outgunned by Do Big-backed Steal An Egg and established incumbents."
+        },
+        "monetization_potential": {
+          "score": 5.5,
+          "confidence": "Medium",
+          "evidence_tag": "Officially confirmed",
+          "rationale": "Egg/damage passes monetize well at scale, but Robux-linked eggs or Luck Boosts trigger strict 2026 Paid Random Items blocks across BE/NL/UK/AU/Brazil."
+        },
+        "long_term_sustainability": {
+          "score": 3.5,
+          "confidence": "High",
+          "evidence_tag": "Observational correlation",
+          "rationale": "Pure numerical damage scaling + static biomes suffer rapid content exhaustion and hyperinflation without a full studio update team."
+        }
+      }
+    },
+    {
+      "id": "C1",
+      "name": "C1: Orbstrike: Boss Rush (Improved GameIdea)",
+      "archetype": "Improved Version of Existing Concept",
+      "overall_confidence": "Medium-High",
+      "scores": {
+        "player_demand": {
+          "score": 7.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Observational correlation",
+          "rationale": "Active arcade boss-rush combat + elemental trick-shot collectibles taps steady action/RPG appetite without competing head-on with clicker click-spam."
+        },
+        "player_retention_potential": {
+          "score": 7.0,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Instant player-triggered Boss Summon Pads eliminate 5-min wait bounce; hatched Orb-Cores grant active curve/ricochet abilities creating real build progression."
+        },
+        "development_feasibility": {
+          "score": 6.5,
+          "confidence": "High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Collapsing multi-biomes into 1 modular re-themed arena cuts world art dramatically, though coding fun telegraphed boss state machines still takes solid solo engineering."
+        },
+        "core_gameplay_appeal": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Mobile-friendly moving/dodging + curved trick-shot orbs + active 30s target drills feel dramatically more kinetic than stationary target clicking."
+        },
+        "organic_discovery_potential": {
+          "score": 7.0,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Flashy boss telegraphs and glowing trick-shot arcs read cleanly in Home Gameplay Videos; lower bounce via instant boss trigger."
+        },
+        "viral_and_social_potential": {
+          "score": 6.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Co-op 1-4p boss scaling and synchronized orb combos create decent Moments clips, though less inherently comedic or dramatic than heist/chaos loops."
+        },
+        "competitive_differentiation": {
+          "score": 7.0,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Dodgeball-style arcade boss rush with hatched active trick-shot orbs stands apart from static pet simulators."
+        },
+        "monetization_potential": {
+          "score": 7.5,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Earned-only Orb-Eggs avoid Paid Random Items bans while cosmetic orb trails, extra loadout slots, 2x core shards, and co-op revives monetize cleanly."
+        },
+        "long_term_sustainability": {
+          "score": 6.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Boss modifier mutators extend replayability, but players still eventually expect fresh boss patterns over time."
+        }
+      }
+    },
+    {
+      "id": "C2",
+      "name": "C2: Egg Heist: Boss Vault (Reimagined PvE Extraction)",
+      "archetype": "Significantly Reimagined Existing Concept",
+      "overall_confidence": "High",
+      "scores": {
+        "player_demand": {
+          "score": 9.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Directly bridges 2026's two largest proven demand surges: Steal An Egg's extraction-egg fantasy (14.3M peak) + 99 Nights / Dead Rails co-op survival tension (120k-204k CCU)."
+        },
+        "player_retention_potential": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Combines push-your-luck 10-min PvE heist runs (D7-D28 replayability), co-op distraction roles (Intentional Co-Play), and bounded 12h offline Vault income (D1 check-in hook) with zero toxic PvP griefing."
+        },
+        "development_feasibility": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Uses 1 modular vault corridor with patrol/aggro boss AI, 4 throwable utility orbs (Decoy/Freeze/Boomerang/Grapple), and simple base pedestals—cleanly buildable solo in 4-6 weeks."
+        },
+        "core_gameplay_appeal": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "High-tension stealth/stun/grab/sprint-to-extraction loop delivers constant adrenaline, tactile physics throws, and meaningful greed-vs-safety decisions."
+        },
+        "organic_discovery_potential": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Officially confirmed",
+          "rationale": "Instantly legible 3-second hook for Home Auto-Play Videos & Roblox Moments; strong PTR via proven heist/egg imagery; low <60s bounce via instant Vault start."
+        },
+        "viral_and_social_potential": {
+          "score": 9.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Narrowly escaping an enraged Boss carrying a glowing Mythic Egg while a friend throws a Freeze Orb creates natural 15-second TikTok/Moments comedy and co-op invites."
+        },
+        "competitive_differentiation": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Differentiates sharply from Steal An Egg & Steal a Brainrot by replacing toxic PvP base-robbing with skillful PvE co-op Boss Vault extraction & utility orb throws."
+        },
+        "monetization_potential": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Purely earned Vault Eggs stay 100% exempt from Paid Random Items bans; monetizes via extra Vault display pedestals, cosmetic orb skins, mid-run revives, VIP Club subscription, and Private Servers."
+        },
+        "long_term_sustainability": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Procedural vault trap/modifier mutators + co-op role interdependence + bounded non-exponential economy sustain 28-day retention far better than static simulators."
+        }
+      }
+    },
+    {
+      "id": "C3",
+      "name": "C3: Curve Clash: Duel Pads (Ultra-Lean Solo Arcade)",
+      "archetype": "Simplified Low-Development-Cost Alternative",
+      "overall_confidence": "High",
+      "scores": {
+        "player_demand": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Validated by RIVALS (110k-200k CCU, 19.4B visits), Illegal Soccer (>40% peak retention), and Blade Ball heritage across mobile/PC competitive players."
+        },
+        "player_retention_potential": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Skill-based PvP duel loops top our 44-game dataset in peak-to-baseline retention (11%-43%); win streaks, daily Contracts, and Ranked ladders drive strong 28-day Play Days."
+        },
+        "development_feasibility": {
+          "score": 9.5,
+          "confidence": "High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Smallest art and content footprint of all viable concepts: 1 lobby + 3 tiny arenas + 1 polished curve/deflect projectile system + Bot Duel Pad for 1-CCU cold start. Shippable solo in 2-4 weeks!"
+        },
+        "core_gameplay_appeal": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Instant 90-second trick-shot dodgeball rounds with curved throws, catch-counters, and snappy hitstop feel thrilling on both mobile thumb controls and PC."
+        },
+        "organic_discovery_potential": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Officially confirmed",
+          "rationale": "Ultra-fast <15s time-to-first-duel crushes <60s bounce rate; R15-native competitive appeal strongly attracts 13+/18+ cohorts favored by Q3 2026 age-cohort RFY weighting."
+        },
+        "viral_and_social_potential": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Physical lobby Duel Pads ('1v1 me right now!'), public win-streak halos, and insane curved trick-shot deflections fuel natural Roblox Moments and Shorts clips."
+        },
+        "competitive_differentiation": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Bridges RIVALS' Duel-Pad structure with mobile-accessible curved dodgeball physics (far friendlier to 80% mobile DAU than twitch hitscan aiming)."
+        },
+        "monetization_potential": {
+          "score": 7.5,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Zero-P2W cosmetic economy (ball skins, curve trails, KO finishers, seasonal pass) + higher U.S. 18+ spend share qualifying for $0.0054/R$ DevEx (+42.1% payout!)."
+        },
+        "long_term_sustainability": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Players ARE the content—near-zero content treadmill lets a solo developer sustain multi-year engagement via balance patches, cosmetic seasons, and occasional arena mutators."
+        }
+      }
+    },
+    {
+      "id": "C4",
+      "name": "C4: 12-Minute Outpost (Bite-Sized Co-Op Extraction)",
+      "archetype": "Emerging Market Opportunity Concept",
+      "overall_confidence": "Medium-High",
+      "scores": {
+        "player_demand": {
+          "score": 9.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Directly targets 2026's highest-retention breakout genre (99 Nights 120k-204k CCU, Dandy's World 113k-191k, Dead Rails 6.67B visits) in a mobile-friendly 12-minute format."
+        },
+        "player_retention_potential": {
+          "score": 9.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "93.3% of sustained games feature cooperation; 12-minute push-your-luck runs align perfectly with GameAnalytics P90 session length (14.7m), Creator Rewards (10m+), and 28-day RFY."
+        },
+        "development_feasibility": {
+          "score": 7.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Compact defense-beacon arena with procedural wave mutators and 4 starter classes is solo-buildable in 5-8 weeks, though enemy AI pathfinding & co-op balance add moderate complexity."
+        },
+        "core_gameplay_appeal": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Tense scavenge-fortify-defend waves culminating in an 'Extract Safely vs. Overdrive Wave' team vote creates intense replayable drama."
+        },
+        "organic_discovery_potential": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Officially confirmed",
+          "rationale": "Strong Intentional Co-Play Days, 12-18m Playtime Per User, and high D7-D28 retention match every top priority of the June 15, 2026 RFY algorithm."
+        },
+        "viral_and_social_potential": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Last-second beacon saves, squad revives, and greedy Overdrive wipes generate natural YouTube challenge runs and Moments clips; non-verbal pings solve Jan 2026 age-gated chat."
+        },
+        "competitive_differentiation": {
+          "score": 8.0,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Compresses 60-90 minute survival marathons into crisp 12-minute push-your-luck sessions tailored for mobile players and school-night schedules."
+        },
+        "monetization_potential": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Proven 99 Nights / Dead Rails model: earn-or-buy meta currency for specialized classes + mid-run team revives + cosmetic beacon/gadget skins + zero lootbox legal friction."
+        },
+        "long_term_sustainability": {
+          "score": 9.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Combinatorial classes × wave mutators × co-op mastery deliver the highest systems-driven D30+ durability in the 2026 market."
+        }
+      }
+    },
+    {
+      "id": "C5",
+      "name": "C5: Chaos Kitchen: Throw & Serve (Co-Op Physics Comedy)",
+      "archetype": "Strong Organic Viral & Social Potential Concept",
+      "overall_confidence": "Medium",
+      "scores": {
+        "player_demand": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Observational correlation",
+          "rationale": "Work at a Pizza Place (92.9% rating, 168k Sep 2026 peak) and Dead Rails physics comedy prove enduring appetite, though modern Roblox lacks a direct Overcooked breakout benchmark."
+        },
+        "player_retention_potential": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Strong friend-squad replayability and persistent diner upgrades, though solo public-lobby enjoyment requires careful anti-grief design."
+        },
+        "development_feasibility": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Single compact kitchen room with 4 station interactions, throw/catch item physics, and order timers keeps 3D art scope tiny for a solo dev."
+        },
+        "core_gameplay_appeal": {
+          "score": 8.5,
+          "confidence": "Medium-High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Frantic 4-minute shifts throwing sizzling food over moving hazards delivers instant laughs and crisp tactile feedback."
+        },
+        "organic_discovery_potential": {
+          "score": 8.0,
+          "confidence": "Medium",
+          "evidence_tag": "Officially confirmed",
+          "rationale": "Bright family-friendly comedy qualifies for all-ages Minimal/Mild maturity, Standout Games editorial curation, and strong Roblox Moments clip appeal."
+        },
+        "viral_and_social_potential": {
+          "score": 9.5,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Unmatched 3-second mute readability for TikTok/Shorts/Moments: flying burnt pizzas, ragdoll kitchen fires, chaotic teamwork, and zero chat-wall dependency via visual order bubbles."
+        },
+        "competitive_differentiation": {
+          "score": 9.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Almost zero high-polish modern Overcooked-style physics co-op roguelites exist on Roblox in late 2026."
+        },
+        "monetization_potential": {
+          "score": 6.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Cosmetic chef skins, kitchen themes, chaos-mutator tips, and VIP Diner Club pass are clean and ethical, though ceiling ARPPU trails progression-heavy RPG/extraction loops."
+        },
+        "long_term_sustainability": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Modular shift hazards and friend co-op sustain steady mid-tier play, provided solo/random-fill lobbies stay fun."
+        }
+      }
+    },
+    {
+      "id": "C6",
+      "name": "C6: Relic Forge: Magnet Salvage (Cozy Skill + Crafting Wildcard)",
+      "archetype": "Bonus Underserved Cozy-Crafting Wildcard",
+      "overall_confidence": "Medium",
+      "scores": {
+        "player_demand": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Merges two proven 2025-2026 demand engines: Fisch/Fish It! cozy tension-bar collection (110k-150k+ combined CCU) + The Forge combinatorial crafting (1.05M peak, 94.45% rating)."
+        },
+        "player_retention_potential": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Bestiary completion + 3-relic combinatorial forging recipes + dynamic weather salvage tides drive strong D7-D30 collector stickiness."
+        },
+        "development_feasibility": {
+          "score": 8.0,
+          "confidence": "High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Proved solo-feasible by WoozyNate's Fisch origin: 1 stylish dock/salvage bay + 5-second 2D tension-bar magnet minigame + data-driven 3-slot forging table."
+        },
+        "core_gameplay_appeal": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Relaxing tactile salvage tension bar + satisfying 'what happens if I fuse these 3 relics?' discovery loop, though calmer than high-adrenaline action hits."
+        },
+        "organic_discovery_potential": {
+          "score": 7.5,
+          "confidence": "Medium",
+          "evidence_tag": "Observational correlation",
+          "rationale": "High YouTube/search demand for 'best relic forge recipes' and calm all-ages accessibility, though calmer gameplay videos pop slightly less than chaotic action clips on Moments."
+        },
+        "viral_and_social_potential": {
+          "score": 7.0,
+          "confidence": "Medium",
+          "evidence_tag": "Observational correlation",
+          "rationale": "Shared server salvage-tide totems, rare relic announcements, and cozy dock hangouts create solid community warmth, with lower viral-clip velocity than PvP/heist chaos."
+        },
+        "competitive_differentiation": {
+          "score": 8.5,
+          "confidence": "High",
+          "evidence_tag": "Reasonable inference",
+          "rationale": "Captures cozy Fisch energy without fighting Fisch & Fish It! directly, adding The Forge's combinatorial crafting hook in a fresh magnet-salvage theme."
+        },
+        "monetization_potential": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Non-P2W storage passes, cosmetic magnet/forge skins, shared server tide-boost totems (non-RNG), VIP Club subscription, and Rewarded Video salvage refills."
+        },
+        "long_term_sustainability": {
+          "score": 8.0,
+          "confidence": "Medium-High",
+          "evidence_tag": "Strongly supported by evidence",
+          "rationale": "Trust-first cozy Bestiary + combinatorial recipe matrix scales horizontally with minimal art cost (just new data-table traits & relic meshes)."
+        }
+      }
+    }
+  ]
+}

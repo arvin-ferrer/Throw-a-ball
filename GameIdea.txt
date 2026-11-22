@@ -1,0 +1,14 @@
+ Game Idea Roblox 
+
+
+
+- Every 5 mins a boss will spawn in the arena, and once defeated they drop an egg.
+- Training Range to grind their attributes, basically players just need to shoot some target to increase their throwable ball damage. The player should be stationary to shoot their ball.
+- Hatching System Egg
+- Battlefield Arena
+- Each bosses has their own biome
+- Include portals that leads to the biome, and each portals has different difficulty, with recommended ball damage.
+- Players can access each portals with no restriction, so it's up to them if they think they can beat the boss in that biome.
+- Once the boss is defeated it will spawn an egg that is based on the difficulty of the boss.
+- Each Player has a training range to grind attributes, and gain additional damage to their throwable ball.
+- Some features are borrowed in some existing roblox game specifically the game steal an egg.

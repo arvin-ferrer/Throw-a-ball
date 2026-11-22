@@ -1,0 +1,45 @@
+game_id,title,category,clicking_repetitive,combat,training_attribute_grinding,resource_gathering,idle_passive_progression,collection_mechanics,exploration,trading,cooperation,competition,stealing_raiding,randomized_rewards,base_building,boss_battles,survival,tycoon_mechanics,levels_xp,rebirths_prestige,pets_companions,egg_hatching,equipment_upgrades,damage_scaling,rarity_systems,area_biome_unlocks,multiple_currencies,skill_trees,leaderboards,achievements,daily_weekly_quests,timed_events,daily_rewards,limited_time_content,random_events,server_wide_announcements,rare_item_discoveries,visible_player_progression,collection_completion,social_recognition,cooperative_objectives,meaningful_competition,offline_progression
+G01,Brookhaven RP,Established market leaders,0,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0
+G02,Blox Fruits,Established market leaders,1,1,1,0,0,1,1,1,1,1,0,1,0,1,0,0,1,0,0,0,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,0
+G03,Adopt Me!,Established market leaders,0,0,0,0,0,1,0,1,1,0,0,1,1,0,0,0,0,0,1,1,0,0,1,0,1,0,0,1,1,1,1,1,0,0,1,1,1,1,0,0,0
+G04,Murder Mystery 2,Established market leaders,0,1,0,0,0,1,0,1,1,1,0,1,0,0,1,0,1,1,1,0,0,0,1,0,1,0,1,1,0,1,0,1,0,0,1,1,1,1,0,1,0
+G05,RIVALS,Established market leaders,0,1,0,0,0,1,0,0,1,1,0,1,0,0,0,0,1,0,0,0,1,0,1,0,1,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0
+G06,The Strongest Battlegrounds,Established market leaders,0,1,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,0,1,0,1,0,1,0
+G07,Dress To Impress,Established market leaders,0,0,0,0,0,1,0,0,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,1,1,1,1,1,0,0,0,1,1,1,0,1,0
+G08,DOORS,Established market leaders,0,0,0,1,0,0,1,0,1,0,0,0,0,1,1,0,0,0,0,0,1,0,0,1,1,0,0,1,0,1,0,1,1,0,0,1,0,1,1,0,0
+G09,Steal a Brainrot,Recently viral games,0,1,0,0,1,1,0,0,0,1,1,1,1,0,0,1,0,1,0,0,1,0,1,0,0,0,1,0,0,1,0,1,1,1,1,1,1,1,0,1,1
+G10,Steal An Egg,Recently viral games,1,1,1,0,1,1,0,0,0,1,1,1,1,0,0,1,0,1,1,1,1,0,1,1,0,0,1,0,0,1,0,1,1,1,1,1,1,1,0,1,1
+G11,99 Nights in the Forest,Recently viral games,0,1,0,1,0,0,1,0,1,0,0,1,1,1,1,0,1,0,0,0,1,1,1,1,1,0,1,1,1,1,0,1,1,0,1,1,0,1,1,0,0
+G12,Plants vs Brainrots,Recently viral games,0,1,0,0,1,1,0,0,0,0,0,1,1,1,0,1,0,1,0,0,1,1,1,1,0,0,1,0,0,1,0,1,1,1,1,1,1,1,0,0,1
+G13,Fish It!,Recently viral games,1,0,0,1,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0
+G14,Throw Food For Animals,Recently viral games,1,0,1,0,1,1,0,0,0,0,0,1,1,0,0,1,0,1,1,0,1,0,1,1,0,0,1,0,0,1,0,1,1,1,1,1,1,1,0,0,1
+G15,Dead Rails,Recently viral games,0,1,0,1,0,0,1,0,1,0,0,1,1,1,1,0,0,0,0,0,1,1,0,1,1,0,1,1,1,0,0,0,1,0,0,1,0,1,1,0,0
+G16,Forsaken,Recently viral games,0,1,0,0,0,1,0,0,1,1,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,1,0,1,0,1,0,0,0,1,1,1,1,1,0
+G17,Blue Lock: Rivals,Recently viral games,0,0,0,0,0,1,0,0,1,1,0,1,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1,0,1,1,1,1,0,0,1,1,1,1,1,1,0
+G18,Ink Game,Recently viral games,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,0,1,0,1,0,1,0
+G19,The Forge,Emerging high-growth games,1,1,0,1,0,1,1,0,1,0,0,1,0,1,0,0,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0
+G20,Volleyball Legends,Emerging high-growth games,0,0,0,0,0,1,0,0,1,1,0,1,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1,0,1,1,1,1,0,0,1,1,1,1,1,1,0
+G21,Violence District,Emerging high-growth games,0,1,0,0,0,1,0,0,1,1,0,0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,1,1,1,1,0,1,0,0,0,1,1,1,1,1,0
+G22,Climb For Animals Eggs,Emerging high-growth games,1,0,1,0,1,1,0,0,0,0,0,1,1,0,0,1,0,1,1,1,1,0,1,1,0,0,1,0,0,1,1,1,0,1,1,1,1,1,0,0,1
+G23,Cat Battles,Emerging high-growth games,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1,0,0,1,0,1,0,0,1,1,1,1,0,1,0
+G24,Illegal Soccer,Emerging high-growth games,0,1,0,0,0,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,1,1,0
+G25,Dandy's World,Emerging high-growth games,0,0,0,1,0,1,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,1,0,0,1,1,1,1,0,1,1,0,0,1,1,1,1,0,0
+G26,Bee Swarm Simulator,Sustainable mid-sized games,1,1,0,1,1,1,1,1,1,0,0,1,1,1,0,0,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0
+G27,Tower of Hell,Sustainable mid-sized games,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,1,1,1,0,1,0,0,1,0,0,1,0,1,0,1,0
+G28,Welcome to Bloxburg,Sustainable mid-sized games,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,1,1,1,1,0,0,0,1,0,1,0,0,0
+G29,Natural Disaster Survival,Sustainable mid-sized games,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0
+G30,Work at a Pizza Place,Sustainable mid-sized games,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,0,0,1,0,1,1,0,0
+G31,Theme Park Tycoon 2,Sustainable mid-sized games,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,0,1,0,0,1,0,1,0,0,0
+G32,Deepwoken,Sustainable mid-sized games,0,1,1,1,0,0,1,1,1,1,0,1,1,1,1,0,1,1,0,0,1,1,1,1,1,1,1,1,0,1,0,0,1,0,1,1,0,1,1,1,0
+G33,Grow a Garden,Games with declining popularity,0,0,0,1,1,1,0,1,0,0,0,1,1,0,0,1,0,0,1,1,1,0,1,0,0,0,1,0,1,1,1,1,1,1,1,1,1,1,0,0,1
+G34,Anime Defenders,Games with declining popularity,0,1,0,0,0,1,0,1,1,0,0,1,0,1,0,0,1,0,0,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,0,0
+G35,Piggy,Games with declining popularity,0,0,0,0,0,1,1,0,1,1,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1,1,1,0,1,0,0,0,1,1,1,1,1,0
+G36,Jailbreak,Games with declining popularity,0,1,0,0,0,1,1,1,1,1,1,1,0,1,0,0,1,0,0,0,1,0,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0
+G37,Pet Simulator 99!,Games with declining popularity,1,0,0,1,1,1,0,1,1,1,0,1,0,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0
+G38,Toilet Tower Defense,Games with declining popularity,0,1,0,0,0,1,0,1,1,0,0,1,0,1,0,0,1,0,0,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,0,0
+G39,Fisch,Simple-mechanic disproportionate results,0,0,0,1,0,1,1,1,1,0,0,1,0,0,0,0,1,0,0,0,1,0,1,1,0,0,1,1,1,1,0,1,1,1,1,1,1,1,1,0,0
+G40,A Dusty Trip,Simple-mechanic disproportionate results,0,1,0,1,0,0,1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,0,1,1,0,1,1,0,1,0,1,1,0,0,1,0,1,1,0,0
+G41,Don't Wake the Brainrots!,Simple-mechanic disproportionate results,0,0,0,0,1,1,0,0,0,0,1,1,1,0,1,1,0,0,0,0,0,0,1,0,0,0,1,0,0,1,0,1,0,1,1,1,1,1,0,0,0
+G42,Sol's RNG,Simple-mechanic disproportionate results,1,0,0,1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0
+G43,Build A Plane,Simple-mechanic disproportionate results,0,0,0,0,1,0,1,0,0,0,0,1,1,0,0,1,0,0,0,0,1,0,1,1,0,0,1,0,0,1,0,1,0,0,1,1,0,1,0,0,1
+G44,Climb and Jump Tower,Simple-mechanic disproportionate results,1,0,1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,0,1,1,0,0,1,0,0,0,1,0,0,0,0,1,0,1,0,0,0

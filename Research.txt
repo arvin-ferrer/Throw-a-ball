@@ -1,0 +1,1165 @@
+Since your game idea is **not yet finalized**, I would approach this as market discovery and product validation rather than research intended to justify your existing idea.
+
+Based on your `GameIdea.txt`, your preliminary concept combines boss battles, throwable ball combat, attribute grinding, egg hatching, biome progression, difficulty-based rewards, and mechanics inspired by Steal an Egg.
+
+The research agent should be allowed to criticize, modify, or even recommend abandoning these mechanics if market evidence suggests better opportunities. You want to understand not just what makes a Roblox game popular, but what makes it **discoverable, addictive in the sense of engaging gameplay, sustainable, profitable, and feasible to develop with limited resources.**
+
+Below is a comprehensive prompt you can use with a Deep Research agent. Attach your `GameIdea.txt` alongside it.
+
+# Deep Research: Roblox Game Market Analysis, Discovery Algorithm, Game Design, and Commercial Opportunities
+
+## 1. Role and Research Objective
+
+Act as a senior game market researcher, Roblox game designer, player behavior analyst, product strategist, and user acquisition specialist with expertise in:
+
+- Roblox game development and its ecosystem
+- Game discovery and recommendation algorithms
+- Player psychology and behavioral economics
+- Game economies and progression systems
+- Player acquisition, engagement, and retention
+- Free-to-play monetization
+- Viral game mechanics
+- Independent game development
+- Competitive market analysis
+- Live-service game operations
+
+Conduct an extensive, evidence-based investigation of the current Roblox gaming market to identify the characteristics of successful games, understand why particular games become trending, and determine how an independent developer or small development team can maximize its probability of developing a commercially successful Roblox game.
+
+The ultimate objective is not simply to create an enjoyable game. It is to identify and develop a game concept that has strong potential for organic discovery, player retention, viral growth, sustainable monetization, and long-term profitability while remaining realistic in terms of development costs and technical complexity.
+
+Research the market as of the date this investigation is conducted. Prioritize recent data over outdated assumptions about the Roblox ecosystem.
+
+## 2. Important Context: The Game Idea Is Not Finalized
+
+I have attached a preliminary document named `GameIdea.txt`.
+
+The current concept includes:
+
+- Bosses spawning in arenas at approximately five-minute intervals.
+- Bosses dropping eggs upon defeat.
+- Throwable ball-based combat.
+- Training ranges where players increase their ball damage by shooting targets.
+- Players remaining stationary when shooting during training.
+- Egg hatching systems.
+- Multiple biomes with different bosses.
+- Portals providing access to different biomes.
+- Recommended damage requirements for each biome.
+- Unrestricted biome access regardless of player strength.
+- Egg rewards that scale with boss difficulty.
+- Mechanics partially inspired by existing Roblox games, particularly Steal an Egg.
+
+Treat this document as an early brainstorming concept, not a finalized game design document.
+
+Do not assume that these mechanics must remain in the final product.
+
+You are explicitly encouraged to:
+
+- Challenge the current concept.
+- Identify weak, generic, redundant, or unnecessarily complicated mechanics.
+- Suggest alternative gameplay loops.
+- Remove features that do not contribute sufficient player or commercial value.
+- Introduce mechanics supported by market evidence.
+- Propose entirely different game concepts if they present significantly better opportunities.
+- Identify assumptions that need to be tested before development.
+
+Do not tailor the market findings merely to validate the preliminary concept. Conduct independent market research first, then evaluate the concept against the findings.
+
+## 3. Current Roblox Market Landscape
+
+Conduct a comprehensive analysis of the current Roblox market.
+
+Investigate:
+
+- The most popular game genres.
+- The fastest-growing game genres.
+- Emerging gameplay trends.
+- Recently successful games.
+- Games that became viral within the past 30, 90, 180, and 365 days.
+- Established games that maintain consistently high player counts.
+- Games that experienced rapid growth followed by rapid decline.
+- Underserved genres and player segments.
+- Oversaturated genres.
+- Seasonal and event-driven trends.
+- Changes in player preferences over time.
+
+Analyze at least 30–50 relevant Roblox experiences, depending on the availability of reliable data.
+
+Do not exclusively analyze the largest games. Include smaller and mid-sized games that demonstrate strong growth or unusual success relative to their apparent development complexity.
+
+Categorize games into:
+
+1. Established market leaders.
+2. Recently viral games.
+3. Emerging high-growth games.
+4. Sustainable mid-sized games.
+5. Games with declining popularity.
+6. Games with relatively simple mechanics but disproportionately strong results.
+
+For each experience, collect the following where publicly available:
+
+- Game title and developer
+- Release date
+- Genre
+- Current concurrent players
+- Historical and peak concurrent players
+- Total visits
+- Recent visit growth
+- Like-to-dislike ratio
+- Favorites
+- Estimated growth trajectory
+- Average session duration, if verifiable
+- Update frequency
+- Monetization methods
+- Core gameplay loop
+- Progression systems
+- Social mechanics
+- Distinctive selling proposition
+- Apparent development complexity
+
+Record the collection date for time-sensitive metrics.
+
+Do not fabricate unavailable metrics. Clearly identify which data is publicly verifiable, estimated, inferred, or unavailable.
+
+Distinguish momentary concurrent player counts from sustained popularity. Avoid treating total lifetime visits as evidence of current success.
+
+## 4. Common Features of Successful Roblox Games
+
+Perform a comparative feature analysis across the selected games.
+
+Identify recurring mechanics and design patterns, including:
+
+### Core gameplay
+
+- Clicking and repetitive interactions
+- Combat
+- Training and attribute grinding
+- Resource gathering
+- Idle and passive progression
+- Collection mechanics
+- Exploration
+- Trading
+- Cooperation
+- Competition
+- Stealing and raiding
+- Randomized rewards
+- Base building
+- Boss battles
+- Survival
+- Tycoon mechanics
+
+### Progression systems
+
+- Levels and experience points
+- Rebirths and prestige systems
+- Pets and companions
+- Egg hatching
+- Equipment upgrades
+- Damage scaling
+- Rarity systems
+- Area and biome unlocks
+- Multiple currencies
+- Skill trees
+- Leaderboards
+- Achievements
+- Daily and weekly quests
+
+### Engagement systems
+
+- Timed events
+- Daily rewards
+- Limited-time content
+- Random events
+- Server-wide announcements
+- Rare item discoveries
+- Visible player progression
+- Collection completion
+- Social recognition
+- Cooperative objectives
+- Meaningful competition
+- Offline progression
+
+Create a feature-frequency matrix showing how common each mechanic is among the analyzed games.
+
+Determine:
+
+- Which features appear most frequently?
+- Which features are associated with rapid growth?
+- Which features appear associated with sustained success?
+- Which features are becoming oversaturated?
+- Which features work especially well together?
+- Which features are common but do not appear to meaningfully differentiate games?
+- Which features are expensive to develop relative to their apparent contribution?
+- Which features can provide disproportionate value for a small development team?
+
+Do not confuse correlation with causation. Explain alternative reasons why a feature may be common among successful games.
+
+## 5. Roblox Discovery and Recommendation Algorithm
+
+Conduct an extensive investigation into how Roblox currently recommends, ranks, and distributes experiences.
+
+Prioritize official Roblox documentation, Creator Hub resources, Roblox developer announcements, official engineering publications, and credible developer case studies.
+
+Investigate all relevant discovery surfaces, including:
+
+- Home recommendations
+- Recommended for You
+- Charts and trending categories
+- Search results
+- Sponsored experiences
+- Friend-related discovery
+- Personalized recommendations
+- Experience details pages
+- External traffic and content sharing
+
+Determine which signals Roblox officially confirms, which signals developers have observed, and which claims remain speculative.
+
+Investigate the potential importance of:
+
+- Qualified play-through rate
+- Impression-to-play conversion
+- Thumbnail and icon performance
+- Session duration
+- First-session experience
+- Early player abandonment
+- Day 1, Day 7, and Day 30 retention
+- Repeat play days
+- Intentional co-play
+- Player spending behavior
+- Payer conversion
+- Player satisfaction
+- Game stability and performance
+- Device compatibility
+- Social engagement
+- Update frequency
+- Audience relevance
+- New player acquisition
+- Traffic source quality
+
+For each signal, explain:
+
+1. Its definition.
+2. Whether Roblox officially recognizes it as a discovery signal.
+3. Where developers can measure it.
+4. Its potential impact on discovery.
+5. Practical ways to improve it.
+6. Common mistakes and misconceptions.
+
+Verify the latest official terminology. Do not assume metrics from outdated discovery systems are still used in the same way.
+
+Investigate the cold-start problem: how can a newly published game with no established player base begin receiving organic recommendations?
+
+Determine:
+
+- Whether Roblox tests new games with small audiences.
+- How initial traffic affects future recommendations, if supported by evidence.
+- Whether paid advertising helps generate organic discovery.
+- Whether a specific concurrent player threshold is necessary.
+- How small developers can acquire their first meaningful player base.
+- What conditions may lead to increased or decreased organic distribution.
+- Whether a game needs high monetization to receive recommendations.
+- How discovery differs between new and established experiences.
+
+Separate confirmed facts from developer hypotheses.
+
+Do not claim to know proprietary algorithm weights, hidden thresholds, or guaranteed methods for reaching recommendation feeds unless they are officially documented.
+
+Produce an actionable discovery optimization framework organized by development phase.
+
+Avoid bots, artificial engagement, misleading thumbnails, fake player counts, or any methods that violate Roblox policies.
+
+## 6. Anatomy of a Viral Roblox Game
+
+Select at least 10 recently viral Roblox games for detailed case studies.
+
+Include games relevant to the preliminary concept, but also investigate unrelated games that may reveal transferable design principles.
+
+For each game, analyze:
+
+- How the game can be explained in one sentence.
+- Its unique hook.
+- Its initial player acquisition, where evidence exists.
+- Its gameplay loop.
+- What players do during their first 30 seconds.
+- What players do during their first five minutes.
+- How it provides immediate gratification.
+- How it creates long-term goals.
+- Why players return.
+- Why players invite friends.
+- Why content creators cover the game.
+- What creates memorable or shareable moments.
+- How developers maintain momentum.
+- How monetization is integrated.
+- Its probable development complexity.
+- Whether its success appears sustainable.
+
+Investigate whether viral games tend to have:
+
+- Easily understandable concepts.
+- Familiar mechanics combined with one distinctive twist.
+- Low barriers to entry.
+- Short reward cycles.
+- Visible progression.
+- Rare and surprising events.
+- Social conflict or cooperation.
+- Strong replayability.
+- Visually recognizable content.
+- Mechanics that naturally generate entertaining videos.
+
+Analyze examples of games that used similar mechanics but failed to achieve comparable growth, where reliable evidence exists.
+
+Identify the differences between a game that temporarily goes viral and one that builds a sustainable player base.
+
+Account for survivorship bias, established developer audiences, advertising budgets, influencer support, and other external advantages.
+
+## 7. Player Psychology and Retention
+
+Analyze why Roblox players continue playing particular games.
+
+Investigate the application of:
+
+- Goal-setting theory
+- Competence and mastery
+- Autonomy
+- Social belonging
+- Collection motivation
+- Anticipation
+- Reward schedules
+- Curiosity
+- Social comparison
+- Competition
+- Cooperation
+- Ownership and customization
+- Meaningful scarcity
+- Progress visibility
+
+Distinguish enjoyable, healthy engagement from exploitative or manipulative design, particularly because Roblox includes younger audiences.
+
+Analyze player motivation across different timescales:
+
+| Time period      | Design question                                  |
+| ---------------- | ------------------------------------------------ |
+| First 10 seconds | What immediately communicates the game's appeal? |
+| First 30 seconds | What encourages the player to start interacting? |
+| First minute     | What provides the first meaningful reward?       |
+| First 5 minutes  | What convinces the player to continue?           |
+| First 15 minutes | What meaningful progression has occurred?        |
+| First hour       | What longer-term goal has been established?      |
+| Next day         | Why would the player return?                     |
+| Next week        | What continues to motivate progression?          |
+| Next month       | What keeps the experience relevant?              |
+
+Investigate common reasons Roblox players quit games, including:
+
+- Slow onboarding
+- Confusing interfaces
+- Excessive tutorials
+- Repetitive gameplay
+- Slow early progression
+- Unbalanced economies
+- Excessive monetization
+- Pay-to-win mechanics
+- Lack of social interaction
+- Insufficient content
+- Performance issues
+- Waiting without meaningful activities
+
+Provide practical retention design recommendations and identify how each recommendation could be measured through analytics.
+
+## 8. Game Loops and Progression Systems
+
+Investigate the most effective gameplay loops used by successful Roblox games.
+
+Distinguish between:
+
+- Moment-to-moment gameplay loops
+- Short-term reward loops
+- Session-level gameplay loops
+- Long-term progression loops
+- Social loops
+- Collection loops
+- Monetization loops
+- Live-service content loops
+
+Compare gameplay loops such as:
+
+- Train → Fight → Earn → Upgrade → Repeat
+- Collect → Sell → Upgrade → Collect
+- Hatch → Discover → Improve → Hatch
+- Build → Defend → Expand
+- Explore → Fight → Loot → Unlock
+- Compete → Rank → Earn → Improve
+
+Identify which loops are best suited to small-team development and which require expensive, continuous content production.
+
+Investigate how to balance:
+
+- Active gameplay versus idle progression.
+- Mechanical skill versus numerical progression.
+- Random rewards versus predictable rewards.
+- Casual accessibility versus gameplay depth.
+- Individual progression versus social interaction.
+- Immediate rewards versus long-term aspirations.
+
+Recommend methods to prevent progression systems from becoming repetitive, unnecessarily grind-heavy, or dependent on constant content releases.
+
+## 9. Social Mechanics and Organic Growth
+
+Investigate how successful Roblox games turn existing players into a source of new players.
+
+Analyze:
+
+- Friend invitations
+- Cooperative boss battles
+- Trading
+- Player gifting
+- Server-wide events
+- Public leaderboards
+- Competitive rankings
+- Player-generated content
+- Shared discoveries
+- Team-based objectives
+- Community challenges
+- Friend bonuses
+- Social status and cosmetic displays
+
+Determine which mechanics encourage genuine social interaction rather than simply rewarding players for inviting others.
+
+Investigate how Roblox games spread through:
+
+- TikTok
+- YouTube Shorts
+- YouTube videos
+- Twitch
+- Discord communities
+- Roblox groups
+- Influencer communities
+- Word of mouth
+
+Analyze what makes gameplay footage shareable.
+
+Identify mechanics that naturally produce:
+
+- Unexpected outcomes
+- Rare discoveries
+- Funny situations
+- Impressive achievements
+- Dramatic victories
+- Friendly rivalry
+- Competitive moments
+- Player-created stories
+
+Propose ways to integrate organic sharing and social growth directly into gameplay rather than relying exclusively on marketing.
+
+## 10. Roblox Game Monetization and Profitability
+
+Investigate the current Roblox monetization ecosystem.
+
+Verify the latest policies, fee structures, eligibility requirements, and payout mechanisms.
+
+Analyze relevant revenue sources, including:
+
+- Game passes
+- Developer products
+- Repeatable purchases
+- Subscriptions
+- Cosmetic items
+- Private servers
+- Creator Rewards and other applicable Roblox programs
+- Advertising-related opportunities
+- Other officially supported experience monetization methods
+
+For each monetization model, examine:
+
+- Advantages
+- Disadvantages
+- Development complexity
+- Revenue potential
+- Effects on retention
+- Effects on player satisfaction
+- Suitability for different genres
+- Risks of excessive monetization
+
+Investigate how successful games monetize through:
+
+- Convenience
+- Cosmetic customization
+- Additional inventory
+- Progression boosts
+- Premium features
+- Optional content
+- Social status
+- Collectible items
+
+Compare ethical monetization, pay-for-convenience, and pay-to-win approaches.
+
+Investigate current Roblox rules regarding randomized paid items, probability disclosures, age restrictions, regional restrictions, and applicable protections for younger players.
+
+Pay particular attention to egg hatching systems.
+
+### Financial Modeling
+
+Construct conservative, moderate, and optimistic financial scenarios for a new independent Roblox game.
+
+Model different levels of:
+
+- Daily active users
+- Average concurrent users
+- Average session duration
+- Payer conversion rate
+- Average revenue per paying user
+- Average revenue per daily active user
+- Player acquisition costs
+- Advertising expenditure
+- Development expenses
+- Maintenance expenses
+- Roblox fees and applicable DevEx conversion rates
+
+Where relevant, express real-world earnings in both USD and PHP using dated exchange rates.
+
+Estimate:
+
+- Monthly gross revenue
+- Monthly developer earnings
+- Monthly operating profit
+- Break-even requirements
+- Advertising return on investment
+- Development cost recovery period
+
+Clearly label all assumptions and provide formulas.
+
+Do not derive unsupported revenue estimates solely from concurrent player counts. Do not confuse Robux spent by users with withdrawable developer earnings.
+
+## 11. Marketing, Launch, and User Acquisition
+
+Investigate how a newly developed Roblox game can acquire its first players.
+
+Create strategies for:
+
+- Pre-launch audience building
+- Closed alpha testing
+- Public beta testing
+- Soft launches
+- Full launches
+- Sponsored experiences
+- Influencer outreach
+- Social media marketing
+- Roblox community building
+- Discord community management
+- Post-launch content updates
+
+Analyze the importance of:
+
+- Game names
+- Experience icons
+- Thumbnails
+- Gameplay trailers
+- Game descriptions
+- Visual clarity
+- Distinctive branding
+- Accurate player expectations
+
+Investigate successful thumbnail and icon design patterns, while avoiding misleading or deceptive clickbait.
+
+Explain how to test different marketing materials and interpret conversion data.
+
+Develop separate launch strategies for:
+
+- A developer with almost no marketing budget.
+- A small developer with a limited marketing budget.
+- A team capable of reinvesting early revenue.
+
+Provide a practical framework for deciding whether to increase advertising spending, improve the game first, or discontinue an unsuccessful campaign.
+
+## 12. Market Gaps and Opportunity Identification
+
+Based on the collected evidence, identify opportunities available to independent Roblox developers.
+
+Evaluate genres and gameplay combinations using:
+
+- Current player demand
+- Market growth
+- Competition
+- Development complexity
+- Differentiation potential
+- Retention potential
+- Monetization potential
+- Social and viral potential
+- Content production requirements
+- Long-term sustainability
+
+Investigate the difference between entering:
+
+- A popular but oversaturated genre.
+- An emerging genre with increasing demand.
+- A smaller but underserved niche.
+- A hybrid genre that combines familiar mechanics in a novel way.
+
+Identify at least 10 potential market opportunities.
+
+For each opportunity, explain:
+
+- Why the opportunity exists.
+- Supporting market evidence.
+- Target audience.
+- Direct and indirect competitors.
+- Proposed differentiation.
+- Major risks.
+- Minimum viable product requirements.
+- Expected development complexity.
+- How the opportunity could be validated before committing resources.
+
+Do not treat low competition alone as evidence of a promising market. Determine whether sufficient player demand exists.
+
+## 13. Critical Evaluation of the Preliminary Game Idea
+
+Only after completing the independent market research, evaluate `GameIdea.txt`.
+
+Analyze the tentative gameplay loop:
+
+Train attributes → Increase ball damage → Enter biome → Defeat boss → Obtain egg → Hatch egg → Progress → Repeat
+
+This is an inferred loop based on the preliminary document. Identify any missing connections or assumptions, particularly what hatching an egg actually provides to the player.
+
+Evaluate each existing mechanic individually.
+
+### Boss spawning every five minutes
+
+- Does waiting increase anticipation or cause player abandonment?
+- What should players do while waiting?
+- Would player-triggered bosses work better?
+- Should bosses be shared, instanced, or available continuously?
+- How could bosses create social interaction?
+- How would the system work in low-population servers?
+
+### Stationary throwable ball combat
+
+- Is the mechanic sufficiently engaging?
+- Does stationary shooting become repetitive?
+- Would aiming, movement, dodging, or timing improve gameplay?
+- Should the training mechanic differ from actual combat?
+- How accessible is the mechanic on mobile devices?
+- Does it offer sufficient opportunities for mastery?
+
+### Training ranges
+
+- Is repetitive attribute grinding enjoyable?
+- How quickly might players become bored?
+- Should training involve active challenges, passive progression, or both?
+- Would different training methods provide meaningful choices?
+- Does the system create a clear reason to improve attributes?
+
+### Egg rewards and hatching
+
+- Are egg systems still compelling in the current Roblox market?
+- How saturated is the mechanic?
+- What should hatch from the eggs?
+- What practical gameplay purpose should hatched items or companions serve?
+- How can collections remain meaningful?
+- How can randomized rewards be implemented responsibly?
+- How can the system differentiate itself from existing pet and egg simulators?
+
+### Biomes and portals
+
+- Does biome progression provide sufficient motivation?
+- Is unrestricted biome access an advantage or disadvantage?
+- Could high-level players carry beginners through endgame content?
+- Could players bypass progression?
+- Would recommended strength requirements be sufficient?
+- What would make each biome meaningfully different?
+- How expensive would it be to continuously develop new biomes?
+
+### Overall Concept
+
+Determine:
+
+- Whether the game has a strong, easily communicated hook.
+- Whether its mechanics form a coherent gameplay loop.
+- Whether the concept is sufficiently differentiated.
+- Whether the game currently has a meaningful long-term objective.
+- Whether it provides reasons for players to invite friends.
+- Whether the gameplay naturally creates shareable moments.
+- Whether it could sustain an active player base.
+- Whether the concept is realistic for a small development team.
+- Whether similar existing games already provide a stronger experience.
+
+Create a feature evaluation table containing:
+
+- Existing mechanic
+- Intended purpose
+- Supporting market evidence
+- Potential strengths
+- Potential weaknesses
+- Implementation complexity
+- Retention contribution
+- Recommendation: Keep, Modify, Remove, or Test
+- Suggested alternative
+
+Provide a critical assessment. Do not recommend retaining features simply because they are included in the preliminary concept.
+
+## 14. Alternative Game Concepts
+
+Generate at least five distinct Roblox game concepts supported by the market research.
+
+Include:
+
+- An improved version of the existing concept.
+- A significantly reimagined version of the existing concept.
+- A simplified, low-development-cost alternative.
+- A concept targeting an emerging market opportunity.
+- A concept with strong organic viral and social potential.
+
+You may propose additional concepts if the research identifies compelling opportunities.
+
+For each concept, provide:
+
+1. Working title.
+2. One-sentence pitch.
+3. Target audience.
+4. Market opportunity.
+5. Main gameplay hook.
+6. Core gameplay loop.
+7. First five minutes of gameplay.
+8. Progression system.
+9. Social mechanics.
+10. Viral growth mechanisms.
+11. Retention strategy.
+12. Monetization opportunities.
+13. Primary competitors.
+14. Competitive differentiation.
+15. MVP features.
+16. Estimated development complexity.
+17. Content production requirements.
+18. Major risks.
+19. Assumptions requiring validation.
+20. Proposed prototype experiments.
+
+Prioritize originality through meaningful combinations and improvements rather than direct copying of successful games.
+
+A concept should ideally be understandable quickly, visually recognizable, feasible to prototype, and capable of delivering an enjoyable experience even with very few concurrent players.
+
+## 15. Game Concept Scoring and Decision Matrix
+
+Evaluate the preliminary concept and every proposed alternative using a weighted scoring matrix.
+
+Use the following initial weights:
+
+| Evaluation criterion        | Weight   |
+| --------------------------- | -------- |
+| Player demand               | 15%      |
+| Player retention potential  | 15%      |
+| Development feasibility     | 15%      |
+| Core gameplay appeal        | 10%      |
+| Organic discovery potential | 10%      |
+| Viral and social potential  | 10%      |
+| Competitive differentiation | 10%      |
+| Monetization potential      | 10%      |
+| Long-term sustainability    | 5%       |
+| **Total**                   | **100%** |
+
+Score each concept from 1 to 10 for every criterion.
+
+Explain the supporting evidence and reasoning for each score.
+
+Include qualitative confidence levels and distinguish between evidence-supported evaluations and speculative judgments.
+
+Perform a sensitivity analysis showing how rankings change when:
+
+- Development feasibility is prioritized.
+- Profitability is prioritized.
+- Organic growth is prioritized.
+- Long-term sustainability is prioritized.
+
+Recommend the most promising concepts for further validation, not necessarily immediate production.
+
+## 16. Minimum Viable Product and Development Strategy
+
+Assume development resources are limited. Do not assume access to a large studio, substantial advertising funding, or a dedicated live-operations team.
+
+Where team size, budget, or experience is unknown, present multiple resource scenarios.
+
+For the highest-ranked concepts, determine:
+
+- The smallest playable version that demonstrates the unique hook.
+- Essential systems required for the first prototype.
+- Features required for a public MVP.
+- Features that should be postponed.
+- Features that should be avoided entirely.
+- Technical risks.
+- Asset production requirements.
+- Estimated developer-hours by feature or system.
+- Dependencies between development tasks.
+- Ongoing maintenance requirements.
+
+Separate features into:
+
+- Prototype essentials
+- MVP essentials
+- Post-launch improvements
+- Optional long-term features
+
+Create illustrative development roadmaps for 2-week, 1-month, and 3-month schedules, where feasible.
+
+Do not propose a large feature set merely because successful games already contain those features.
+
+Identify reusable systems that can reduce the cost of introducing future content.
+
+Determine how to design a game that can survive with a small initial community and limited update capacity.
+
+## 17. Prototype Testing and Market Validation
+
+Create a validation framework that can be used before investing heavily in full development.
+
+Propose low-cost experiments for validating:
+
+- Game concept appeal
+- Gameplay hook
+- Thumbnail effectiveness
+- Onboarding clarity
+- Combat enjoyment
+- Progression speed
+- Reward desirability
+- Replayability
+- Social interaction
+- Player willingness to return
+- Monetization interest
+
+For each experiment, specify:
+
+- Hypothesis
+- Prototype requirements
+- Target test audience
+- Suggested sample size and limitations
+- Data to collect
+- Success criteria
+- Failure criteria
+- Interpretation
+- Recommended next action
+
+Distinguish between qualitative playtesting and statistically meaningful quantitative testing.
+
+Identify metrics that can be measured before acquiring a large player base.
+
+Provide explicit decision gates for:
+
+- Continuing development.
+- Revising the core gameplay loop.
+- Changing the game's hook.
+- Removing underperforming features.
+- Pivoting to an alternative concept.
+- Discontinuing the project.
+
+Avoid recommending continued development solely because substantial time or money has already been invested.
+
+## 18. Analytics and Performance Measurement
+
+Design a practical analytics framework for the recommended game concepts.
+
+Investigate appropriate Roblox analytics tools and instrumentation capabilities.
+
+Identify metrics including:
+
+- Impression-to-play conversion
+- Qualified play-through rate
+- Onboarding completion rate
+- First-session abandonment
+- Average session duration
+- Day 1 retention
+- Day 7 retention
+- Day 30 retention
+- Daily active users
+- Monthly active users
+- Concurrent users
+- Repeat play frequency
+- Progression milestones
+- Payer conversion
+- Average revenue per paying user
+- Average revenue per daily active user
+- Player acquisition cost
+- Player lifetime value
+- Intentional co-play
+
+For each metric, provide:
+
+- Definition
+- Formula, where applicable
+- Measurement method
+- Relevant benchmarks, if supported
+- Interpretation
+- Possible causes of poor performance
+- Recommended corrective actions
+
+Do not invent universal success thresholds. Use official Roblox benchmarks or credible industry evidence where available. Clearly label provisional testing targets.
+
+Propose an analytics event structure for player actions such as:
+
+- Joining the game
+- Starting gameplay
+- Completing onboarding
+- Receiving the first reward
+- Completing training
+- Participating in a boss fight
+- Hatching an egg
+- Unlocking a progression milestone
+- Returning for another session
+- Making an optional purchase
+
+Identify which metrics should be prioritized at different stages of development.
+
+## 19. Failure Analysis and Risk Assessment
+
+Investigate why Roblox games fail despite apparently promising ideas.
+
+Analyze risks involving:
+
+- Market saturation
+- Lack of differentiation
+- Poor onboarding
+- Weak gameplay loops
+- Insufficient retention
+- Excessive grinding
+- Excessive development scope
+- Poor monetization design
+- Low discoverability
+- Unsustainable advertising
+- Content exhaustion
+- Exploits and cheating
+- Mobile performance
+- Server performance
+- Economy inflation
+- Intellectual property infringement
+- Roblox policy violations
+- Excessive maintenance requirements
+- Dependence on temporary trends
+
+Create a risk matrix using:
+
+- Risk description
+- Likelihood
+- Impact
+- Early warning signs
+- Preventive measures
+- Mitigation strategy
+
+Identify the five most consequential risks specifically for independent Roblox developers.
+
+Conduct a pre-mortem analysis:
+
+Assume the game was released and failed six months after launch. Explain the most plausible reasons for its failure and what could have been done earlier to prevent them.
+
+## 20. Research Sources and Evidence Standards
+
+Prioritize the following sources:
+
+**Primary sources**
+
+- Official Roblox Creator Hub documentation
+- Roblox Developer Forum announcements by Roblox staff
+- Official Roblox company announcements
+- Roblox engineering publications
+- Roblox investor reports and financial disclosures
+- Official experience pages
+- Directly published developer statistics and case studies
+
+**Secondary sources**
+
+- Reliable Roblox player-count and historical tracking platforms
+- Industry research reports
+- Game developer post-mortems
+- Developer interviews
+- Credible game market analysis
+- Academic research on game design and player behavior
+
+**Supplementary sources**
+
+- Reddit discussions
+- Roblox Developer Forum community discussions
+- YouTube developer case studies
+- TikTok trend observations
+- Community feedback
+- Player reviews
+
+Treat community observations as anecdotal evidence unless independently supported.
+
+For important findings:
+
+- Provide direct source links.
+- Include publication dates and data collection dates.
+- Cross-reference multiple sources when possible.
+- Distinguish official information from inference.
+- Identify conflicting evidence.
+- State limitations.
+- Avoid outdated information.
+- Do not fabricate metrics, quotations, sources, or developer experiences.
+
+Classify major findings as:
+
+- Officially confirmed
+- Strongly supported by evidence
+- Observational correlation
+- Developer-reported experience
+- Reasonable inference
+- Speculative hypothesis
+- Unknown
+
+Do not allow a lack of publicly available data to justify inventing information.
+
+## 21. Required Final Deliverables
+
+Organize the final research into the following sections:
+
+### Deliverable A — Executive Summary
+
+Summarize the most important market findings, opportunities, risks, and recommended next steps.
+
+### Deliverable B — Roblox Market Report
+
+Provide market statistics, genre analysis, emerging trends, and competitor comparisons.
+
+### Deliverable C — Competitive Analysis Database
+
+Provide a structured table of the analyzed Roblox games and their relevant characteristics.
+
+### Deliverable D — Successful Game Feature Matrix
+
+Show the frequency, apparent value, and implementation complexity of common game mechanics.
+
+### Deliverable E — Roblox Discovery Playbook
+
+Provide an evidence-based explanation of the current recommendation ecosystem and practical methods for improving organic discovery.
+
+### Deliverable F — Viral Game Case Studies
+
+Provide detailed analyses of recently successful games and the transferable lessons from their growth.
+
+### Deliverable G — Player Retention and Monetization Framework
+
+Explain gameplay loops, retention strategies, healthy engagement systems, and sustainable monetization.
+
+### Deliverable H — Preliminary Game Idea Evaluation
+
+Critically evaluate `GameIdea.txt` and recommend which mechanics to keep, change, remove, or test.
+
+### Deliverable I — Alternative Game Concepts
+
+Present the proposed game concepts and their distinguishing features.
+
+### Deliverable J — Concept Decision Matrix
+
+Compare all proposed concepts using weighted scores, evidence, confidence levels, and sensitivity analysis.
+
+### Deliverable K — Prototype and Development Roadmap
+
+Present MVP requirements, development priorities, validation experiments, and decision gates.
+
+### Deliverable L — Financial Feasibility Report
+
+Present financial scenarios, development cost considerations, monetization assumptions, and break-even analysis.
+
+### Deliverable M — Launch and Growth Strategy
+
+Present practical plans for pre-launch, launch, first-player acquisition, organic growth, and continuous improvement.
+
+### Deliverable N — Founder Cheat Sheet
+
+Provide a concise reference containing:
+
+- 10 most important findings.
+- 10 high-value game design principles.
+- 10 mistakes to avoid.
+- 10 actionable discovery optimization strategies.
+- The most promising market opportunities.
+- The recommended prototype concepts.
+- The next practical steps to take.
+
+## 22. Final Strategic Recommendation
+
+Conclude the report by directly answering:
+
+1. What types of Roblox games currently have the strongest evidence of commercial opportunity?
+2. What common features appear to contribute most to successful Roblox games?
+3. What separates temporarily viral games from sustainable games?
+4. How can a new developer improve the likelihood of organic Roblox discovery?
+5. Which mechanics provide the greatest potential value relative to development effort?
+6. What market opportunities appear underserved?
+7. Is the preliminary game idea worth pursuing, modifying, or replacing?
+8. What should the project's primary gameplay hook be?
+9. Which game concept should be prototyped first, and why?
+10. How can its commercial potential be tested with minimal financial investment?
+11. What evidence would justify committing to full development?
+12. What should the developer accomplish within the next 30 days?
+
+The final recommendation must be informed by evidence, development feasibility, player experience, and commercial potential rather than personal preference.
+
+Be critical, specific, comprehensive, and actionable. Avoid generic advice such as "make the game fun," "update frequently," or "market the game on social media" unless accompanied by concrete implementation strategies and supporting evidence.
+
+The purpose of this research is to help determine which game is worth building before committing significant development time and financial resources.
+
+## **What I would particularly want the research to uncover**
+
+Your current concept has several recognizable Roblox mechanics, but the biggest unanswered question is **what makes your game worth playing instead of an existing simulator?**
+
+Current proposed gameplay loopThe missing progression connection is something the research and prototype should resolve.
+
+I would prioritize these five questions above everything else:
+
+| Research priority               | Why it matters                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| **Discoverability**             | Even a good game can fail if Roblox does not distribute it to players.               |
+| **Unique gameplay hook**        | Players need a compelling reason to choose your game over thousands of alternatives. |
+| **First five minutes**          | Determines whether new players understand and enjoy the game enough to continue.     |
+| **Development feasibility**     | You don't want to spend months building features that contribute little to success.  |
+| **Retention and profitability** | Becoming trending temporarily is different from building a sustainable business.     |
+
+## **Recommended research-to-development process**
+
+**01**
+
+**Market research**
+
+Understand demand, trends, competitors and discovery.
+
+**02**
+
+**Opportunity identification**
+
+Find promising gaps and high-value mechanics.
+
+**03**
+
+**Concept generation**
+
+Compare multiple ideas without committing to one.
+
+**04**
+
+**Concept validation**
+
+Test whether players find the hook appealing.
+
+**05**
+
+**Playable prototype**
+
+Build only the essential gameplay loop.
+
+**06**
+
+**Player testing**
+
+Measure enjoyment, retention and replayability.
+
+**07**
+
+**MVP development**
+
+Invest further only when the evidence supports it.
+
+**08**
+
+**Launch and optimization**
+
+Acquire players, measure performance and iterate.
+
+My recommendation is **not to finalize the game idea until you have completed at least the first four stages.** You could discover that the egg hatching and boss fighting combination has strong potential, or you could discover that a much simpler game with one exceptionally engaging mechanic offers a better return on development effort.
+
+The goal should not be to build the Roblox game with the most features. It should be to build the smallest game capable of delivering a compelling, repeatable experience that players genuinely want to return to and share with their friends.

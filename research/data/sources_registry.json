@@ -1,0 +1,263 @@
+[
+  {
+    "source_id": "S01",
+    "title": "Roblox Corporation Q3 2026 Shareholder Letter & Financial Results (138M DAU, $1.697B Bookings, $403M DevEx, RFY Age-Cohort Weighting, 40% Top-100 RFY Freshness)",
+    "publisher": "Roblox Investor Relations (ir.roblox.com / sec.gov / q4cdn.com)",
+    "tier": "Primary",
+    "publication_date": "2026-10-29",
+    "collection_date": "2026-11-22",
+    "reference": "ir.roblox.com — Q3 2026 Earnings Release & Shareholder Letter"
+  },
+  {
+    "source_id": "S02",
+    "title": "Roblox Corporation Q1–Q2 2026 & FY 2025 Financial Results (28-Day RFY Rollout, Age-Checked DAU Demographics, DevEx Trajectory)",
+    "publisher": "Roblox Investor Relations (ir.roblox.com / sec.gov)",
+    "tier": "Primary",
+    "publication_date": "2026-07-30",
+    "collection_date": "2026-11-22",
+    "reference": "ir.roblox.com — FY 2025 & Q1–Q2 2026 Shareholder Letters"
+  },
+  {
+    "source_id": "S03",
+    "title": "Recommended For You Algorithm Improvements That Better Value Long-Term Retention (QPTR Deprecation, PTR, First Play Bounce Rate, 28-Day Window)",
+    "publisher": "Roblox Staff (devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-06-15",
+    "collection_date": "2026-11-22",
+    "reference": "devforum.roblox.com — Official Discovery Staff Announcement (updated Aug 2026)"
+  },
+  {
+    "source_id": "S04",
+    "title": "Improved Discovery Measurement in Creator Analytics & Home Recommendations / Thumbnail Personalization / Gameplay Videos / Standout Games Docs",
+    "publisher": "Roblox Creator Hub & DevForum Staff (create.roblox.com / devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-10-12",
+    "collection_date": "2026-11-22",
+    "reference": "create.roblox.com/docs/production/promotion — Discovery, RFY, Thumbnails, Videos, Standout Games (Mar–Oct 2026)"
+  },
+  {
+    "source_id": "S05",
+    "title": "RDC 2025 & RDC 2026 Official Announcements (Roblox Moments, Server Authority, Standalone Apps, Build Alpha, $5B Cumulative DevEx, The Hunt: Roblox 20, The Hollow)",
+    "publisher": "Roblox Corporation (corp.roblox.com / roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-09",
+    "collection_date": "2026-11-22",
+    "reference": "corp.roblox.com — RDC 2025/2026 Keynotes & Official Platform Events Blog"
+  },
+  {
+    "source_id": "S06",
+    "title": "Developer Exchange (DevEx) Documentation & Three-Tier Rate Schedule ($0.0035 Legacy, $0.0038 Standard Sept 5 2025+, $0.0054 U.S. 18+ June 8 2026+)",
+    "publisher": "Roblox Corporation (create.roblox.com / devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-06-08",
+    "collection_date": "2026-11-22",
+    "reference": "create.roblox.com/docs/production/earning-on-roblox — DevEx Rates, Eligibility & Tipalti Tax Forms"
+  },
+  {
+    "source_id": "S07",
+    "title": "Creator Rewards Program (Daily Engagement 5 R$/Active Spender & Audience Expansion 35% Share), Subscriptions (70%/100%), Roblox Plus & Managed Pricing",
+    "publisher": "Roblox Corporation (create.roblox.com / devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-09-24",
+    "collection_date": "2026-11-22",
+    "reference": "create.roblox.com/docs/production/monetization — Creator Rewards, Subscriptions, Roblox Plus, Managed Pricing"
+  },
+  {
+    "source_id": "S08",
+    "title": "Paid Random Items Policy, Probability Disclosures, PolicyService API & Regional Restrictions (BE/NL/UK/AU & Brazil Digital ECA Mar 17 2026)",
+    "publisher": "Roblox Corporation (create.roblox.com / devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-03-17",
+    "collection_date": "2026-11-22",
+    "reference": "create.roblox.com/docs/production/monetization — Paid Random Items, PolicyService & Content Maturity Questionnaire"
+  },
+  {
+    "source_id": "S09",
+    "title": "Mandatory Facial Age Estimation, Age-Segregated Chat (Kids 5-8 / Select 9-15 / 16-17 / 18+), TextChatService Migration & License Manager",
+    "publisher": "Roblox Corporation (corp.roblox.com / create.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-01",
+    "collection_date": "2026-11-22",
+    "reference": "corp.roblox.com & create.roblox.com — Safety, Age-Checked Chat, Rights Manager & License Manager"
+  },
+  {
+    "source_id": "S10",
+    "title": "Roblox Ads Manager, Ad Credits (1 Credit = $1 = 285 R$), Earnings Objective ROAS, Incrementality Studies (+14% Sessions / +10% D7) & User Ads Sunset",
+    "publisher": "Roblox Corporation (create.roblox.com / devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-08",
+    "collection_date": "2026-11-22",
+    "reference": "create.roblox.com/docs/production/promotion/ads-manager — Sponsored Experiences, Rewarded Videos & Immersive Ads"
+  },
+  {
+    "source_id": "S11",
+    "title": "AnalyticsService Luau API Reference, Creator Hub Analytics Dashboards, Open Cloud Analytics/Benchmarks API, Performance/OOM & DataStore Limits",
+    "publisher": "Roblox Corporation (create.roblox.com / devforum.roblox.com)",
+    "tier": "Primary",
+    "publication_date": "2026-10",
+    "collection_date": "2026-11-22",
+    "reference": "create.roblox.com/docs/production/analytics — AnalyticsService, Funnels, Journeys, Economy, Performance & DataStore Observability"
+  },
+  {
+    "source_id": "S12",
+    "title": "U.S.–Philippines Income Tax Treaty (Article 13 — Royalties 15% WHT) & IRS Form W-8BEN / 1042-S Rules",
+    "publisher": "Internal Revenue Service (irs.gov) & Bureau of Internal Revenue (bir.gov.ph)",
+    "tier": "Primary",
+    "publication_date": "Active Treaty",
+    "collection_date": "2026-11-22",
+    "reference": "irs.gov — U.S.–Philippines Income Tax Treaty Article 13 & Form W-8BEN Instructions"
+  },
+  {
+    "source_id": "S13",
+    "title": "Bangko Sentral ng Pilipinas (BSP) Official Reference Exchange Rate Bulletin (PHP 63.6960/USD) & BAP/PDS Close (PHP 63.81/USD)",
+    "publisher": "Bangko Sentral ng Pilipinas / BAP (via taxcalculator.com.ph & philnews.ph)",
+    "tier": "Primary",
+    "publication_date": "2026-11-20",
+    "collection_date": "2026-11-22",
+    "reference": "BSP Reference Rate Bulletin Nov 20, 2026 (cross-checked with Wise/XE mid-market PHP 63.65–63.85)"
+  },
+  {
+    "source_id": "S14",
+    "title": "Rolimon's Game Analytics Live & Historical CCU / Visits / Ratings Tracker",
+    "publisher": "Rolimon's (rolimons.com)",
+    "tier": "Secondary",
+    "publication_date": "2026-11-22",
+    "collection_date": "2026-11-22",
+    "reference": "rolimons.com/games — Live & Peak CCU, Visits, Approval Ratios across 44 tracked titles"
+  },
+  {
+    "source_id": "S15",
+    "title": "RoMonitor Stats & RoPeaks Live Roblox Telemetry Platform",
+    "publisher": "RoMonitor Stats (romonitorstats.com) & RoPeaks (ropeaks.com)",
+    "tier": "Secondary",
+    "publication_date": "2026-11-22",
+    "collection_date": "2026-11-22",
+    "reference": "romonitorstats.com & ropeaks.com — Live CCU, Charts, Visits, Session Estimates"
+  },
+  {
+    "source_id": "S16",
+    "title": "RivalDucks, PlaytimeStats & LiveCounts Secondary Roblox CCU Trackers",
+    "publisher": "RivalDucks / PlaytimeStats / LiveCounts (rivalducks.com, playtimestats.com, livecounts.nl)",
+    "tier": "Secondary",
+    "publication_date": "2026-11-22",
+    "collection_date": "2026-11-22",
+    "reference": "rivalducks.com & playtimestats.com — Cross-referenced Oct–Nov 2026 peak & daily CCU snapshots"
+  },
+  {
+    "source_id": "S17",
+    "title": "The 2025 & 2026 Roblox Benchmark Reports (500+ Scaled Experiences >=1M MAU: D1/D7/D30, Session Length, Payer Conversion, Spend Polarization)",
+    "publisher": "GameAnalytics (gameanalytics.com)",
+    "tier": "Secondary",
+    "publication_date": "2026-09",
+    "collection_date": "2026-11-22",
+    "reference": "gameanalytics.com — 2025 (Aug 2025) & 2026 (Sep 2026) Roblox Benchmark Reports"
+  },
+  {
+    "source_id": "S18",
+    "title": "Roblox Ecosystem Monetization, Co-Op Survival Shift, UA Budgets & Non-Paying Audience (~80%) Analyses",
+    "publisher": "Naavik (naavik.co) & GameDiscoverCo (gamediscover.co)",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "naavik.co & gamediscover.co — Roblox UGC Economy, Admin Abuse War & Survival Run Analyses"
+  },
+  {
+    "source_id": "S19",
+    "title": "Roblox Discovery, 30-Second FTUE Window, Agile MAP Prototyping & Simulator Saturation Studies",
+    "publisher": "Dubit (dubit.io)",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "dubit.io — Roblox Onboarding & Discovery Whitepapers"
+  },
+  {
+    "source_id": "S20",
+    "title": "The Motivational Pull of Video Games: Self-Determination Theory (PENS) & Youth Dark Patterns / Pity System Research",
+    "publisher": "Ryan, Rigby & Przybylski (selfdeterminationtheory.org) / Newcastle University (ncl.ac.uk)",
+    "tier": "Secondary",
+    "publication_date": "2006–2026",
+    "collection_date": "2026-11-22",
+    "reference": "selfdeterminationtheory.org & ncl.ac.uk — PENS Framework & Youth Game Monetization Ethics"
+  },
+  {
+    "source_id": "S21",
+    "title": "Youth Safety, FTC Petitions, UK Children's Code & State AG Monetization Scrutiny Coverage",
+    "publisher": "Fairplay, The Guardian, Fortune, Australian eSafety Commissioner",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "fairplayforkids.org, theguardian.com, esafety.gov.au — Roblox Youth Protection & Dark Pattern Regulation"
+  },
+  {
+    "source_id": "S22",
+    "title": "Newzoo Roblox Market & Monthly Top-10 Visit Rankings (2025–2026)",
+    "publisher": "Newzoo (newzoo.com)",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "newzoo.com — Roblox Genre Demand, Top-10 Consistency & Supply Gap Analyses"
+  },
+  {
+    "source_id": "S23",
+    "title": "PocketGamer.biz, Business of Apps, Digiday & Search Engine Land — Roblox 80% Mobile Split, DevEx Concentration & 25.8M/47.4M CCU Records",
+    "publisher": "PocketGamer.biz / Business of Apps / Digiday / Search Engine Land",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "pocketgamer.biz, businessofapps.com, searchengineland.com — Payout Power-Law & Mobile Platform Data"
+  },
+  {
+    "source_id": "S24",
+    "title": "GamesIndustry.biz, Business Wire, Voldex & Do Big Studios M&A / Portfolio Disclosures",
+    "publisher": "GamesIndustry.biz / Business Wire / Do Big Studios / Voldex",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "gamesindustry.biz, businesswire.com, dobig.com, voldex.com — Brookhaven Buyout & Game-Sales M&A Consolidation"
+  },
+  {
+    "source_id": "S25",
+    "title": "Gaming Press Verification (PC Gamer, IGN, Eurogamer, GamesRadar, VG247, Dot Esports, Calcalistech, Wikipedia)",
+    "publisher": "PC Gamer / IGN / Eurogamer / GamesRadar / VG247 / Wikipedia",
+    "tier": "Secondary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "pcgamer.com, ign.com, eurogamer.net, wikipedia.org — Case Study Timelines, BMWLux Prototype & Incident Reporting"
+  },
+  {
+    "source_id": "S26",
+    "title": "Wise & XE Live USD-to-PHP Mid-Market FX Verification & Rewarded Video Ad Consulting Benchmarks",
+    "publisher": "Wise (wise.com) / XE (xe.com) / GameBiz Consulting (gamebizconsulting.com)",
+    "tier": "Secondary",
+    "publication_date": "2026-11-22",
+    "collection_date": "2026-11-22",
+    "reference": "wise.com, xe.com (PHP 63.65–63.85/USD), gamebizconsulting.com ($4–$7.50+ Rewarded Video CPM)"
+  },
+  {
+    "source_id": "S27",
+    "title": "Roblox Developer Forum Community Post-Mortems (Ads Manager Burn, DataStore 304/SetAsync Wipes, Mobile Memory Leaks, Clone Failure Rates)",
+    "publisher": "Roblox Developer Forum Community (devforum.roblox.com)",
+    "tier": "Supplementary",
+    "publication_date": "2024–2026",
+    "collection_date": "2026-11-22",
+    "reference": "devforum.roblox.com — Flagged [Developer-reported experience] unless staff-corroborated"
+  },
+  {
+    "source_id": "S28",
+    "title": "Reddit r/robloxgamedev & HiddenDevs / Talent Hub Commission Rates & Solo Developer Burnout Post-Mortems",
+    "publisher": "Reddit (reddit.com/r/robloxgamedev) & HiddenDevs / Talent Hub",
+    "tier": "Supplementary",
+    "publication_date": "2024–2026",
+    "collection_date": "2026-11-22",
+    "reference": "reddit.com/r/robloxgamedev — Flagged [Developer-reported experience] (freelance GFX/UI/SFX pricing & launch post-mortems)"
+  },
+  {
+    "source_id": "S29",
+    "title": "Game Wikis & Community Guides (Fandom, Fischipedia, ProGameGuides, Beebom, Sportskeeda, Timesaver.gg, BloxG)",
+    "publisher": "Fandom / Fischipedia / ProGameGuides / Beebom / Sportskeeda",
+    "tier": "Supplementary",
+    "publication_date": "2025–2026",
+    "collection_date": "2026-11-22",
+    "reference": "fandom.com, fischipedia.org, progameguides.com — Mechanics/update/code verification (unverified blog retention claims explicitly audited)"
+  }
+]

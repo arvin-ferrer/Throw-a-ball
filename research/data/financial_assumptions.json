@@ -1,0 +1,156 @@
+{
+  "platform_rates": {
+    "marketplace_take_rate": 0.30,
+    "devex_standard_usd": 0.0038,
+    "devex_us18_usd": 0.0054,
+    "usd_to_php": 63.75,
+    "fx_date": "2026-11-22",
+    "notes": "Verified Nov 2026: 30% Roblox cut on Game Passes/Dev Products; DevEx $0.0038 standard (Sept 5, 2025+) & $0.0054 U.S. 18+ qualifying tier (June 8, 2026+); BSP Nov 20, 2026 ref rate PHP 63.6960 & BAP close PHP 63.81 / Wise mid-market PHP 63.65-63.85 (midpoint PHP 63.75)."
+  },
+  "profiles": [
+    {
+      "name": "Solo Bootstrap (Primary Anchor)",
+      "description": "Solo developer, DIY Studio/Blender/UI, $100 (PHP 6,375) upfront GFX/test budget, $0/mo ongoing ad spend, $10/mo minor tools.",
+      "scenarios": [
+        {
+          "tier": "Conservative",
+          "dau": 300,
+          "mau_to_dau_ratio": 3.8,
+          "sessions_per_day": 1.3,
+          "avg_session_minutes": 10.0,
+          "monthly_payer_conversion": 0.018,
+          "monthly_arppu_robux": 220.0,
+          "monthly_creator_rewards_robux_per_dau": 3.0,
+          "us18_spend_share": 0.10,
+          "monthly_ad_spend_usd": 0.0,
+          "monthly_maintenance_usd": 10.0,
+          "upfront_dev_cost_usd": 100.0
+        },
+        {
+          "tier": "Moderate",
+          "dau": 2500,
+          "mau_to_dau_ratio": 3.5,
+          "sessions_per_day": 1.56,
+          "avg_session_minutes": 12.0,
+          "monthly_payer_conversion": 0.032,
+          "monthly_arppu_robux": 350.0,
+          "monthly_creator_rewards_robux_per_dau": 6.0,
+          "us18_spend_share": 0.18,
+          "monthly_ad_spend_usd": 0.0,
+          "monthly_maintenance_usd": 10.0,
+          "upfront_dev_cost_usd": 100.0
+        },
+        {
+          "tier": "Optimistic",
+          "dau": 15000,
+          "mau_to_dau_ratio": 3.2,
+          "sessions_per_day": 1.8,
+          "avg_session_minutes": 15.0,
+          "monthly_payer_conversion": 0.042,
+          "monthly_arppu_robux": 480.0,
+          "monthly_creator_rewards_robux_per_dau": 9.0,
+          "us18_spend_share": 0.22,
+          "monthly_ad_spend_usd": 0.0,
+          "monthly_maintenance_usd": 25.0,
+          "upfront_dev_cost_usd": 100.0
+        }
+      ]
+    },
+    {
+      "name": "Polished Solo / Duo (Limited Budget)",
+      "description": "Solo or duo with $600 (PHP 38,250) upfront GFX/UI/SFX/test spend, $150/mo targeted Ads Manager, $40/mo tools/contractors.",
+      "scenarios": [
+        {
+          "tier": "Conservative",
+          "dau": 800,
+          "mau_to_dau_ratio": 3.8,
+          "sessions_per_day": 1.4,
+          "avg_session_minutes": 11.0,
+          "monthly_payer_conversion": 0.022,
+          "monthly_arppu_robux": 260.0,
+          "monthly_creator_rewards_robux_per_dau": 4.0,
+          "us18_spend_share": 0.15,
+          "monthly_ad_spend_usd": 150.0,
+          "monthly_maintenance_usd": 40.0,
+          "upfront_dev_cost_usd": 600.0
+        },
+        {
+          "tier": "Moderate",
+          "dau": 6000,
+          "mau_to_dau_ratio": 3.5,
+          "sessions_per_day": 1.6,
+          "avg_session_minutes": 13.0,
+          "monthly_payer_conversion": 0.035,
+          "monthly_arppu_robux": 380.0,
+          "monthly_creator_rewards_robux_per_dau": 7.0,
+          "us18_spend_share": 0.20,
+          "monthly_ad_spend_usd": 150.0,
+          "monthly_maintenance_usd": 40.0,
+          "upfront_dev_cost_usd": 600.0
+        },
+        {
+          "tier": "Optimistic",
+          "dau": 35000,
+          "mau_to_dau_ratio": 3.2,
+          "sessions_per_day": 1.9,
+          "avg_session_minutes": 16.0,
+          "monthly_payer_conversion": 0.045,
+          "monthly_arppu_robux": 520.0,
+          "monthly_creator_rewards_robux_per_dau": 10.0,
+          "us18_spend_share": 0.25,
+          "monthly_ad_spend_usd": 150.0,
+          "monthly_maintenance_usd": 100.0,
+          "upfront_dev_cost_usd": 600.0
+        }
+      ]
+    },
+    {
+      "name": "Reinvesting Small Team (2-3 Devs)",
+      "description": "Small indie studio with $2,500 (PHP 159,375) commercial MVP outlay, $800/mo Ads Manager + CPM clipping, $400/mo ongoing live-ops.",
+      "scenarios": [
+        {
+          "tier": "Conservative",
+          "dau": 4000,
+          "mau_to_dau_ratio": 3.6,
+          "sessions_per_day": 1.5,
+          "avg_session_minutes": 12.0,
+          "monthly_payer_conversion": 0.028,
+          "monthly_arppu_robux": 320.0,
+          "monthly_creator_rewards_robux_per_dau": 5.5,
+          "us18_spend_share": 0.18,
+          "monthly_ad_spend_usd": 800.0,
+          "monthly_maintenance_usd": 400.0,
+          "upfront_dev_cost_usd": 2500.0
+        },
+        {
+          "tier": "Moderate",
+          "dau": 25000,
+          "mau_to_dau_ratio": 3.4,
+          "sessions_per_day": 1.7,
+          "avg_session_minutes": 14.5,
+          "monthly_payer_conversion": 0.040,
+          "monthly_arppu_robux": 450.0,
+          "monthly_creator_rewards_robux_per_dau": 8.5,
+          "us18_spend_share": 0.24,
+          "monthly_ad_spend_usd": 800.0,
+          "monthly_maintenance_usd": 400.0,
+          "upfront_dev_cost_usd": 2500.0
+        },
+        {
+          "tier": "Optimistic",
+          "dau": 100000,
+          "mau_to_dau_ratio": 3.1,
+          "sessions_per_day": 2.0,
+          "avg_session_minutes": 17.0,
+          "monthly_payer_conversion": 0.050,
+          "monthly_arppu_robux": 600.0,
+          "monthly_creator_rewards_robux_per_dau": 12.0,
+          "us18_spend_share": 0.28,
+          "monthly_ad_spend_usd": 800.0,
+          "monthly_maintenance_usd": 600.0,
+          "upfront_dev_cost_usd": 2500.0
+        }
+      ]
+    }
+  ]
+}
