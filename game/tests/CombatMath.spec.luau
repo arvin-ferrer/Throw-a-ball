@@ -170,6 +170,29 @@ run("Throw origin accepts 12 studs and rejects 12.01 studs without mutating cool
 	expectRejected(outside, rate, 11, "OriginTooFar")
 end)
 
+run("Non-finite origin-check context rejects throws without consuming cooldown", function()
+	local rate = CombatMath.newRateState()
+	local payload = { origin = ZERO, direction = FORWARD }
+	assert(validate(payload, rate, 10).ok, "seed an accepted throw")
+	local previousThrow, previousDeadline = rate.lastThrowTime, rate.nextAllowedTime
+	for _, context in
+		{
+			{ root = { X = 0 / 0, Y = 0, Z = 0 }, limit = 12 },
+			{ root = ZERO, limit = 0 / 0 },
+			{ root = ZERO, limit = math.huge },
+		}
+	do
+		local result =
+			CombatMath.validateThrowPayload(payload, context.root, rate, 0, 11, context.limit)
+		assert(not result.ok and result.reason == "OriginTooFar", "unusable origin-check context")
+		assert(
+			rate.lastThrowTime == previousThrow,
+			"rejection leaves the accepted throw time intact"
+		)
+		assert(rate.nextAllowedTime == previousDeadline, "rejection leaves cooldown debt intact")
+	end
+end)
+
 run("Throw rate allows one early packet while preserving cooldown debt", function()
 	local rate = CombatMath.newRateState()
 	local payload = { origin = ZERO, direction = FORWARD }
@@ -281,6 +304,29 @@ run("Training pads require ownership and respect horizontal and vertical bounds"
 end)
 
 -- Cases 9–11
+run("Sphere entry stays exact when the sphere center projects past the segment end", function()
+	local endpoint = { X = 10, Y = 0, Z = 0 }
+	local center = { X = 12, Y = 0, Z = 0 }
+	local entry = CombatMath.intersectSegmentSphere(ZERO, endpoint, center, 3)
+	assertNear(assert(entry, "sphere overlaps the endpoint"), 0.9, "entry at nine of ten studs")
+end)
+
+run("Sphere checks handle point segments and reject invalid geometry", function()
+	local center = { X = 1, Y = 0, Z = 0 }
+	assert(CombatMath.intersectSegmentSphere(ZERO, ZERO, center, 2) == 0, "point starts inside")
+	assert(
+		CombatMath.intersectSegmentSphere(ZERO, ZERO, center, 0.5) == nil,
+		"point outside misses"
+	)
+	assert(CombatMath.intersectSegmentSphere(ZERO, center, center, -1) == nil, "negative radius")
+	assert(
+		CombatMath.intersectSegmentSphere(ZERO, center, center, math.huge) == nil,
+		"infinite radius"
+	)
+	local invalid = { X = 0 / 0, Y = 0, Z = 0 }
+	assert(CombatMath.intersectSegmentSphere(ZERO, center, invalid, 1) == nil, "non-finite center")
+end)
+
 run("The PR #22 ballistic arc samples match and cover 1.6 seconds in 32 segments", function()
 	local origin = { X = 0, Y = 5, Z = 0 }
 	local sample = CombatMath.sampleArcPosition(origin, FORWARD, 0.5, BASELINE_ARC)

@@ -195,6 +195,23 @@ run("Slam recovers for 0.8 seconds and stays on cooldown for six seconds", funct
 	expectAction(step(state, finishAt + 6.001, targets), "TelegraphSlam")
 end)
 
+run("One lagged slam tick hits a grounded fighter crossed between radius samples once", function()
+	local state = newBoss(false)
+	local targets = { target(7, 14, 0, 0) }
+	beginAttack(state, targets, "TelegraphSlam")
+	step(state, 1.2, targets)
+	local lagged = step(state, 1.8, targets)
+	local ring = expectAction(lagged, "SlamShockwaveTick")
+	assertNear(assert(ring.radius, "ring radius"), 20.8, "ring advanced beyond the fighter")
+	local hit = expectAction(lagged, "SlamHit")
+	assert(hit.playerId == 7 and hit.damage == 28, "grounded fighter crossed by the wave")
+	assert(countActions(lagged, "SlamHit") == 1, "lagged tick delivers one hit")
+	assert(
+		countActions(step(state, 1.85, targets), "SlamHit") == 0,
+		"no second hit from the same slam"
+	)
+end)
+
 run("Dashing outside the slam ring and jumping above its hit height both avoid damage", function()
 	local state = newBoss(false)
 	local startingTargets = { target(7, 12, 0, 0), target(8, 12, 0, 0) }
@@ -271,6 +288,49 @@ run("Arena cover occludes a player even when one boulder step crosses both", fun
 end)
 
 -- Case 21
+run(
+	"A single lagged boulder tick expires at the range or lifetime cap without hitting beyond it",
+	function()
+		for _, limit in
+			{
+				{ range = 75, cutoff = 75 / 46, finalZ = 75, targetZ = 82 },
+				{ range = 200, cutoff = 2, finalZ = 92, targetZ = 100 },
+			}
+		do
+			for _, delay in { limit.cutoff, 2.8 } do
+				local config = table.clone(MOSSBACK)
+				config.boulder = table.clone(MOSSBACK.boulder)
+				config.boulder.maxDistance = limit.range
+				local state = BossAIStateMachine.new(config, ORIGIN, 1_560, false, 0)
+				local id = startRolling(state, { target(7, 0, 0, 40) }, 1)
+				local actions = step(state, 1 + delay, { target(7, 0, 0, limit.targetZ) })
+				assert(findAction(actions, "BoulderHit") == nil, "cannot hit beyond the cutoff")
+				expectDespawn(actions, id, "Expired")
+				local moved = expectAction(actions, "BoulderMoved")
+				assertNear(
+					assert(moved.position, "final boulder position").Z,
+					limit.finalZ,
+					"clipped travel"
+				)
+				assert(state.boulders[id] == nil, "boulder is removed in the cutoff tick")
+			end
+		end
+	end
+)
+
+run("Boulder collision uses a supplied target radius instead of the default", function()
+	local state = newBoss(false)
+	local id = startRolling(state, { target(7, 0, 0, 40) }, 1)
+	local fighter = target(7, 6, 0, 40)
+	fighter.radius = 3
+	local contact = step(state, 1.9, { fighter })
+	assert(
+		expectAction(contact, "BoulderHit").playerId == 7,
+		"custom radius reaches the boulder lane"
+	)
+	expectDespawn(contact, id, "PlayerHit")
+end)
+
 run("A missed boulder expires at its 75-stud travel limit", function()
 	local state = newBoss(false)
 	local id = startRolling(state, { target(7, 0, 0, 40) }, 1)

@@ -164,10 +164,17 @@ function MobService.init(mapRoot: Instance)
 	RunService.Heartbeat:Connect(onHeartbeat)
 end
 
-function MobService.getTargets(): { CombatMath.SweepTarget }
+local TARGET_RANGE = 200 -- studs; a ball flies ~216 studs, so farther mobs can't be in play
+
+-- Only live mobs near this attacker (i.e. in the PvE layer they stand in) can be hit.
+function MobService.getTargets(attacker: Player): { CombatMath.SweepTarget }
 	local targets = {}
+	local root = attacker.Character and attacker.Character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		return targets
+	end
 	for id, mob in mobs do
-		if mob.alive then
+		if mob.alive and (mob.position - root.Position).Magnitude <= TARGET_RANGE then
 			local p = mob.position
 			table.insert(targets, {
 				id = id,

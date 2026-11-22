@@ -24,7 +24,8 @@ export type Hooks = {
 	getFighterBiome: (player: Player) -> string?,
 	getBossTarget: (biomeId: string) -> SweepTarget?,
 	damageBoss: (biomeId: string, amount: number, attackerId: number) -> (),
-	getMobTargets: () -> { SweepTarget },
+	-- Mobs the attacker may hit: same biome PvE layer, never from inside a locked room.
+	getMobTargets: (attacker: Player) -> { SweepTarget },
 	-- On a kill: the mob kind and its biome's PvE damage multiplier (GDD §6: 1.5x–6x).
 	damageMob: (mobId: string, amount: number, attacker: Player) -> (string?, number?),
 }
@@ -82,11 +83,14 @@ local function rootOf(player: Player): BasePart?
 	return if root and root:IsA("BasePart") then root else nil
 end
 
+-- Only opponents this attacker may legally hit are solid to the ball; everyone else (Hub,
+-- PvE, dead, grace period) is see-through, so they can't soak a throw meant for the boss.
 local function playerTargets(attacker: Player): { SweepTarget }
 	local targets = {}
+	local h = hooks :: Hooks
 	for _, other in Players:GetPlayers() do
 		local root = rootOf(other)
-		if other ~= attacker and root then
+		if other ~= attacker and root and h.canDealPvPDamage(attacker, other) then
 			local id, radius = tostring(other.UserId), THROW.PLAYER_HIT_RADIUS_STUDS
 			table.insert(
 				targets,
@@ -123,7 +127,8 @@ local function gatherTargets(attacker: Player): ({ SweepTarget }, { [string]: Ba
 	if boss then
 		table.insert(targets, boss)
 	end
-	for _, mob in h.getMobTargets() do
+	local mobs: { SweepTarget } = if biomeId then {} else h.getMobTargets(attacker)
+	for _, mob in mobs do
 		table.insert(targets, mob)
 	end
 	local training, byId = trainingTargets()
@@ -332,6 +337,11 @@ local function onThrowBall(player: Player, payload: unknown)
 	)
 	if not valid.ok or not valid.origin or not valid.direction then
 		return
+	end
+	local o = valid.origin
+	local toOrigin = Vector3.new(o.X, o.Y, o.Z) - root.Position
+	if toOrigin.Magnitude > 0.05 and Workspace:Raycast(root.Position, toOrigin, worldParams()) then
+		return -- release point behind cover: an origin can't be smuggled through a wall
 	end
 	local speed =
 		CombatMath.computeProjectileSpeed(stat(player, "BallTier", "RubberBall"), throwSpeed)
