@@ -15,6 +15,7 @@ local ArenaCycleService = require(Services.ArenaCycleService)
 local BossAIService = require(Services.BossAIService)
 local CombatService = require(Services.CombatService)
 local MobService = require(Services.MobService)
+local PortalService = require(Services.PortalService)
 
 local MAP_NAME = "BallBrawl_Map_v2"
 
@@ -27,6 +28,7 @@ if map then
 		onDefeated = ArenaCycleService.notifyBossDefeated,
 	})
 	MobService.init(map)
+	PortalService.init(map)
 	CombatService.init(remotesFolder, {
 		canDealPvPDamage = ArenaCycleService.canDealPvPDamage,
 		notifyPvPDamage = ArenaCycleService.notifyPvPDamage,
