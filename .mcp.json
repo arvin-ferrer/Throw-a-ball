@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "robloxstudio": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@chrrxs/robloxstudio-mcp@latest"
+      ]
+    },
+    "blender": {
+      "command": "uvx",
+      "args": [
+        "mcp-for-blender"
+      ]
+    }
+  }
+}

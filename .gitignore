@@ -11,3 +11,15 @@ venv/
 Thumbs.db
 *.swp
 *.swo
+
+# Machine-local third-party skills (populated by `python scripts/setup_team.py`)
+/.agents/skills/scenario-*
+/.claude/skills/scenario-*
+/.claude/skills/ball-brawl-pipeline
+
+# Local Roblox & Blender scratch artifacts
+*.rbxl
+*.rbxlx
+*.blend1
+*.blend2
+.tmp/
