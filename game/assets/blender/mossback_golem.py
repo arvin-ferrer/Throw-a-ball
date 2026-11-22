@@ -30,103 +30,167 @@ MAT_BARK = 7
 
 
 def create_materials() -> list[bpy.types.Material]:
-    """Build Emerald Meadow 3-value palette + glowing jade rune crystal."""
+    """Build Emerald Meadow 3-value palette + saturated Meadow emerald rune glow."""
     return [
-        C.make_material("StoneDark", (0.14, 0.16, 0.15), roughness=0.84),
-        C.make_material("StoneMid", (0.28, 0.31, 0.29), roughness=0.78),
-        C.make_material("StoneLight", (0.44, 0.47, 0.44), roughness=0.72),
-        C.make_material("MossDeep", (0.06, 0.25, 0.11), roughness=0.88),
-        C.make_material("MossBright", (0.12, 0.48, 0.18), roughness=0.82),
-        C.make_material("MossLime", (0.34, 0.72, 0.22), roughness=0.76),
+        C.make_material("StoneDark", (0.14, 0.17, 0.15), roughness=0.84),
+        C.make_material("StoneMid", (0.28, 0.32, 0.29), roughness=0.78),
+        C.make_material("StoneLight", (0.44, 0.49, 0.45), roughness=0.72),
+        C.make_material("MossDeep", (0.04, 0.28, 0.10), roughness=0.86),
+        C.make_material("MossBright", (0.09, 0.56, 0.18), roughness=0.80),
+        C.make_material("MossLime", (0.24, 0.80, 0.22), roughness=0.72),
         C.make_material(
-            "JadeRuneGlow",
-            (0.10, 0.88, 0.42),
-            roughness=0.18,
-            emission=(0.10, 0.92, 0.42),
-            emission_strength=2.4,
+            "EmeraldRuneGlow",
+            (0.05, 0.96, 0.24),
+            roughness=0.16,
+            emission=(0.04, 0.96, 0.22),
+            emission_strength=1.55,
         ),
-        C.make_material("RootBark", (0.22, 0.15, 0.10), roughness=0.86),
+        C.make_material("RootBark", (0.24, 0.15, 0.09), roughness=0.86),
     ]
 
 
-def add_leg(bm: bmesh.types.BMesh, side: int, bmap: dict[int, str]) -> None:
-    """Build one heavy pillar stone leg (Thigh, Shin, Foot) grounded at Z=0."""
+def add_leg(bm: bmesh.types.BMesh, side: int, bmap: dict[bmesh.types.BMVert, str]) -> None:
+    """Build one sculpted organic stone pillar leg (Thigh, Shin, Foot) grounded at Z=0."""
     tag = "L" if side < 0 else "R"
-    x = side * 1.85
-    # Foot block resting exactly on Z=0..1.25 + 3 blocky stone toes facing -Y
-    C.add_faceted_box(bm, (2.1, 2.7, 1.25), (x, -0.25, 0.625), MAT_STONE_DARK, 0.10, taper_top=(0.86, 0.88), tag_bone=f"Foot{tag}", bone_map=bmap)
-    for tx in (-0.65, 0.0, 0.65):
-        C.add_faceted_box(bm, (0.55, 0.85, 0.75), (x + tx, -1.55, 0.375), MAT_STONE_MID, 0.06, taper_top=(0.8, 0.7), tag_bone=f"Foot{tag}", bone_map=bmap)
-    # Shin pillar + knee stone guard + bark vine wrap
-    C.add_faceted_box(bm, (1.85, 1.95, 2.55), (x, 0.0, 2.45), MAT_STONE_MID, 0.12, taper_top=(1.08, 1.05), tag_bone=f"Shin{tag}", bone_map=bmap)
-    C.add_faceted_box(bm, (1.45, 0.75, 1.15), (x, -1.05, 3.35), MAT_STONE_LIGHT, 0.08, rot_deg=(12, 0, 0), tag_bone=f"Shin{tag}", bone_map=bmap)
-    C.add_faceted_box(bm, (2.05, 2.1, 0.42), (x, 0.0, 2.05), MAT_BARK, 0.04, rot_deg=(4, side * 6, 0), tag_bone=f"Shin{tag}", bone_map=bmap)
-    # Thigh
-    C.add_faceted_box(bm, (2.15, 2.2, 2.05), (x, 0.1, 4.55), MAT_STONE_DARK, 0.14, taper_top=(1.1, 1.05), tag_bone=f"Thigh{tag}", bone_map=bmap)
+    x = side * 1.92
+    # Organic arched stone foot resting flush on Z=0 + 3 carved stone toe claws
+    foot_rings = [
+        ((x, 0.95, 0.56), 0.92, 0.56, (90, 0, 0)),
+        ((x, 0.05, 0.64), 1.12, 0.64, (90, 0, 0)),
+        ((x, -1.05, 0.58), 1.16, 0.58, (90, 0, 0)),
+        ((x, -1.55, 0.42), 0.92, 0.42, (95, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, foot_rings, MAT_STONE_DARK, sides=10, smooth=False, tag_bone=f"Foot{tag}", bone_map=bmap)
+    for tx, ang in [(-0.62, 12), (0.0, 0), (0.62, -12)]:
+        C.add_crystal_prism(bm, 0.32, 0.92, (x + tx, -1.85, 0.36), MAT_STONE_LIGHT, sides=5, rot_deg=(78, 0, ang), tag_bone=f"Foot{tag}", bone_map=bmap)
+    # Tapered organic stone shin + faceted knee boulder + woven root wrap
+    shin_rings = [
+        ((x, -0.05, 1.05), 0.95, 1.00, (0, 0, 0)),
+        ((x, -0.02, 2.35), 1.12, 1.16, (0, 0, 0)),
+        ((x, 0.04, 3.65), 1.06, 1.10, (0, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, shin_rings, MAT_STONE_MID, sides=9, smooth=False, tag_bone=f"Shin{tag}", bone_map=bmap)
+    C.add_faceted_icosphere(bm, 0.78, (x, -0.92, 3.35), MAT_STONE_LIGHT, subdivisions=1, scale=(1.05, 0.68, 0.92), noise_amp=0.08, seed=30 + side, tag_bone=f"Shin{tag}", bone_map=bmap)
+    b0 = set(bm.verts)
+    C.add_closed_ring(bm, 1.14, 0.14, 0.20, MAT_BARK, (6, side * 8, 0), 12)
+    for v in [v for v in bm.verts if v not in b0]:
+        v.co += Vector((x, 0.0, 2.15))
+        bmap[v] = f"Shin{tag}"
+    # Tapered organic thigh blending smoothly into pelvis
+    thigh_rings = [
+        ((x, 0.05, 3.55), 1.08, 1.10, (0, 0, 0)),
+        ((x, 0.12, 4.65), 1.32, 1.34, (0, 0, 0)),
+        ((x * 0.90, 0.14, 5.55), 1.05, 1.10, (0, side * -12, 0)),
+    ]
+    C.add_lofted_tube(bm, thigh_rings, MAT_STONE_DARK, sides=9, smooth=False, tag_bone=f"Thigh{tag}", bone_map=bmap)
 
 
-def add_torso_and_head(bm: bmesh.types.BMesh, bmap: dict[int, str]) -> None:
-    """Build pelvis, massive faceted stone chest, glowing emerald core, moss mantle, and head."""
-    # Pelvis & mossy stone loin slabs
-    C.add_faceted_box(bm, (4.4, 3.0, 1.7), (0, 0.15, 5.45), MAT_STONE_DARK, 0.14, taper_top=(1.12, 1.06), tag_bone="Pelvis", bone_map=bmap)
-    C.add_faceted_box(bm, (1.9, 0.55, 1.35), (0, -1.45, 4.95), MAT_MOSS_DEEP, 0.06, rot_deg=(-8, 0, 0), tag_bone="Pelvis", bone_map=bmap)
+def add_torso_and_head(bm: bmesh.types.BMesh, bmap: dict[bmesh.types.BMVert, str]) -> None:
+    """Build sculpted organic stone torso, emerald rune heart, moss mantle, and stone brow head."""
+    # Organic tapered pelvis + mossy stone kilt drape
+    pelvis_rings = [
+        ((0.0, 0.15, 4.55), 2.10, 1.48, (0, 0, 0)),
+        ((0.0, 0.12, 5.65), 2.45, 1.72, (0, 0, 0)),
+        ((0.0, 0.10, 6.45), 2.30, 1.68, (0, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, pelvis_rings, MAT_STONE_DARK, sides=10, smooth=False, tag_bone="Pelvis", bone_map=bmap)
+    C.add_faceted_icosphere(bm, 1.15, (0.0, -1.35, 5.10), MAT_MOSS_DEEP, subdivisions=1, scale=(1.15, 0.45, 0.95), noise_amp=0.12, seed=41, tag_bone="Pelvis", bone_map=bmap)
 
-    # Massive inverted-trapezoid chest
-    C.add_faceted_box(bm, (5.2, 3.7, 4.1), (0, 0.1, 8.15), MAT_STONE_MID, 0.22, taper_top=(1.22, 1.12), tag_bone="Chest", bone_map=bmap)
-    # Sculpted chest armor plates framing recessed emerald core cavity
-    C.add_faceted_box(bm, (1.75, 1.0, 2.4), (-1.55, -1.65, 8.25), MAT_STONE_LIGHT, 0.12, rot_deg=(0, 0, 10), tag_bone="Chest", bone_map=bmap)
-    C.add_faceted_box(bm, (1.75, 1.0, 2.4), (1.55, -1.65, 8.25), MAT_STONE_LIGHT, 0.12, rot_deg=(0, 0, -10), tag_bone="Chest", bone_map=bmap)
-    C.add_faceted_box(bm, (2.1, 0.8, 1.9), (0, -1.45, 8.2), MAT_STONE_DARK, 0.08, tag_bone="Chest", bone_map=bmap)
-    # Glowing emerald chest crystal core + flanking rune shards
-    C.add_crystal_prism(bm, 0.72, 1.75, (0, -1.95, 8.25), MAT_CRYSTAL_GLOW, sides=6, rot_deg=(12, 0, 0), tag_bone="Chest", bone_map=bmap)
-    C.add_crystal_prism(bm, 0.34, 1.05, (-0.75, -1.85, 8.1), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(15, 22, 0), tag_bone="Chest", bone_map=bmap)
-    C.add_crystal_prism(bm, 0.34, 1.05, (0.75, -1.85, 8.1), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(15, -22, 0), tag_bone="Chest", bone_map=bmap)
+    # Massive heroic V-tapered organic stone torso (lofted 5-ring ribcage)
+    torso_rings = [
+        ((0.0, 0.12, 6.05), 2.25, 1.65, (0, 0, 0)),
+        ((0.0, 0.05, 7.35), 2.95, 2.08, (4, 0, 0)),
+        ((0.0, -0.05, 8.85), 3.45, 2.38, (8, 0, 0)),
+        ((0.0, -0.15, 10.15), 3.10, 2.15, (12, 0, 0)),
+        ((0.0, -0.10, 10.95), 2.05, 1.55, (12, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, torso_rings, MAT_STONE_MID, sides=12, smooth=False, tag_bone="Chest", bone_map=bmap)
+    # Sculpted flanking boulder pec plates framing recessed dark cavity + blazing EMERALD heart
+    for sx in (-1, 1):
+        C.add_faceted_icosphere(bm, 1.38, (sx * 1.52, -1.78, 8.45), MAT_STONE_LIGHT, subdivisions=1, scale=(0.95, 0.56, 1.05), noise_amp=0.10, seed=50 + sx, tag_bone="Chest", bone_map=bmap)
+    C.add_faceted_icosphere(bm, 1.25, (0.0, -1.82, 8.30), MAT_STONE_DARK, subdivisions=1, scale=(1.05, 0.42, 1.05), tag_bone="Chest", bone_map=bmap)
+    C.add_crystal_prism(bm, 0.72, 1.95, (0.0, -2.28, 8.38), MAT_CRYSTAL_GLOW, sides=6, rot_deg=(12, 0, 0), tag_bone="Chest", bone_map=bmap)
+    for sx in (-1, 1):
+        C.add_crystal_prism(bm, 0.34, 1.15, (sx * 0.74, -2.18, 8.20), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(14, sx * -22, 0), tag_bone="Chest", bone_map=bmap)
 
-    # Shaggy layered moss mantle & glowing dorsal crystal spikes across back/top
+    # Shaggy multi-tone Meadow moss mantle + blazing emerald dorsal crystal ridge
     moss_clumps = [
-        (1.65, (0.0, 1.35, 10.1), (1.55, 1.05, 0.75), MAT_MOSS_DEEP, 1),
-        (1.35, (-1.8, 1.05, 10.35), (1.2, 1.0, 0.72), MAT_MOSS_BRIGHT, 2),
-        (1.35, (1.8, 1.05, 10.35), (1.2, 1.0, 0.72), MAT_MOSS_BRIGHT, 3),
-        (1.15, (0.0, 1.75, 8.75), (1.6, 0.85, 0.9), MAT_MOSS_DEEP, 4),
-        (0.95, (-0.9, 1.4, 10.85), (1.1, 0.9, 0.6), MAT_MOSS_LIME, 5),
-        (0.90, (1.1, 1.2, 10.8), (1.0, 0.85, 0.55), MAT_MOSS_LIME, 6),
+        (1.75, (0.0, 1.35, 10.2), (1.60, 1.05, 0.78), MAT_MOSS_DEEP, 1),
+        (1.42, (-1.85, 1.05, 10.45), (1.22, 1.02, 0.74), MAT_MOSS_BRIGHT, 2),
+        (1.42, (1.85, 1.05, 10.45), (1.22, 1.02, 0.74), MAT_MOSS_BRIGHT, 3),
+        (1.25, (0.0, 1.85, 8.65), (1.65, 0.85, 0.92), MAT_MOSS_DEEP, 4),
+        (0.98, (-0.95, 1.40, 10.95), (1.12, 0.92, 0.60), MAT_MOSS_LIME, 5),
+        (0.95, (1.10, 1.25, 10.90), (1.05, 0.88, 0.58), MAT_MOSS_LIME, 6),
     ]
     for r, pos, sc, mat, sd in moss_clumps:
-        C.add_faceted_icosphere(bm, r, pos, mat, subdivisions=1, scale=sc, noise_amp=0.16, seed=sd, tag_bone="Chest", bone_map=bmap)
-    # Dorsal jade crystal ridge (echoes Pyraxis silhouette flair)
-    C.add_crystal_prism(bm, 0.45, 2.2, (0.0, 1.15, 11.45), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(-22, 0, 0), tag_bone="Chest", bone_map=bmap)
-    C.add_crystal_prism(bm, 0.36, 1.65, (-1.1, 1.35, 11.1), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(-26, 18, 0), tag_bone="Chest", bone_map=bmap)
-    C.add_crystal_prism(bm, 0.36, 1.65, (1.1, 1.35, 11.1), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(-26, -18, 0), tag_bone="Chest", bone_map=bmap)
+        C.add_faceted_icosphere(bm, r, pos, mat, subdivisions=2, scale=sc, noise_amp=0.16, seed=sd, tag_bone="Chest", bone_map=bmap)
+    for px, py, pz, h, rot in [
+        (0.0, 1.15, 11.75, 2.55, (-22, 0, 0)),
+        (-1.25, 1.35, 11.25, 1.85, (-26, 20, 0)),
+        (1.25, 1.35, 11.25, 1.85, (-26, -20, 0)),
+        (0.0, 1.95, 9.75, 1.65, (-48, 0, 0)),
+    ]:
+        C.add_crystal_prism(bm, 0.44, h, (px, py, pz), MAT_CRYSTAL_GLOW, sides=5, rot_deg=rot, tag_bone="Chest", bone_map=bmap)
 
-    # Low-set heavy stone Head with overhanging brow & glowing eyes
-    C.add_faceted_box(bm, (2.35, 2.25, 1.95), (0, -1.25, 10.35), MAT_STONE_MID, 0.14, taper_top=(0.92, 0.92), tag_bone="Head", bone_map=bmap)
-    C.add_faceted_box(bm, (2.65, 1.05, 0.65), (0, -2.05, 10.95), MAT_STONE_LIGHT, 0.08, rot_deg=(8, 0, 0), tag_bone="Head", bone_map=bmap)
-    C.add_faceted_box(bm, (2.15, 0.65, 0.55), (0, -2.15, 9.65), MAT_STONE_DARK, 0.06, tag_bone="Head", bone_map=bmap)
-    C.add_faceted_box(bm, (0.55, 0.32, 0.34), (-0.62, -2.35, 10.42), MAT_CRYSTAL_GLOW, 0.02, tag_bone="Head", bone_map=bmap)
-    C.add_faceted_box(bm, (0.55, 0.32, 0.34), (0.62, -2.35, 10.42), MAT_CRYSTAL_GLOW, 0.02, tag_bone="Head", bone_map=bmap)
-    C.add_faceted_icosphere(bm, 0.85, (0.15, -0.95, 11.45), MAT_MOSS_BRIGHT, subdivisions=1, scale=(1.35, 1.05, 0.55), noise_amp=0.14, seed=9, tag_bone="Head", bone_map=bmap)
+    # Sculpted craggy ancient stone Head (organic cranium + overhanging stone brow + carved jaw)
+    C.add_faceted_icosphere(bm, 1.42, (0.0, -1.42, 10.48), MAT_STONE_MID, subdivisions=2, scale=(1.04, 0.96, 0.88), noise_amp=0.08, seed=70, tag_bone="Head", bone_map=bmap)
+    brow_rings = [
+        ((-1.25, -2.05, 10.96), 0.34, 0.42, (0, 90, 12)),
+        ((0.0, -2.38, 10.90), 0.38, 0.48, (0, 90, 0)),
+        ((1.25, -2.05, 10.96), 0.34, 0.42, (0, 90, -12)),
+    ]
+    C.add_lofted_tube(bm, brow_rings, MAT_STONE_LIGHT, sides=6, smooth=False, tag_bone="Head", bone_map=bmap)
+    jaw_rings = [
+        ((-0.95, -1.92, 9.78), 0.32, 0.38, (0, 90, 8)),
+        ((0.0, -2.26, 9.64), 0.38, 0.44, (0, 90, 0)),
+        ((0.95, -1.92, 9.78), 0.32, 0.38, (0, 90, -8)),
+    ]
+    C.add_lofted_tube(bm, jaw_rings, MAT_STONE_DARK, sides=6, smooth=False, tag_bone="Head", bone_map=bmap)
+    for sx in (-1, 1):
+        C.add_crystal_prism(bm, 0.24, 0.54, (sx * 0.56, -2.38, 10.42), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(0, 90, sx * -14), tag_bone="Head", bone_map=bmap)
+    C.add_faceted_icosphere(bm, 0.88, (0.12, -1.10, 11.48), MAT_MOSS_BRIGHT, subdivisions=2, scale=(1.32, 1.02, 0.52), noise_amp=0.14, seed=9, tag_bone="Head", bone_map=bmap)
 
 
-def add_arm(bm: bmesh.types.BMesh, side: int, bmap: dict[int, str]) -> None:
-    """Build asymmetrical boulder pauldron (Chest-anchored), heavy arm, and slam gauntlet."""
+def add_arm(bm: bmesh.types.BMesh, side: int, bmap: dict[bmesh.types.BMVert, str]) -> None:
+    """Build asymmetrical craggy boulder pauldron, organic muscular stone arm, and slam gauntlet."""
     tag = "L" if side < 0 else "R"
-    sx = side * 3.85
-    # Massive craggy boulder pauldron weighted to Chest so it stays upright during overhead slams
-    p_z = 9.75 if side < 0 else 9.45
-    C.add_faceted_icosphere(bm, 1.75, (sx, 0.05, p_z), MAT_STONE_LIGHT, subdivisions=1, scale=(1.08, 1.0, 0.92), noise_amp=0.16, seed=12 + side, tag_bone="Chest", bone_map=bmap)
-    C.add_faceted_icosphere(bm, 1.15, (sx + side * 0.2, 0.25, p_z + 0.85), MAT_MOSS_BRIGHT, subdivisions=1, scale=(1.1, 0.95, 0.55), noise_amp=0.15, seed=20 + side, tag_bone="Chest", bone_map=bmap)
-    if side < 0:
-        C.add_crystal_prism(bm, 0.38, 1.7, (sx - 0.35, 0.1, p_z + 1.45), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(0, 22, 0), tag_bone="Chest", bone_map=bmap)
-    # Upper arm block
-    C.add_faceted_box(bm, (1.75, 1.85, 2.6), (side * 4.05, -0.05, 7.65), MAT_STONE_DARK, 0.12, rot_deg=(0, side * -5, 0), tag_bone=f"UpperArm{tag}", bone_map=bmap)
-    # Oversized widening stone forearm gauntlet + glowing rune strip
-    C.add_faceted_box(bm, (2.25, 2.35, 2.95), (side * 4.35, -0.35, 5.15), MAT_STONE_MID, 0.16, taper_top=(0.82, 0.85), tag_bone=f"Forearm{tag}", bone_map=bmap)
-    C.add_faceted_box(bm, (0.35, 0.95, 1.5), (side * 5.45, -0.35, 5.15), MAT_CRYSTAL_GLOW, 0.04, tag_bone=f"Forearm{tag}", bone_map=bmap)
-    C.add_faceted_box(bm, (2.42, 2.5, 0.45), (side * 4.35, -0.35, 6.15), MAT_BARK, 0.04, tag_bone=f"Forearm{tag}", bone_map=bmap)
-    # Massive flat-knuckled slamming stone fist
-    C.add_faceted_box(bm, (2.55, 2.55, 1.95), (side * 4.45, -0.55, 2.95), MAT_STONE_LIGHT, 0.14, taper_top=(0.94, 0.94), tag_bone=f"Hand{tag}", bone_map=bmap)
-    # Thumb slab
-    C.add_faceted_box(bm, (0.85, 1.05, 1.1), (side * 3.15, -1.35, 2.95), MAT_STONE_MID, 0.08, rot_deg=(12, side * 15, 0), tag_bone=f"Hand{tag}", bone_map=bmap)
+    sx = side * 3.82
+    p_z = 9.85 if side < 0 else 9.55
+    C.add_faceted_icosphere(bm, 1.82, (sx, 0.05, p_z), MAT_STONE_LIGHT, subdivisions=2, scale=(1.08, 1.0, 0.92), noise_amp=0.16, seed=12 + side, tag_bone="Chest", bone_map=bmap)
+    C.add_faceted_icosphere(bm, 1.22, (sx + side * 0.2, 0.25, p_z + 0.85), MAT_MOSS_BRIGHT, subdivisions=2, scale=(1.12, 0.96, 0.55), noise_amp=0.15, seed=20 + side, tag_bone="Chest", bone_map=bmap)
+    C.add_crystal_prism(bm, 0.40, 1.85 if side < 0 else 1.35, (sx + side * 0.35, 0.1, p_z + 1.45), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(0, side * -22, 0), tag_bone="Chest", bone_map=bmap)
+
+    # Tapered organic stone upper arm (zero boxes)
+    upper = [
+        ((side * 3.85, -0.02, 9.05), 1.08, 1.12, (0, side * -6, 0)),
+        ((side * 4.18, -0.14, 7.65), 1.12, 1.16, (0, side * -8, 0)),
+        ((side * 4.28, -0.26, 6.45), 0.96, 1.02, (0, side * -5, 0)),
+    ]
+    C.add_lofted_tube(bm, upper, MAT_STONE_DARK, sides=9, smooth=False, tag_bone=f"UpperArm{tag}", bone_map=bmap)
+
+    # Widening sculpted boulder forearm gauntlet + embedded emerald rune crystal + vine cuff
+    forearm = [
+        ((side * 4.26, -0.24, 6.55), 1.02, 1.06, (0, 0, 0)),
+        ((side * 4.42, -0.38, 5.25), 1.36, 1.40, (0, 0, 0)),
+        ((side * 4.52, -0.52, 3.85), 1.44, 1.48, (0, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, forearm, MAT_STONE_MID, sides=9, smooth=False, tag_bone=f"Forearm{tag}", bone_map=bmap)
+    C.add_crystal_prism(bm, 0.42, 1.65, (side * 5.65, -0.38, 5.15), MAT_CRYSTAL_GLOW, sides=5, rot_deg=(0, side * 58, 0), tag_bone=f"Forearm{tag}", bone_map=bmap)
+    b0 = set(bm.verts)
+    C.add_closed_ring(bm, 1.24, 0.15, 0.22, MAT_BARK, (4, side * -8, 0), 12)
+    for v in [v for v in bm.verts if v not in b0]:
+        v.co += Vector((side * 4.34, -0.32, 6.08))
+        bmap[v] = f"Forearm{tag}"
+
+    # Sculpted organic boulder slamming fist + carved knuckle crest + tapered stone thumb
+    C.add_faceted_icosphere(bm, 1.48, (side * 4.55, -0.58, 2.88), MAT_STONE_LIGHT, subdivisions=2, scale=(1.02, 1.04, 0.88), noise_amp=0.10, seed=80 + side, tag_bone=f"Hand{tag}", bone_map=bmap)
+    for ky in (-0.58, 0.0, 0.58):
+        C.add_faceted_icosphere(bm, 0.46, (side * 4.65, -0.58 + ky, 1.88), MAT_STONE_MID, subdivisions=1, scale=(0.95, 0.78, 0.85), tag_bone=f"Hand{tag}", bone_map=bmap)
+    thumb = [
+        ((side * 3.55, -1.15, 3.25), 0.48, 0.48, (35, side * -25, 0)),
+        ((side * 3.25, -1.65, 2.55), 0.34, 0.36, (45, side * -18, 0)),
+    ]
+    C.add_lofted_tube(bm, thumb, MAT_STONE_MID, sides=7, smooth=False, tag_bone=f"Hand{tag}", bone_map=bmap)
 
 
 def build_armature() -> bpy.types.Object:
