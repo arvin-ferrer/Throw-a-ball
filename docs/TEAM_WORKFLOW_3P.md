@@ -1,6 +1,10 @@
 # 3-Person Development Split, Contracts & Issue Backlog (`TEAM_WORKFLOW_3P.md`)
 
-**Team Composition:** 2 Scripters + 1 3D / Map Builder (**Dev A**, **Dev B**, **Dev C**)  
+**Team Composition:** 2 Scripters + 1 3D / Map Builder
+- **Dev A (`@arvin-ferrer`)** — Server Systems, Configs, Economy & Security (`role:server`)
+- **Dev B (`@Natex15`)** — Client Combat, Controllers, UI & Mobile QA (`role:client`)
+- **Dev C (`@Gab172005`)** — 3D Assets, Studio Maps, VFX & Audio (`role:3d-map`)
+
 **Canonical Spec:** [GameIdea_Evolved_GDD.md](GameIdea_Evolved_GDD.md) (`v1.1`)  
 **Machine Setup:** [TEAM_SETUP.md](TEAM_SETUP.md)  
 **Target MVP Velocity:** ~4–5 weeks parallel execution (compressed from 7+ weeks solo)
@@ -13,9 +17,9 @@ To eliminate Git merge conflicts and Roblox Studio Team Create overwrites, each 
 
 | Role | Primary Focus | Owned Repo Paths & Studio Domains | Primary Quality Gate |
 | :--- | :--- | :--- | :--- |
-| **Dev A — Server Systems & Economy Engineer** (`role:server`) | Authoritative gameplay logic, 3-Phase Arena FSM, Boss AI, DataStore/ProfileStore, Dual Currency, Pet Income, `PolicyService` & Anti-Exploit. | `game/src/server/**`<br>`game/src/shared/Configs/**`<br>`game/src/shared/Net/**` *(co-owned contract)*<br>`game/tests/*Service*.spec.luau`, `*Configs*.spec.luau` | `python scripts/check.py` (StyLua, Selene, Lune server/economy unit tests, Rojo build) |
-| **Dev B — Client Combat, UI & Feel Engineer** (`role:client`) | Ball Throw feel, Stationary Pad vs. Free-Move/Dodge, Mobile Aim Assist, HUD/Modals, Cash Pad & 3s Hatch VFX, Codex/Shop UI, Mobile 60 FPS QA. | `game/src/client/**`<br>`game/src/shared/Utils/**`<br>`game/src/shared/Net/**` *(consumer / co-owned)*<br>`game/tests/*Client*.spec.luau`, `*Math*.spec.luau` | `python scripts/check.py` + Roblox Studio Device Simulator (Phone/Tablet/PC) playtests |
-| **Dev C — 3D Assets, Maps, VFX & Audio Artist** (`role:3d-map`) | Hub Plaza, 12 Personal Plots (Tier 1–3), 3 Biomes (Open PvE + Locked Boss/PvP Rooms), Blender Pets/Bosses/Eggs/Balls, Particle VFX, Audio & 16:9 Thumbnails. | **Roblox Studio Map / Terrain / Lighting / Models**<br>`game/assets/blender/**`<br>`game/assets/imports/**`, `exports/**`, `renders/**`<br>`game/assets/audio/**`, `ui/**` | `python scripts/blender_run.py` + preview PNGs in `game/assets/renders/` + `CollectionService` tag audit |
+| **Dev A (`@arvin-ferrer`) — Server Systems & Economy** (`role:server`) | Authoritative gameplay logic, 3-Phase Arena FSM, Boss AI, DataStore/ProfileStore, Dual Currency, Pet Income, `PolicyService` & Anti-Exploit. | `game/src/server/**`<br>`game/src/shared/Configs/**`<br>`game/src/shared/Net/**` *(co-owned contract)*<br>`game/tests/*Service*.spec.luau`, `*Configs*.spec.luau` | `python scripts/check.py` (StyLua, Selene, Lune server/economy unit tests, Rojo build) |
+| **Dev B (`@Natex15`) — Client Combat, UI & Feel** (`role:client`) | Ball Throw feel, Stationary Pad vs. Free-Move/Dodge, Mobile Aim Assist, HUD/Modals, Cash Pad & 3s Hatch VFX, Codex/Shop UI, Mobile 60 FPS QA. | `game/src/client/**`<br>`game/src/shared/Utils/**`<br>`game/src/shared/Net/**` *(consumer / co-owned)*<br>`game/tests/*Client*.spec.luau`, `*Math*.spec.luau` | `python scripts/check.py` + Roblox Studio Device Simulator (Phone/Tablet/PC) playtests |
+| **Dev C (`@Gab172005`) — 3D Assets, Maps, VFX & Audio** (`role:3d-map`) | Hub Plaza, 12 Personal Plots (Tier 1–3), 3 Biomes (Open PvE + Locked Boss/PvP Rooms), Blender Pets/Bosses/Eggs/Balls, Particle VFX, Audio & 16:9 Thumbnails. | **Roblox Studio Map / Terrain / Lighting / Models**<br>`game/assets/blender/**`<br>`game/assets/imports/**`, `exports/**`, `renders/**`<br>`game/assets/audio/**`, `ui/**` | `python scripts/blender_run.py` + preview PNGs in `game/assets/renders/` + `CollectionService` tag audit |
 
 > **Golden Rule of Zero Conflicts:** Never edit another role's owned directory in a feature PR without agreeing on a contract change first. If Dev B needs a new server field, open/update the shared schema in `game/src/shared/Net/Remotes.luau` with Dev A first.
 
