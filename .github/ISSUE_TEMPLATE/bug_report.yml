@@ -1,0 +1,52 @@
+name: Bug / Exploit / Sync Issue
+description: Report a gameplay bug, soft-lock, mobile ergonomics issue, security invariant breach, or Rojo/Studio sync problem.
+title: "[Bug] Short description"
+labels: ["type:bug"]
+body:
+  - type: dropdown
+    id: role
+    attributes:
+      label: Likely Owner Role
+      options:
+        - "Dev A — Server Systems & Economy (role:server)"
+        - "Dev B — Client Combat, UI & Feel (role:client)"
+        - "Dev C — 3D Assets, Maps & VFX (role:3d-map)"
+        - "Needs Triage"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "P0 — Blocker / Soft-Lock / Data Loss / Security Exploit"
+        - "P1 — Core Loop Broken / Major UX Issue"
+        - "P2 — Visual Polish / Minor Glitch"
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Spawn in Hub Plaza...
+        2. Enter Emerald Meadow Boss Opt-In with 2 players...
+        3. Disconnect mid-5s Egg claim...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs. Actual Behavior
+      description: Reference the relevant rule in GameIdea_Evolved_GDD.md if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, Screenshots, or Device Context
+      description: Include Studio Output logs, `python scripts/check.py` output, or device (PC / Mobile / Console).

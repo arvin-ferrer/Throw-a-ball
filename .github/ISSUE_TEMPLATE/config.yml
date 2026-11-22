@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Canonical Game Design Document (GDD v1.1)
+    url: https://github.com/arvin-ferrer/Throw-a-ball/blob/main/docs/GameIdea_Evolved_GDD.md
+    about: Check the canonical mechanics, formulas, and invariants before filing an issue.
+  - name: 3-Person Team Work Split & Contracts
+    url: https://github.com/arvin-ferrer/Throw-a-ball/blob/main/docs/TEAM_WORKFLOW_3P.md
+    about: Check role ownership boundaries, CollectionService tags, and sprint plan.
+  - name: Team Machine Setup Guide
+    url: https://github.com/arvin-ferrer/Throw-a-ball/blob/main/docs/TEAM_SETUP.md
+    about: Cross-platform Windows, macOS, and Linux onboarding instructions.
