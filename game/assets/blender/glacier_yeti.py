@@ -30,76 +30,96 @@ MAT_MAW_DARK = 6
 
 def create_materials() -> list[bpy.types.Material]:
     return [
-        C.make_material("YetiSnowFur", (0.86, 0.92, 0.97), roughness=0.72),
-        C.make_material("YetiFrostFur", (0.52, 0.72, 0.88), roughness=0.68),
-        C.make_material("YetiSlateSkin", (0.20, 0.28, 0.38), roughness=0.62),
-        C.make_material("YetiIceCrystal", (0.48, 0.86, 1.0), roughness=0.12, metallic=0.06),
-        C.make_material("YetiCyanGlow", (0.22, 0.92, 1.0), roughness=0.14, emission=(0.20, 0.90, 1.0), emission_strength=2.2),
-        C.make_material("YetiClawIvory", (0.88, 0.92, 0.95), roughness=0.28),
-        C.make_material("YetiMawDark", (0.06, 0.10, 0.16), roughness=0.50),
+        C.make_material("YetiSnowFur", (0.88, 0.94, 0.98), roughness=0.70),
+        C.make_material("YetiFrostFur", (0.34, 0.64, 0.88), roughness=0.64),
+        C.make_material("YetiSlateSkin", (0.16, 0.25, 0.36), roughness=0.58),
+        C.make_material("YetiIceCrystal", (0.28, 0.84, 1.0), roughness=0.12, metallic=0.08),
+        C.make_material("YetiCyanGlow", (0.06, 0.86, 1.0), roughness=0.14, emission=(0.04, 0.84, 1.0), emission_strength=1.75),
+        C.make_material("YetiClawIvory", (0.90, 0.95, 0.98), roughness=0.26),
+        C.make_material("YetiMawDark", (0.05, 0.09, 0.16), roughness=0.50),
     ]
 
 
 def add_leg(bm: bmesh.types.BMesh, side: int, bmap: dict[bmesh.types.BMVert, str]) -> None:
     tag = "L" if side < 0 else "R"
     x = side * 1.95
-    # Heavy snow-beast foot + 3 icy claws resting on Z=0
-    C.add_faceted_box(bm, (2.2, 2.75, 1.15), (x, -0.25, 0.575), MAT_SKIN_SLATE, 0.14, taper_top=(0.86, 0.88), tag_bone=f"Foot{tag}", bone_map=bmap)
-    for cx in (-0.68, 0.0, 0.68):
-        C.add_crystal_prism(bm, 0.24, 0.95, (x + cx, -1.72, 0.36), MAT_CLAW_IVORY, sides=5, rot_deg=(78, 0, 0), tag_bone=f"Foot{tag}", bone_map=bmap)
-    # Shaggy lofted shin & thigh
+    # Sculpted arched yeti snow-paw resting flush on Z=0 + 3 curved ivory-ice claws (zero boxes)
+    foot_rings = [
+        ((x, 0.95, 0.56), 0.94, 0.56, (90, 0, 0)),
+        ((x, -0.05, 0.68), 1.18, 0.68, (90, 0, 0)),
+        ((x, -1.15, 0.58), 1.15, 0.58, (90, 0, 0)),
+        ((x, -1.68, 0.40), 0.88, 0.40, (96, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, foot_rings, MAT_SKIN_SLATE, sides=10, smooth=True, tag_bone=f"Foot{tag}", bone_map=bmap)
+    for cx, ang in [(-0.64, 12), (0.0, 0), (0.64, -12)]:
+        C.add_crystal_prism(bm, 0.25, 0.98, (x + cx, -1.92, 0.36), MAT_CLAW_IVORY, sides=5, rot_deg=(78, 0, ang), tag_bone=f"Foot{tag}", bone_map=bmap)
+    # Shaggy muscular lofted shin & tapered thigh tucked seamlessly into pelvis
     shin_rings = [
-        ((x, -0.1, 1.05), 1.08, 1.12, (0, 0, 0)),
-        ((x, 0.05, 2.45), 1.18, 1.22, (0, 0, 0)),
-        ((x, 0.12, 3.65), 1.24, 1.28, (0, 0, 0)),
+        ((x, -0.08, 1.05), 1.04, 1.08, (0, 0, 0)),
+        ((x, 0.04, 2.35), 1.24, 1.28, (0, 0, 0)),
+        ((x, 0.12, 3.60), 1.14, 1.18, (0, 0, 0)),
     ]
     C.add_lofted_tube(bm, shin_rings, MAT_FUR_FROST, sides=10, smooth=True, tag_bone=f"Shin{tag}", bone_map=bmap)
     thigh_rings = [
-        ((x, 0.12, 3.45), 1.22, 1.26, (0, 0, 0)),
-        ((x, 0.18, 4.95), 1.38, 1.40, (0, 0, 0)),
+        ((x, 0.10, 3.45), 1.16, 1.20, (0, 0, 0)),
+        ((x, 0.16, 4.65), 1.38, 1.40, (0, 0, 0)),
+        ((x * 0.88, 0.18, 5.65), 1.08, 1.12, (0, side * -14, 0)),
     ]
     C.add_lofted_tube(bm, thigh_rings, MAT_FUR_WHITE, sides=10, smooth=True, tag_bone=f"Thigh{tag}", bone_map=bmap)
 
 
 def add_torso_and_head(bm: bmesh.types.BMesh, bmap: dict[bmesh.types.BMVert, str]) -> None:
-    """Build hulking hunched yeti torso, frost mane, dorsal icicle ridge, and horned skull."""
+    """Build hulking hunched yeti torso, icy fur mane, dorsal icicle ridge, and sculpted beast skull."""
     torso_rings = [
         ((0.0, 0.25, 4.65), 2.25, 1.75, (0, 0, 0)),
-        ((0.0, 0.15, 6.25), 2.75, 2.15, (6, 0, 0)),
-        ((0.0, -0.10, 8.25), 3.35, 2.45, (10, 0, 0)),
-        ((0.0, -0.35, 10.15), 2.95, 2.15, (14, 0, 0)),
-        ((0.0, -0.45, 11.05), 1.85, 1.45, (14, 0, 0)),
+        ((0.0, 0.15, 6.25), 2.82, 2.18, (6, 0, 0)),
+        ((0.0, -0.10, 8.25), 3.42, 2.48, (10, 0, 0)),
+        ((0.0, -0.35, 10.15), 3.02, 2.18, (14, 0, 0)),
+        ((0.0, -0.45, 11.10), 1.85, 1.45, (14, 0, 0)),
     ]
     C.add_lofted_tube(bm, torso_rings, MAT_FUR_WHITE, sides=12, smooth=True, tag_bone="Chest", bone_map=bmap)
-    # Recessed slate chest plate + glowing glacier heart rune
-    C.add_faceted_icosphere(bm, 1.65, (0.0, -1.85, 8.25), MAT_SKIN_SLATE, subdivisions=2, scale=(1.2, 0.45, 1.1), tag_bone="Chest", bone_map=bmap)
-    C.add_crystal_prism(bm, 0.58, 1.55, (0.0, -2.32, 8.35), MAT_ICE_GLOW, sides=6, rot_deg=(12, 0, 0), tag_bone="Chest", bone_map=bmap)
-    # Jagged dorsal ice spikes & frost-blue fur mantle across upper back/shoulders
+    # Recessed slate chest plate + blazing Frostbite ice-cyan glacier heart rune
+    C.add_faceted_icosphere(bm, 1.65, (0.0, -1.92, 8.25), MAT_SKIN_SLATE, subdivisions=2, scale=(1.22, 0.46, 1.12), tag_bone="Chest", bone_map=bmap)
+    C.add_crystal_prism(bm, 0.66, 1.82, (0.0, -2.42, 8.38), MAT_ICE_GLOW, sides=6, rot_deg=(12, 0, 0), tag_bone="Chest", bone_map=bmap)
+    for sx in (-1, 1):
+        C.add_crystal_prism(bm, 0.30, 1.05, (sx * 0.72, -2.30, 8.20), MAT_ICE_SHARD, sides=5, rot_deg=(14, sx * -20, 0), tag_bone="Chest", bone_map=bmap)
+    # Shaggy frosted shoulder ruff tufts + jagged ice-cyan dorsal crystal ridge
     for idx, (px, py, pz, rot, h) in enumerate([
-        (0.0, 1.25, 11.45, (-26, 0, 0), 2.5),
-        (-1.35, 1.20, 10.95, (-24, -22, 0), 2.0),
-        (1.35, 1.20, 10.95, (-24, 22, 0), 2.0),
-        (0.0, 1.85, 9.55, (-46, 0, 0), 1.9),
+        (0.0, 1.25, 11.65, (-26, 0, 0), 2.7),
+        (-1.40, 1.20, 11.10, (-24, -22, 0), 2.2),
+        (1.40, 1.20, 11.10, (-24, 22, 0), 2.2),
+        (0.0, 1.90, 9.60, (-46, 0, 0), 2.1),
     ]):
-        C.add_crystal_prism(bm, 0.44, h, (px, py, pz), MAT_ICE_SHARD if idx % 2 else MAT_ICE_GLOW, sides=5, rot_deg=rot, tag_bone="Chest", bone_map=bmap)
+        C.add_crystal_prism(bm, 0.46, h, (px, py, pz), MAT_ICE_GLOW if idx % 2 == 0 else MAT_ICE_SHARD, sides=5, rot_deg=rot, tag_bone="Chest", bone_map=bmap)
     for sx in (-1, 1):
-        C.add_faceted_icosphere(bm, 1.85, (sx * 3.45, -0.10, 9.85), MAT_FUR_FROST, subdivisions=1, scale=(1.05, 1.0, 0.92), noise_amp=0.14, seed=8 + sx, tag_bone="Chest", bone_map=bmap)
-        C.add_crystal_prism(bm, 0.50, 2.1, (sx * 4.05, 0.15, 11.15), MAT_ICE_SHARD, sides=5, rot_deg=(-12, sx * 26, 0), tag_bone="Chest", bone_map=bmap)
+        C.add_faceted_icosphere(bm, 1.92, (sx * 3.45, -0.10, 9.90), MAT_FUR_FROST, subdivisions=2, scale=(1.08, 1.02, 0.94), noise_amp=0.14, seed=8 + sx, tag_bone="Chest", bone_map=bmap)
+        C.add_crystal_prism(bm, 0.52, 2.35, (sx * 4.08, 0.15, 11.35), MAT_ICE_GLOW, sides=5, rot_deg=(-12, sx * 26, 0), tag_bone="Chest", bone_map=bmap)
+        C.add_crystal_prism(bm, 0.36, 1.45, (sx * 2.45, -0.85, 10.65), MAT_FUR_FROST, sides=5, rot_deg=(24, sx * 34, 0), tag_bone="Chest", bone_map=bmap)
 
-    # Fierce low-set yeti head facing -Y + swept curved glacier horns
-    C.add_faceted_icosphere(bm, 1.48, (0.0, -1.65, 10.55), MAT_FUR_WHITE, subdivisions=2, scale=(1.08, 0.98, 0.95), tag_bone="Head", bone_map=bmap)
-    C.add_faceted_box(bm, (2.15, 1.05, 1.15), (0.0, -2.55, 10.25), MAT_SKIN_SLATE, 0.12, tag_bone="Head", bone_map=bmap)
-    C.add_faceted_box(bm, (1.65, 0.52, 0.56), (0.0, -2.85, 9.85), MAT_MAW_DARK, 0.04, tag_bone="Head", bone_map=bmap)
+    # Sculpted fierce organic Yeti head, heavy brow, roaring fanged muzzle & swept glacier horns (zero boxes)
+    C.add_faceted_icosphere(bm, 1.52, (0.0, -1.62, 10.60), MAT_FUR_WHITE, subdivisions=2, scale=(1.10, 1.00, 0.96), tag_bone="Head", bone_map=bmap)
+    muzzle = [
+        ((0.0, -2.05, 10.35), 1.12, 0.72, (90, 0, 0)),
+        ((0.0, -2.75, 10.22), 0.96, 0.60, (94, 0, 0)),
+        ((0.0, -3.22, 10.12), 0.62, 0.42, (96, 0, 0)),
+    ]
+    C.add_lofted_tube(bm, muzzle, MAT_SKIN_SLATE, sides=10, smooth=True, tag_bone="Head", bone_map=bmap)
+    brow = [
+        ((-1.10, -2.55, 10.88), 0.28, 0.32, (0, 90, 14)),
+        ((0.0, -2.92, 10.76), 0.32, 0.36, (0, 90, 0)),
+        ((1.10, -2.55, 10.88), 0.28, 0.32, (0, 90, -14)),
+    ]
+    C.add_lofted_tube(bm, brow, MAT_FUR_FROST, sides=6, smooth=False, tag_bone="Head", bone_map=bmap)
+    C.add_faceted_icosphere(bm, 0.72, (0.0, -2.85, 9.74), MAT_MAW_DARK, subdivisions=1, scale=(1.18, 0.52, 0.48), tag_bone="Head", bone_map=bmap)
     for sx in (-1, 1):
-        # Blazing cyan eyes & angled snow brow
-        C.add_faceted_box(bm, (0.52, 0.25, 0.30), (sx * 0.58, -3.02, 10.58), MAT_ICE_GLOW, 0.02, rot_deg=(0, 0, sx * -12), tag_bone="Head", bone_map=bmap)
-        C.add_crystal_prism(bm, 0.14, 0.45, (sx * 0.56, -2.98, 9.86), MAT_CLAW_IVORY, sides=4, rot_deg=(12, 0, 0), tag_bone="Head", bone_map=bmap)
-        # Sweeping curved Pyraxis-style ram/glacier horns!
+        C.add_crystal_prism(bm, 0.22, 0.52, (sx * 0.56, -2.96, 10.56), MAT_ICE_GLOW, sides=5, rot_deg=(0, 90, sx * -16), tag_bone="Head", bone_map=bmap)
+        C.add_crystal_prism(bm, 0.14, 0.52, (sx * 0.56, -3.02, 9.72), MAT_CLAW_IVORY, sides=4, rot_deg=(12, 0, 0), tag_bone="Head", bone_map=bmap)
+        C.add_crystal_prism(bm, 0.11, 0.38, (sx * 0.26, -3.14, 9.76), MAT_CLAW_IVORY, sides=4, rot_deg=(170, 0, 0), tag_bone="Head", bone_map=bmap)
         horn_rings = [
-            ((sx * 1.15, -1.65, 11.15), 0.42, 0.40, (0, sx * 60, 0)),
-            ((sx * 2.15, -1.45, 11.85), 0.32, 0.30, (-14, sx * 42, 0)),
-            ((sx * 2.85, -1.75, 12.45), 0.18, 0.18, (22, sx * 18, 0)),
-            ((sx * 2.65, -2.15, 12.95), 0.04, 0.04, (40, sx * -10, 0)),
+            ((sx * 1.15, -1.65, 11.15), 0.44, 0.42, (0, sx * 60, 0)),
+            ((sx * 2.20, -1.45, 11.88), 0.33, 0.31, (-14, sx * 42, 0)),
+            ((sx * 2.95, -1.78, 12.50), 0.18, 0.18, (22, sx * 18, 0)),
+            ((sx * 2.72, -2.20, 13.05), 0.04, 0.04, (40, sx * -10, 0)),
         ]
         C.add_lofted_tube(bm, horn_rings, MAT_ICE_SHARD, sides=8, smooth=True, tag_bone="Head", bone_map=bmap)
 
@@ -107,20 +127,26 @@ def add_torso_and_head(bm: bmesh.types.BMesh, bmap: dict[bmesh.types.BMVert, str
 def add_arm(bm: bmesh.types.BMesh, side: int, bmap: dict[bmesh.types.BMVert, str]) -> None:
     tag = "L" if side < 0 else "R"
     upper = [
-        ((side * 3.75, -0.15, 9.15), 1.18, 1.18, (0, 0, 0)),
+        ((side * 3.72, -0.14, 9.25), 1.24, 1.24, (0, 0, 0)),
         ((side * 4.25, -0.35, 6.85), 1.06, 1.10, (0, 0, 0)),
     ]
     C.add_lofted_tube(bm, upper, MAT_FUR_WHITE, sides=10, smooth=True, tag_bone=f"UpperArm{tag}", bone_map=bmap)
     forearm = [
         ((side * 4.25, -0.35, 6.85), 1.08, 1.10, (0, 0, 0)),
-        ((side * 4.65, -0.65, 4.15), 1.38, 1.42, (0, 0, 0)),
+        ((side * 4.55, -0.55, 5.25), 1.42, 1.46, (0, 0, 0)),
+        ((side * 4.72, -0.72, 3.85), 1.32, 1.36, (0, 0, 0)),
     ]
     C.add_lofted_tube(bm, forearm, MAT_FUR_FROST, sides=10, smooth=True, tag_bone=f"Forearm{tag}", bone_map=bmap)
-    C.add_crystal_prism(bm, 0.36, 1.45, (side * 5.65, -0.55, 5.25), MAT_ICE_GLOW, sides=5, rot_deg=(0, side * 62, 0), tag_bone=f"Forearm{tag}", bone_map=bmap)
-    # Huge clawed ice-knuckle fist
-    C.add_faceted_box(bm, (2.45, 2.35, 1.85), (side * 4.72, -0.82, 3.15), MAT_SKIN_SLATE, 0.16, tag_bone=f"Hand{tag}", bone_map=bmap)
-    for dy in (-0.65, 0.0, 0.65):
-        C.add_crystal_prism(bm, 0.22, 0.92, (side * 4.72, -0.82 + dy, 2.02), MAT_CLAW_IVORY, sides=4, rot_deg=(180, 0, 0), tag_bone=f"Hand{tag}", bone_map=bmap)
+    C.add_crystal_prism(bm, 0.38, 1.65, (side * 5.75, -0.55, 5.25), MAT_ICE_GLOW, sides=5, rot_deg=(0, side * 62, 0), tag_bone=f"Forearm{tag}", bone_map=bmap)
+    # Sculpted organic clawed yeti paw-fist + curled thumb (zero boxes)
+    C.add_faceted_icosphere(bm, 1.42, (side * 4.75, -0.84, 3.05), MAT_SKIN_SLATE, subdivisions=2, scale=(1.02, 1.04, 0.88), noise_amp=0.06, seed=90 + side, tag_bone=f"Hand{tag}", bone_map=bmap)
+    thumb = [
+        ((side * 3.78, -1.35, 3.35), 0.44, 0.44, (35, side * -24, 0)),
+        ((side * 3.45, -1.85, 2.65), 0.30, 0.30, (48, side * -18, 0)),
+    ]
+    C.add_lofted_tube(bm, thumb, MAT_SKIN_SLATE, sides=8, smooth=True, tag_bone=f"Hand{tag}", bone_map=bmap)
+    for dy in (-0.62, 0.0, 0.62):
+        C.add_crystal_prism(bm, 0.24, 1.05, (side * 4.82, -0.86 + dy, 1.92), MAT_CLAW_IVORY, sides=5, rot_deg=(172, side * -12, 0), tag_bone=f"Hand{tag}", bone_map=bmap)
 
 
 def build_armature() -> bpy.types.Object:
