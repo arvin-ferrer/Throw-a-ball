@@ -28,6 +28,8 @@ export type Hooks = {
 	getMobTargets: (attacker: Player) -> { SweepTarget },
 	-- On a kill: the mob kind and its biome's PvE damage multiplier (GDD §6: 1.5x–6x).
 	damageMob: (mobId: string, amount: number, attacker: Player) -> (string?, number?),
+	grantCoins: (player: Player, amount: number, reason: string) -> (),
+	getTrainingMultiplier: (player: Player) -> number, -- Soft Ascension bonus
 }
 
 local THROW = CombatConfigs.Throw
@@ -42,7 +44,7 @@ local remotesFolder: Folder? = nil
 local rateStates: { [Player]: CombatMath.ThrowRateState } = {}
 
 -- Player stats --------------------------------------------------------------------------------
--- shortcut: stats live in Player attributes for this session; DataService (#9) persists them.
+-- Training stats live in Player attributes; EconomyService loads and persists them (#9).
 
 local function stat(player: Player, name: string, default: any): any
 	local value = player:GetAttribute(name)
@@ -57,7 +59,7 @@ local function initStats(player: Player)
 	player:SetAttribute("Exp", stat(player, "Exp", 0))
 end
 
-local function grantExp(player: Player, amount: number)
+function CombatService.grantExp(player: Player, amount: number)
 	local level, exp, maxHp =
 		CombatMath.applyExp(stat(player, "Level", 1), stat(player, "Exp", 0), amount)
 	player:SetAttribute("Level", level)
@@ -280,8 +282,9 @@ local function hitTrainingTarget(attacker: Player, part: BasePart)
 	local tier = tostring(range and range:GetAttribute("TargetTier") or "WoodenDummy")
 	local damageGain, speedGain =
 		CombatMath.computeTrainingGain(tier, CollectionService:HasTag(part, "MovingGoldTarget"))
-	addStat(attacker, "BallDamage", damageGain)
-	addStat(attacker, "ThrowSpeed", speedGain)
+	local multiplier = (hooks :: Hooks).getTrainingMultiplier(attacker)
+	addStat(attacker, "BallDamage", damageGain * multiplier)
+	addStat(attacker, "ThrowSpeed", speedGain * multiplier)
 end
 
 local function applyHit(
@@ -310,9 +313,9 @@ local function applyHit(
 		local killed, biomeMultiplier = h.damageMob(target.id, damage, attacker)
 		if killed then
 			local exp, progress, coins = CombatMath.computeMobRewards(killed, biomeMultiplier or 1)
-			grantExp(attacker, exp)
+			CombatService.grantExp(attacker, exp)
 			addStat(attacker, "BallDamage", progress)
-			addStat(attacker, "Coins", coins) -- EconomyService (#9) takes over Coins
+			h.grantCoins(attacker, coins, "MobKill")
 		end
 	elseif target.kind == "Target" and byId[target.id] then
 		hitTrainingTarget(attacker, byId[target.id])

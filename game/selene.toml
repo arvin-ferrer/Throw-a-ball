@@ -1,4 +1,6 @@
 std = "roblox"
+# Vendored third-party code (ProfileStore by loleris, data kit) is not ours to lint.
+exclude = ["src/server/Packages/**"]
 
 [lints]
 shadowing = "warn"

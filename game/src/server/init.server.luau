@@ -14,12 +14,27 @@ local Services = script.Services
 local ArenaCycleService = require(Services.ArenaCycleService)
 local BossAIService = require(Services.BossAIService)
 local CombatService = require(Services.CombatService)
+local EconomyService = require(Services.EconomyService)
 local MobService = require(Services.MobService)
 local PortalService = require(Services.PortalService)
+
+local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
 
 local MAP_NAME = "BallBrawl_Map_v2"
 
 local remotesFolder = Remotes.setupServer(ReplicatedStorage)
+EconomyService.start(remotesFolder) -- profiles load even without a map
+
+-- Every arena participant: Coins + a Gem (EconomyService) and EXP (CombatService level curve).
+local function payParticipants(userIds: { number }, biomeId: string)
+	EconomyService.awardConsolation(userIds, biomeId)
+	for _, userId in userIds do
+		local player = game:GetService("Players"):GetPlayerByUserId(userId)
+		if player then
+			CombatService.grantExp(player, BiomeConfigs.ArenaRewards.participantExp)
+		end
+	end
+end
 
 local map = Workspace:FindFirstChild(MAP_NAME)
 if map then
@@ -41,17 +56,23 @@ if map then
 		damageMob = function(mobId, amount)
 			return MobService.applyDamage(mobId, amount)
 		end,
+		grantCoins = function(player, amount, reason)
+			EconomyService.grantCoins(player, amount, reason)
+		end,
+		getTrainingMultiplier = function(player)
+			local _, training = EconomyService.getAscensionMultipliers(player)
+			return training
+		end,
 	})
 	ArenaCycleService.init(map, remotesFolder, {
 		onSpawnBoss = BossAIService.spawn,
 		onDespawnBoss = BossAIService.despawn,
 		getBossHealth = BossAIService.getHealth,
 		onAwardEgg = function(userId, biomeId, eggType)
-			print(`[Arena] {userId} won {eggType} in {biomeId}`) -- EconomyService (#9) grants it
+			EconomyService.awardArenaWin(userId, biomeId, eggType)
+			payParticipants({ userId }, biomeId) -- the winner is a participant too
 		end,
-		onAwardConsolation = function(userIds, biomeId)
-			print(`[Arena] consolation in {biomeId} for {table.concat(userIds, ",")}`)
-		end,
+		onAwardConsolation = payParticipants,
 	})
 	ArenaCycleService.start()
 else
