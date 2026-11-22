@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the same quality gate as CI before any push. Skip once with: git push --no-verify
+cd "$(git rev-parse --show-toplevel)" || exit 1
+PY=$(command -v python3 || command -v python) || { echo "pre-push: python not found" >&2; exit 1; }
+exec "$PY" scripts/check.py
