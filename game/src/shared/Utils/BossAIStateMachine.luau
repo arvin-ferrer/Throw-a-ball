@@ -24,7 +24,8 @@ export type BossState =
 	| "Recovery"
 	| "Defeated"
 
-export type TargetSnapshot = { playerId: number, position: Vec3 }
+-- radius: the fighter's hit radius (defaults to the standard character radius).
+export type TargetSnapshot = { playerId: number, position: Vec3, radius: number? }
 
 export type Boulder = {
 	id: number,
@@ -99,6 +100,8 @@ function BossAIStateMachine.new(
 	isOvercharged: boolean,
 	now: number
 )
+	assert(maxHp == maxHp and maxHp > 0 and maxHp < math.huge, "maxHp must be positive and finite")
+	assert(now == now and math.abs(now) < math.huge, "now must be finite")
 	return {
 		config = config,
 		tuning = buildTuning(config, isOvercharged),
@@ -113,6 +116,7 @@ function BossAIStateMachine.new(
 		boulderReadyAt = now,
 		slamStartedAt = now,
 		slamHitPlayers = {} :: { [number]: boolean },
+		slamLastRadius = 0,
 		lockedDirection = { X = 0, Y = 0, Z = 1 } :: Vec3,
 		boulders = {} :: { [number]: Boulder },
 		nextBoulderId = 1,
@@ -167,8 +171,10 @@ local function firstContact(
 		end
 	end
 	for _, target in targets do
+		local r = target.radius
+		local targetRadius = if r and r == r and r >= 0 and r < math.huge then r else PLAYER_RADIUS
 		local s =
-			CombatMath.intersectSegmentSphere(from, to, target.position, radius + PLAYER_RADIUS)
+			CombatMath.intersectSegmentSphere(from, to, target.position, radius + targetRadius)
 		if s and (bestS == nil or s < bestS) then
 			bestS, bestTarget = s, target
 		end
@@ -179,7 +185,12 @@ end
 local function stepBoulder(state: State, b: Boulder, ctx: { [string]: any })
 	local cfg = state.config.boulder
 	local from = b.position
-	local to = CombatMath.add(from, CombatMath.scale(b.direction, b.speed * ctx.dt))
+	-- Clip this frame's travel to what the boulder has left, so a laggy frame can never sweep
+	-- (and hit) past its range or lifetime.
+	local lifeLeft = cfg.maxLifetimeSeconds - (ctx.now - ctx.dt - b.spawnTime)
+	local travel =
+		math.max(0, math.min(b.speed * ctx.dt, cfg.maxDistance - b.traveled, b.speed * lifeLeft))
+	local to = CombatMath.add(from, CombatMath.scale(b.direction, travel))
 	local s, hitTarget = firstContact(from, to, ctx.targets, ctx.obstacles, cfg.radius)
 	if s then
 		if hitTarget then
@@ -192,10 +203,10 @@ local function stepBoulder(state: State, b: Boulder, ctx: { [string]: any })
 		return
 	end
 	b.position = to
-	b.traveled += b.speed * ctx.dt
+	b.traveled += travel
 	local moved = emit(ctx.actions, "BoulderMoved")
 	moved.boulderId, moved.position = b.id, to
-	local expired = b.traveled > cfg.maxDistance
+	local expired = b.traveled + EPSILON >= cfg.maxDistance
 		or ctx.now - b.spawnTime + EPSILON >= cfg.maxLifetimeSeconds
 	if expired then
 		despawn(state, ctx.actions, b.id, "Expired")
@@ -231,9 +242,13 @@ local function stepSlam(state: State, ctx: { [string]: any })
 	local radius = cfg.maxRadius * math.clamp(elapsed / cfg.activeSeconds, 0, 1)
 	local tick = emit(ctx.actions, "SlamShockwaveTick")
 	tick.radius, tick.position = radius, state.position
+	-- Swept annulus: everything the ring crossed since last frame, so lag can't skip a fighter.
+	local inner = math.min(state.slamLastRadius, radius) - cfg.ringHalfWidth
+	local outer = math.max(state.slamLastRadius, radius) + cfg.ringHalfWidth
+	state.slamLastRadius = radius
 	for _, target in ctx.targets do
 		local _, dist = flatDelta(state.position, target.position)
-		local inBand = math.abs(dist - radius) <= cfg.ringHalfWidth
+		local inBand = dist >= inner and dist <= outer
 		local grounded = target.position.Y - state.position.Y <= cfg.hitHeight
 		if inBand and grounded and not state.slamHitPlayers[target.playerId] then
 			state.slamHitPlayers[target.playerId] = true
@@ -298,7 +313,7 @@ local function stepBoss(state: State, ctx: { [string]: any })
 	local now, s = ctx.now, state.state
 	local phaseOver = now + EPSILON >= state.phaseEndsAt
 	if s == "Windup_Slam" and phaseOver then
-		state.state, state.slamStartedAt = "Active_Slam", now
+		state.state, state.slamStartedAt, state.slamLastRadius = "Active_Slam", now, 0
 		table.clear(state.slamHitPlayers)
 	elseif s == "Active_Slam" then
 		stepSlam(state, ctx)

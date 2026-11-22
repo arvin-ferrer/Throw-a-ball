@@ -126,7 +126,7 @@ function CombatMath.computeBallDamage(
 		then bonusMultiplier
 		else 1
 	local raw = base * tierOf(ballTierId).damageMultiplier * bonus
-	return math.max(1, math.floor(raw * 100 + 0.5) / 100) -- cents: hides float noise
+	return if isFinite(raw) then math.max(1, raw) else THROW.DEFAULT_BASE_BALL_DAMAGE
 end
 
 function CombatMath.computeBossMaxHp(
@@ -134,7 +134,9 @@ function CombatMath.computeBossMaxHp(
 	optInCount: number,
 	isOvercharged: boolean
 ): number
-	return ArenaStateMachine.computeBossMaxHp(baseBossHp, optInCount, isOvercharged)
+	assert(isFinite(baseBossHp) and baseBossHp > 0, "baseBossHp must be positive and finite")
+	local count = if isFinite(optInCount) then math.max(1, math.floor(optInCount)) else 1
+	return ArenaStateMachine.computeBossMaxHp(baseBossHp, count, isOvercharged)
 end
 
 function CombatMath.computeTrainingGain(
@@ -168,8 +170,12 @@ end
 
 -- Returns the new level, leftover EXP and the resulting max HP.
 function CombatMath.applyExp(level: number, exp: number, gained: number): (number, number, number)
-	local lvl = math.max(1, math.floor(level))
-	local total = math.max(0, exp) + (if isFinite(gained) and gained > 0 then gained else 0)
+	local lvl = if isFinite(level) then math.max(1, math.floor(level)) else 1
+	local base = if isFinite(exp) then math.max(0, exp) else 0
+	local total = base + (if isFinite(gained) and gained > 0 then gained else 0)
+	if not isFinite(total) then
+		total = base -- an unrepresentable gain is dropped, never propagated as inf
+	end
 	while total >= expToNext(lvl) do
 		total -= expToNext(lvl)
 		lvl += 1
@@ -213,7 +219,10 @@ function CombatMath.validateThrowPayload(
 	if not isFinite(now) or now < rate.lastThrowTime then
 		return rejectThrow("NonMonotonicTime")
 	end
-	if length(sub(origin, playerRootPos)) > (maxOriginDist or THROW.MAX_ORIGIN_DISTANCE_STUDS) then
+	local limit = maxOriginDist or THROW.MAX_ORIGIN_DISTANCE_STUDS
+	local originGap = length(sub(origin, playerRootPos))
+	-- Fail closed: a NaN root or limit must never let a throw through.
+	if not (isFinite(originGap) and isFinite(limit) and originGap <= limit) then
 		return rejectThrow("OriginTooFar")
 	end
 	if now < rate.nextAllowedTime - THROW.COOLDOWN_JITTER_TOLERANCE then
@@ -259,7 +268,10 @@ function CombatMath.sampleArcPosition(origin: Vec3, unitDir: Vec3, t: number, cf
 end
 
 function CombatMath.buildArcSegments(origin: Vec3, unitDir: Vec3, cfg: ArcConfig): { ArcSegment }
-	local count = math.max(1, math.ceil(cfg.maxDuration / cfg.stepSeconds - 1e-9))
+	assert(isFinite(cfg.maxDuration) and cfg.maxDuration > 0, "arc maxDuration must be positive")
+	assert(isFinite(cfg.stepSeconds) and cfg.stepSeconds > 0, "arc stepSeconds must be positive")
+	-- Same rule as PR #22: whole steps plus one partial final step; bounded against tiny steps.
+	local count = math.clamp(math.ceil(cfg.maxDuration / cfg.stepSeconds - 1e-9), 1, 256)
 	local segments = {}
 	local prevT, prevPos = 0, origin
 	for i = 1, count do
@@ -274,19 +286,41 @@ end
 -- Collision ----------------------------------------------------------------------------------
 
 -- Earliest fraction s in [0,1] where segment a->b comes within `radius` of center (inclusive).
+local function isFiniteVec(v: Vec3): boolean
+	return isFinite(v.X) and isFinite(v.Y) and isFinite(v.Z)
+end
+
 function CombatMath.intersectSegmentSphere(a: Vec3, b: Vec3, center: Vec3, radius: number): number?
+	if
+		not (isFiniteVec(a) and isFiniteVec(b) and isFiniteVec(center) and isFinite(radius))
+		or radius < 0
+	then
+		return nil -- bogus geometry never produces a hit
+	end
+	local r2 = radius * radius + 1e-9 -- inclusive: a tangent graze counts
+	local toCenter = sub(center, a)
+	if dot(toCenter, toCenter) <= r2 then
+		return 0 -- starts inside
+	end
 	local d = sub(b, a)
 	local segLen2 = dot(d, d)
-	local closestS = if segLen2 > 0 then math.clamp(dot(sub(center, a), d) / segLen2, 0, 1) else 0
-	local gap2 = dot(sub(lerp(a, b, closestS), center), sub(lerp(a, b, closestS), center))
-	if gap2 > radius * radius + 1e-9 then
+	if segLen2 == 0 then
 		return nil
 	end
-	if segLen2 == 0 then
-		return 0
+	-- Solve on the infinite line first, then clip to the segment, so the entry point is exact
+	-- even when the sphere's centre projects past an endpoint.
+	local s0 = dot(toCenter, d) / segLen2
+	local perp = sub(add(a, scale(d, s0)), center)
+	local perp2 = dot(perp, perp)
+	if perp2 > r2 then
+		return nil
 	end
-	local back = math.sqrt(math.max(0, radius * radius - gap2)) / math.sqrt(segLen2)
-	return math.max(0, closestS - back)
+	local half = math.sqrt(math.max(0, r2 - perp2) / segLen2)
+	local entry, exit = s0 - half, s0 + half
+	if exit < 0 or entry > 1 then
+		return nil
+	end
+	return math.max(0, entry)
 end
 
 -- Slab test: earliest fraction s in [0,1] where segment a->b enters the box (0 if it starts inside).
