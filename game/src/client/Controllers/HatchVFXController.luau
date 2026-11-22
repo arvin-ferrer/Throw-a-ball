@@ -221,8 +221,8 @@ function HatchVFXController.start()
 	end
 	Players.PlayerAdded:Connect(watchPlayerBadges)
 
-	-- Smooth bobbing float animation for 1-3 Active Combat Followers
-	RunService.Heartbeat:Connect(function()
+	-- Spring-damped smooth hovering & banking float animation for 1-3 Active Combat Followers
+	RunService.RenderStepped:Connect(function(dt: number)
 		if #activeFollowerModels == 0 then
 			return
 		end
@@ -232,16 +232,25 @@ function HatchVFXController.start()
 			return
 		end
 		local t = os.clock()
+		local speed = hrp.AssemblyLinearVelocity.Magnitude
+		local moving = speed > 1.5
+		local followAlpha = 1 - math.exp(-7.5 * math.min(dt, 0.1))
 		for i, rig in ipairs(activeFollowerModels) do
+			rig:SetAttribute("IsMoving", moving)
 			local angle = math.rad(135 + (i - 1) * 45)
-			local offset = Vector3.new(
-				math.cos(angle) * 4.8,
-				2.2 + math.sin(t * 3.2 + i) * 0.55,
-				math.sin(angle) * 4.8
-			)
-			local targetPos = hrp.CFrame:PointToWorldSpace(offset)
-			local lookPos = hrp.Position + hrp.CFrame.LookVector * 12
-			rig:PivotTo(CFrame.lookAt(targetPos, Vector3.new(lookPos.X, targetPos.Y, lookPos.Z)))
+			local bob = math.sin(t * 3.4 + i * 1.4) * 0.55
+			local offset = Vector3.new(math.cos(angle) * 4.8, 2.2 + bob, math.sin(angle) * 4.8)
+			local desiredPos = hrp.CFrame:PointToWorldSpace(offset)
+			local curCF = rig:GetPivot()
+			local smoothedPos = curCF.Position:Lerp(desiredPos, followAlpha)
+			local moveVec = desiredPos - curCF.Position
+			local bank = math.clamp(moveVec.X * 0.04, -0.25, 0.25)
+			local lookPos = hrp.Position + hrp.CFrame.LookVector * 14
+			local desiredRot = CFrame.lookAt(
+				smoothedPos,
+				Vector3.new(lookPos.X, smoothedPos.Y + bob * 0.15, lookPos.Z)
+			) * CFrame.Angles(0, 0, bank)
+			rig:PivotTo(curCF:Lerp(desiredRot, followAlpha))
 		end
 	end)
 end

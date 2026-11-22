@@ -7,6 +7,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -263,6 +264,10 @@ function BossAIService.getBossFromPart(part: BasePart): ActiveBoss?
 	return nil
 end
 
+function BossAIService.getActiveBoss(biomeId: string): ActiveBoss?
+	return activeBosses[biomeId]
+end
+
 function BossAIService.getNearbyMobs(
 	biomeId: string,
 	pos: Vector3,
@@ -360,114 +365,112 @@ function BossAIService.init()
 	discoverMobSpawns()
 end
 
-function BossAIService.start()
-	task.spawn(function()
-		local dt = 0.2
-		while true do
-			task.wait(dt)
-			local now = os.clock()
-			-- Tick PvE Mobs
-			for _, mob in ipairs(mobs) do
-				if not mob.alive then
-					if now >= mob.respawnAt then
-						spawnMobInstance(mob)
-					end
-				elseif mob.model and mob.model.PrimaryPart then
-					local cfg = BiomeConfigs.MOBS[mob.mobType]
-					local root = mob.model.PrimaryPart
-					if cfg and now >= mob.stunUntil then
-						local speedMult = if now < mob.slowUntil then 0.7 else 1.0
-						local targetPlr, targetHrp =
-							findNearestTarget(root.Position, 58, "BiomePvE", mob.biomeId)
-						if targetPlr and targetHrp then
-							local toTarget = Vector3.new(
-								targetHrp.Position.X - root.Position.X,
-								0,
-								targetHrp.Position.Z - root.Position.Z
-							)
-							local dist = toTarget.Magnitude
-							if dist > cfg.attackRange then
-								local step = math.min(
-									dist - cfg.attackRange + 1,
-									cfg.moveSpeed * speedMult * dt
-								)
-								local nextPos = root.Position + toTarget.Unit * step
-								mob.model:PivotTo(
-									CFrame.lookAt(
-										nextPos,
-										Vector3.new(
-											targetHrp.Position.X,
-											nextPos.Y,
-											targetHrp.Position.Z
-										)
-									)
-								)
-							elseif now >= mob.lastAttackAt + cfg.attackCooldown then
-								mob.lastAttackAt = now
-								local hum = if targetPlr.Character
-									then targetPlr.Character:FindFirstChildOfClass("Humanoid")
-									else nil
-								if hum and hum.Health > 0 then
-									hum.Health = math.max(0, hum.Health - cfg.attackDamage)
-								end
-							end
-						else
-							-- Gently return toward spawn pad
-							local home = mob.spawnPart.Position + Vector3.new(0, 3.2, 0)
-							local toHome =
-								Vector3.new(home.X - root.Position.X, 0, home.Z - root.Position.Z)
-							if toHome.Magnitude > 4 then
-								local nextPos = root.Position
-									+ toHome.Unit
-										* math.min(toHome.Magnitude, cfg.moveSpeed * 0.6 * dt)
-								mob.model:PivotTo(
-									CFrame.lookAt(nextPos, Vector3.new(home.X, nextPos.Y, home.Z))
-								)
-							end
-						end
-					end
-				end
-			end
+local function smoothStepModel(model: Model, nextPos: Vector3, lookAtPos: Vector3, dt: number)
+	local curCF = model:GetPivot()
+	local targetCF = CFrame.lookAt(nextPos, Vector3.new(lookAtPos.X, nextPos.Y, lookAtPos.Z))
+	local turnAlpha = 1 - math.exp(-8 * dt)
+	local blendedRot = curCF.Rotation:Lerp(targetCF.Rotation, turnAlpha)
+	model:PivotTo(CFrame.new(nextPos) * blendedRot)
+end
 
-			-- Tick Active Biome Bosses
-			for biomeId, boss in pairs(activeBosses) do
-				local cfg = BiomeConfigs.BOSSES[boss.bossId]
-				local root = boss.model.PrimaryPart
-				if cfg and root and now >= boss.stunUntil then
-					local speedMult = if now < boss.slowUntil then 0.75 else 1.0
-					local _, targetHrp =
-						findNearestTarget(root.Position, 160, "LockedBossPvP", biomeId)
-					if targetHrp then
-						local toTarget = Vector3.new(
-							targetHrp.Position.X - root.Position.X,
-							0,
-							targetHrp.Position.Z - root.Position.Z
-						)
-						if toTarget.Magnitude > 14 then
-							local nextPos = root.Position
-								+ toTarget.Unit * (cfg.moveSpeed * speedMult * dt)
-							boss.model:PivotTo(
-								CFrame.lookAt(
-									nextPos,
-									Vector3.new(
-										targetHrp.Position.X,
-										nextPos.Y,
-										targetHrp.Position.Z
-									)
-								)
-							)
-						end
-						if now >= boss.nextAttackAt then
-							local atk = cfg.attacks[(boss.attackIndex % #cfg.attacks) + 1]
-							local agg = if boss.isOvercharged
-								then BiomeConfigs.OVERCHARGED_AGGRESSION_MULT
-								else 1.0
-							boss.nextAttackAt = now + (atk.cooldownSec * agg)
-							executeBossAttack(boss, targetHrp.Position)
-						end
-					end
+local function stepSingleMob(mob: ActiveMob, now: number, dt: number)
+	if not mob.alive then
+		if now >= mob.respawnAt then
+			spawnMobInstance(mob)
+		end
+		return
+	end
+	if not mob.model or not mob.model.PrimaryPart then
+		return
+	end
+	local cfg = BiomeConfigs.MOBS[mob.mobType]
+	local root = mob.model.PrimaryPart
+	if not cfg or now < mob.stunUntil then
+		mob.model:SetAttribute("IsMoving", false)
+		return
+	end
+	local speedMult = if now < mob.slowUntil then 0.7 else 1.0
+	local targetPlr, targetHrp = findNearestTarget(root.Position, 58, "BiomePvE", mob.biomeId)
+	if targetPlr and targetHrp then
+		local toTarget = Vector3.new(
+			targetHrp.Position.X - root.Position.X,
+			0,
+			targetHrp.Position.Z - root.Position.Z
+		)
+		local dist = toTarget.Magnitude
+		if dist > cfg.attackRange then
+			local step = math.min(dist - cfg.attackRange + 0.5, cfg.moveSpeed * speedMult * dt)
+			local nextPos = root.Position + toTarget.Unit * step
+			smoothStepModel(mob.model, nextPos, targetHrp.Position, dt)
+			mob.model:SetAttribute("IsMoving", true)
+		else
+			mob.model:SetAttribute("IsMoving", false)
+			if now >= mob.lastAttackAt + cfg.attackCooldown then
+				mob.lastAttackAt = now
+				local hum = if targetPlr.Character
+					then targetPlr.Character:FindFirstChildOfClass("Humanoid")
+					else nil
+				if hum and hum.Health > 0 then
+					hum.Health = math.max(0, hum.Health - cfg.attackDamage)
 				end
 			end
+		end
+	else
+		local home = mob.spawnPart.Position + Vector3.new(0, 3.2, 0)
+		local toHome = Vector3.new(home.X - root.Position.X, 0, home.Z - root.Position.Z)
+		if toHome.Magnitude > 2.5 then
+			local nextPos = root.Position
+				+ toHome.Unit * math.min(toHome.Magnitude, cfg.moveSpeed * 0.65 * dt)
+			smoothStepModel(mob.model, nextPos, home, dt)
+			mob.model:SetAttribute("IsMoving", true)
+		else
+			mob.model:SetAttribute("IsMoving", false)
+		end
+	end
+end
+
+local function stepSingleBoss(biomeId: string, boss: ActiveBoss, now: number, dt: number)
+	local cfg = BiomeConfigs.BOSSES[boss.bossId]
+	local root = boss.model.PrimaryPart
+	if not cfg or not root or now < boss.stunUntil then
+		boss.model:SetAttribute("IsMoving", false)
+		return
+	end
+	local speedMult = if now < boss.slowUntil then 0.75 else 1.0
+	local _, targetHrp = findNearestTarget(root.Position, 160, "LockedBossPvP", biomeId)
+	if not targetHrp then
+		boss.model:SetAttribute("IsMoving", false)
+		return
+	end
+	local toTarget = Vector3.new(
+		targetHrp.Position.X - root.Position.X,
+		0,
+		targetHrp.Position.Z - root.Position.Z
+	)
+	if toTarget.Magnitude > 14 then
+		local nextPos = root.Position + toTarget.Unit * (cfg.moveSpeed * speedMult * dt)
+		smoothStepModel(boss.model, nextPos, targetHrp.Position, dt)
+		boss.model:SetAttribute("IsMoving", true)
+	else
+		boss.model:SetAttribute("IsMoving", false)
+	end
+	if now >= boss.nextAttackAt then
+		local atk = cfg.attacks[(boss.attackIndex % #cfg.attacks) + 1]
+		local agg = if boss.isOvercharged then BiomeConfigs.OVERCHARGED_AGGRESSION_MULT else 1.0
+		boss.nextAttackAt = now + (atk.cooldownSec * agg)
+		executeBossAttack(boss, targetHrp.Position)
+	end
+end
+
+function BossAIService.start()
+	RunService.Heartbeat:Connect(function(rawDt: number)
+		local dt = math.min(rawDt, 0.08)
+		local now = os.clock()
+		for _, mob in ipairs(mobs) do
+			stepSingleMob(mob, now, dt)
+		end
+		for biomeId, boss in pairs(activeBosses) do
+			stepSingleBoss(biomeId, boss, now, dt)
 		end
 	end)
 end

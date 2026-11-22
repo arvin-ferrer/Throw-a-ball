@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MathUtil = require(Shared.Utils.MathUtil)
+local AudioCatalog = require(Shared.Utils.AudioCatalog)
 local Remotes = require(Shared.Net.Remotes)
 
 local Theme = require(script.Parent.Theme)
@@ -19,9 +20,13 @@ local HudGui = {}
 local statLabels: { [string]: TextLabel } = {}
 local hubReturnBtn: TextButton? = nil
 local guideBanner: TextLabel? = nil
+local afkBadgeFrame: Frame? = nil
 local dashBtn: TextButton? = nil
+local autoAimBtn: TextButton? = nil
 local throwCallback: (() -> ())? = nil
+local throwHoldCallback: ((boolean) -> ())? = nil
 local dashCallback: (() -> ())? = nil
+local toggleAutoAimCallback: (() -> ())? = nil
 local openModalCallback: ((string) -> ())? = nil
 
 local function buildStatChips(gui: ScreenGui)
@@ -76,7 +81,7 @@ local function buildMenuDock(gui: ScreenGui)
 	dock.BackgroundTransparency = 1
 	dock.AnchorPoint = Vector2.new(1, 0.5)
 	dock.Position = UDim2.new(1, -12, 0.45, 0)
-	dock.Size = UDim2.fromOffset(116, 250)
+	dock.Size = UDim2.fromOffset(116, 300)
 	dock.Parent = gui
 
 	local list = Instance.new("UIListLayout")
@@ -95,7 +100,7 @@ local function buildMenuDock(gui: ScreenGui)
 			dock,
 			b.id .. "Btn",
 			b.text,
-			UDim2.fromOffset(112, 42),
+			UDim2.fromOffset(112, 40),
 			UDim2.fromOffset(0, 0),
 			b.color,
 			function()
@@ -105,6 +110,24 @@ local function buildMenuDock(gui: ScreenGui)
 			end
 		)
 	end
+
+	local audioBtn: TextButton
+	audioBtn = Theme.makeButton(
+		dock,
+		"AudioToggleBtn",
+		"AUDIO: LOW",
+		UDim2.fromOffset(112, 34),
+		UDim2.fromOffset(0, 0),
+		Theme.Colors.CardAlt,
+		function()
+			local label = AudioCatalog.cycleAudioMode()
+			audioBtn.Text = label
+			audioBtn.BackgroundColor3 = if AudioCatalog.isMuted()
+				then Theme.Colors.Danger
+				else Theme.Colors.CardAlt
+		end
+	)
+	audioBtn.TextSize = 13
 
 	hubReturnBtn = Theme.makeButton(
 		dock,
@@ -129,30 +152,33 @@ local function buildCombatButtons(gui: ScreenGui)
 	holder.BackgroundTransparency = 1
 	holder.AnchorPoint = Vector2.new(1, 1)
 	holder.Position = UDim2.new(1, -110, 1, -18)
-	holder.Size = UDim2.fromOffset(160, 80)
+	holder.Size = UDim2.fromOffset(238, 84)
 	holder.Parent = gui
 
-	local throwBtn = Theme.makeButton(
+	autoAimBtn = Theme.makeButton(
 		holder,
-		"ThrowBtn",
-		"THROW",
-		UDim2.fromOffset(74, 74),
-		UDim2.fromOffset(82, 0),
-		Theme.Colors.Molten,
+		"AutoAimBtn",
+		"AUTO AIM\nOFF",
+		UDim2.fromOffset(74, 60),
+		UDim2.fromOffset(0, 14),
+		Theme.Colors.CardAlt,
 		function()
-			if throwCallback then
-				throwCallback()
+			if toggleAutoAimCallback then
+				toggleAutoAimCallback()
 			end
 		end
 	)
-	Theme.addCorner(throwBtn, 37)
+	if autoAimBtn then
+		autoAimBtn.TextSize = 13
+		Theme.addCorner(autoAimBtn, 16)
+	end
 
 	dashBtn = Theme.makeButton(
 		holder,
 		"DashBtn",
 		"DASH\n[Q]",
 		UDim2.fromOffset(66, 66),
-		UDim2.fromOffset(6, 8),
+		UDim2.fromOffset(82, 10),
 		Theme.Colors.Frost,
 		function()
 			if dashCallback then
@@ -163,15 +189,54 @@ local function buildCombatButtons(gui: ScreenGui)
 	if dashBtn then
 		Theme.addCorner(dashBtn, 33)
 	end
+
+	local throwBtn = Theme.makeButton(
+		holder,
+		"ThrowBtn",
+		"THROW",
+		UDim2.fromOffset(76, 76),
+		UDim2.fromOffset(156, 2),
+		Theme.Colors.Molten,
+		function()
+			if throwCallback then
+				throwCallback()
+			end
+		end
+	)
+	Theme.addCorner(throwBtn, 38)
+	throwBtn.InputBegan:Connect(function(inp: InputObject)
+		if
+			inp.UserInputType == Enum.UserInputType.Touch
+			or inp.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			if throwHoldCallback then
+				throwHoldCallback(true)
+			end
+		end
+	end)
+	throwBtn.InputEnded:Connect(function(inp: InputObject)
+		if
+			inp.UserInputType == Enum.UserInputType.Touch
+			or inp.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			if throwHoldCallback then
+				throwHoldCallback(false)
+			end
+		end
+	end)
 end
 
 function HudGui.mount(callbacks: {
 	onThrow: () -> (),
+	onThrowHold: ((boolean) -> ())?,
 	onDash: () -> (),
+	onToggleAutoAim: (() -> ())?,
 	onOpenModal: (string) -> (),
 })
 	throwCallback = callbacks.onThrow
+	throwHoldCallback = callbacks.onThrowHold
 	dashCallback = callbacks.onDash
+	toggleAutoAimCallback = callbacks.onToggleAutoAim
 	openModalCallback = callbacks.onOpenModal
 
 	local gui = Theme.createScreenGui("BallBrawl_HUD", 10)
@@ -200,6 +265,29 @@ function HudGui.mount(callbacks: {
 	if guideBanner then
 		guideBanner.TextXAlignment = Enum.TextXAlignment.Center
 	end
+
+	local afkFrame = Theme.makeFrame(
+		gui,
+		"AfkTrainingBadge",
+		UDim2.fromOffset(320, 34),
+		UDim2.new(0.5, -160, 1, -90),
+		Theme.Colors.Card,
+		10
+	)
+	Theme.addStroke(afkFrame, Theme.Colors.Emerald, 2)
+	afkFrame.Visible = false
+	afkBadgeFrame = afkFrame
+	local afkLbl = Theme.makeLabel(
+		afkFrame,
+		"Label",
+		"⚡ AFK AUTO-TRAINING ACTIVE • GRINDING DMG",
+		UDim2.fromScale(1, 1),
+		UDim2.fromOffset(0, 0),
+		13,
+		Theme.Colors.Emerald,
+		true
+	)
+	afkLbl.TextXAlignment = Enum.TextXAlignment.Center
 end
 
 function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
@@ -227,7 +315,8 @@ function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
 			guideBanner.Text = "Step 1: Press [E] at Pedestal #1 to hatch your FREE Starter Egg!"
 		elseif (profile.ballDamage or 5) < 15 then
 			guideBanner.Parent.Visible = true
-			guideBanner.Text = "Step 2: Step onto your Training Pad & throw balls to reach 15 DMG!"
+			guideBanner.Text =
+				"Step 2: Stand on your glowing Training Pad to AUTO-SHOOT & grind DMG (AFK-ready!)"
 		elseif (profile.level or 1) < 2 then
 			guideBanner.Parent.Visible = true
 			guideBanner.Text = "Step 3: Walk into Portal 1 (Emerald Meadow) for PvE & Boss Brawl!"
@@ -240,6 +329,25 @@ end
 function HudGui.updateZone(zone: string)
 	if hubReturnBtn then
 		hubReturnBtn.Visible = zone == "BiomePvE"
+	end
+end
+
+function HudGui.setAfkTrainingActive(active: boolean)
+	if afkBadgeFrame then
+		afkBadgeFrame.Visible = active
+	end
+end
+
+function HudGui.setAutoAimEnabled(enabled: boolean)
+	if not autoAimBtn then
+		return
+	end
+	if enabled then
+		autoAimBtn.Text = "AUTO AIM\nON"
+		autoAimBtn.BackgroundColor3 = Theme.Colors.Emerald
+	else
+		autoAimBtn.Text = "AUTO AIM\nOFF"
+		autoAimBtn.BackgroundColor3 = Theme.Colors.CardAlt
 	end
 end
 

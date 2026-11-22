@@ -51,8 +51,8 @@ MonetizationConfigs.GAME_PASSES = {
 	},
 	AutoFireRange = {
 		key = "AutoFireRange",
-		displayName = "Auto-Fire Training Pad",
-		description = "Automatically fires downrange while standing on your Training Pad.",
+		displayName = "Turbo AFK Range",
+		description = "Boosts AFK Training Pad auto-fire speed by +25% with priority 2x Gold target lock.",
 		passId = 190001003,
 		attributeName = "Pass_AutoFireRange",
 	},

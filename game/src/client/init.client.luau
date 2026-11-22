@@ -23,6 +23,7 @@ local BallThrowController = require(Controllers.BallThrowController)
 local PlotCashController = require(Controllers.PlotCashController)
 local ArenaHUDController = require(Controllers.ArenaHUDController)
 local HatchVFXController = require(Controllers.HatchVFXController)
+local AnimationController = require(Controllers.AnimationController)
 
 local function openPanel(kind: string)
 	if kind == "Pets" or kind == "TraitAltar" then
@@ -59,13 +60,16 @@ end
 
 HudGui.mount({
 	onThrow = BallThrowController.fireThrow,
+	onThrowHold = BallThrowController.setHoldingFire,
 	onDash = BallThrowController.triggerDash,
+	onToggleAutoAim = BallThrowController.toggleAutoAim,
 	onOpenModal = openPanel,
 })
 HubModalsGui.mount()
 ShopCodexGui.mount()
 ArenaHUDController.setServiceModalHandler(openPanel)
 
+AnimationController.start()
 BallThrowController.start()
 PlotCashController.start()
 ArenaHUDController.start()

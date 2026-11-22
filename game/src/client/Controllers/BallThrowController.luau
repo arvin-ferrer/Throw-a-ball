@@ -1,11 +1,8 @@
 --!strict
 --[[
 	BallThrowController.luau
-	Client movement & ball-throwing controller:
-	- Stationary Training Pad stance lock (jump/move off cancels cleanly)
-	- Free movement (18 walk / 24 sprint) + 0.35s Dash/Dodge (2.5s CD) + Frost Slow/Stun respect
-	- Soft Magnetic Aim-Assist (generous on PvE targets/mobs/bosses, tuned gently in PvP)
-	- Auto-Fire Range pass support, client projectile trails, damage popups & Boss Telegraphs
+	Client movement, 100% FREE AFK Auto-Training Range, Toggleable Guaranteed-Hit Auto-Aim,
+	and real 60 FPS ballistic/homing ball physics with hand launch & post-impact bounce rebound!
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -17,12 +14,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
+local CombatLogic = require(Shared.Utils.CombatLogic)
 local MathUtil = require(Shared.Utils.MathUtil)
 local ProceduralModels = require(Shared.Utils.ProceduralModels)
 local AudioCatalog = require(Shared.Utils.AudioCatalog)
 local Remotes = require(Shared.Net.Remotes)
 
 local HudGui = require(script.Parent.Parent.UI.HudGui)
+local AnimationController = require(script.Parent.AnimationController)
 
 local BallThrowController = {}
 
@@ -39,6 +38,10 @@ local padLocked = false
 local lastDashAt = 0
 local lastThrowAt = 0
 local isHoldingFire = false
+local afkTargetCycle = 0
+local autoAimEnabled = UserInputService.PreferredInput == Enum.PreferredInput.Touch
+local currentLockedPart: BasePart? = nil
+local lockReticleGui: BillboardGui? = nil
 
 local function getRootAndHum(): (BasePart?, Humanoid?)
 	local char = localPlayer.Character
@@ -48,6 +51,18 @@ local function getRootAndHum(): (BasePart?, Humanoid?)
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	return if hrp and hrp:IsA("BasePart") then hrp else nil, hum
+end
+
+local function getThrowHandOrigin(player: Player?, fallbackPos: Vector3): Vector3
+	local char = if player then player.Character else nil
+	if not char then
+		return fallbackPos
+	end
+	local hand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
+	if hand and hand:IsA("BasePart") then
+		return hand.Position + Vector3.new(0, 0.35, 0)
+	end
+	return fallbackPos
 end
 
 local function findMyFiringPad(): BasePart?
@@ -63,74 +78,183 @@ local function findMyFiringPad(): BasePart?
 	return nil
 end
 
-local function computeMagneticAim(origin: Vector3, baseDir: Vector3): Vector3
-	local zone = tostring(localPlayer:GetAttribute("Zone") or "Hub")
-	local maxConeDot = if zone == "LockedBossPvP" then 0.965 else 0.90
-	local bestDir = baseDir
-	local bestScore = maxConeDot
-
-	local function consider(pos: Vector3)
-		local toTarget = pos - origin
-		local dist = toTarget.Magnitude
-		if dist < 2 or dist > 155 then
-			return
+local function pickAfkTrainingTarget(pad: BasePart, hasTurboPass: boolean): BasePart?
+	local tr = pad.Parent
+	if not tr then
+		return nil
+	end
+	local gold = tr:FindFirstChild("Target_MovingGold")
+	if gold and gold:IsA("BasePart") then
+		if hasTurboPass then
+			return gold
 		end
-		local d = toTarget.Unit:Dot(baseDir)
-		if d > bestScore then
-			bestScore = d
-			bestDir = toTarget.Unit
+		local localOffset = pad.CFrame:PointToObjectSpace(gold.Position)
+		if math.abs(localOffset.X) <= 7.5 then
+			return gold
 		end
 	end
 
+	local statics: { BasePart } = {}
+	for _, child in ipairs(tr:GetChildren()) do
+		if child:IsA("BasePart") and child:GetAttribute("TargetKind") == "Static" then
+			table.insert(statics, child)
+		end
+	end
+	if #statics == 0 then
+		return if gold and gold:IsA("BasePart") then gold else nil
+	end
+	table.sort(statics, function(a, b)
+		return a.Name < b.Name
+	end)
+	afkTargetCycle = (afkTargetCycle % #statics) + 1
+	return statics[afkTargetCycle]
+end
+
+local function ensureReticleGui(): BillboardGui
+	if lockReticleGui and lockReticleGui.Parent then
+		return lockReticleGui
+	end
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "AutoAimReticle"
+	bb.Size = UDim2.fromOffset(92, 92)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 200
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Name = "Mark"
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.FredokaOne
+	lbl.TextScaled = true
+	lbl.TextColor3 = Color3.fromRGB(52, 255, 168)
+	lbl.TextStrokeTransparency = 0.15
+	lbl.Text = "◎"
+	lbl.AutoLocalize = false
+	lbl.Parent = bb
+
+	local tag = Instance.new("TextLabel")
+	tag.Name = "Sub"
+	tag.BackgroundTransparency = 1
+	tag.Position = UDim2.fromScale(0, 0.72)
+	tag.Size = UDim2.fromScale(1, 0.28)
+	tag.Font = Enum.Font.GothamBold
+	tag.TextScaled = true
+	tag.TextColor3 = Color3.fromRGB(250, 204, 21)
+	tag.TextStrokeTransparency = 0.2
+	tag.Text = "LOCKED"
+	tag.AutoLocalize = false
+	tag.Parent = bb
+
+	lockReticleGui = bb
+	return bb
+end
+
+local function updateLockReticle(targetPart: BasePart?)
+	currentLockedPart = targetPart
+	if not autoAimEnabled or not targetPart or not targetPart.Parent then
+		if lockReticleGui then
+			lockReticleGui.Adornee = nil
+			lockReticleGui.Parent = nil
+		end
+		return
+	end
+	local bb = ensureReticleGui()
+	bb.Adornee = targetPart
+	bb.Parent = targetPart
+end
+
+local function collectBiomeCandidates(
+	zone: string,
+	activeBiome: string,
+	candidates: { CombatLogic.AutoAimCandidate },
+	partById: { [string]: BasePart }
+)
+	local map = workspace:FindFirstChild("BallBrawl_Map_v2")
+	if map then
+		local idx = 0
+		for _, desc in ipairs(map:GetDescendants()) do
+			if desc:IsA("Model") and desc.PrimaryPart then
+				local kind = desc:GetAttribute("EntityKind")
+				local biome = tostring(desc:GetAttribute("BiomeId") or "")
+				if
+					(kind == "PvEMob" or kind == "BiomeBoss")
+					and (activeBiome == "" or biome == activeBiome)
+				then
+					idx += 1
+					local id = `ent_{idx}`
+					local pp = desc.PrimaryPart
+					partById[id] = pp
+					table.insert(candidates, {
+						id = id,
+						kind = if kind == "BiomeBoss" then "Boss" else "Mob",
+						x = pp.Position.X,
+						y = pp.Position.Y,
+						z = pp.Position.Z,
+					})
+				end
+			end
+		end
+	end
+	if zone == "LockedBossPvP" then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if
+				plr ~= localPlayer
+				and plr:GetAttribute("Zone") == "LockedBossPvP"
+				and plr.Character
+			then
+				local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+				local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+				if hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
+					local id = `plr_{plr.UserId}`
+					partById[id] = hrp
+					table.insert(candidates, {
+						id = id,
+						kind = "PvP",
+						x = hrp.Position.X,
+						y = hrp.Position.Y,
+						z = hrp.Position.Z,
+					})
+				end
+			end
+		end
+	end
+end
+
+local function findAutoAimTarget(origin: Vector3): BasePart?
+	local zone = tostring(localPlayer:GetAttribute("Zone") or "Hub")
+	local activeBiome = tostring(localPlayer:GetAttribute("ActiveBiome") or "")
+	local candidates: { CombatLogic.AutoAimCandidate } = {}
+	local partById: { [string]: BasePart } = {}
+
 	if zone == "Hub" then
-		for _, tag in ipairs({ "MovingGoldTarget", "TrainingTarget" }) do
-			for _, t in ipairs(CollectionService:GetTagged(tag)) do
-				if t:IsA("BasePart") then
-					consider(t.Position)
+		local pad = findMyFiringPad()
+		local tr = if pad then pad.Parent else nil
+		if tr then
+			for _, child in ipairs(tr:GetChildren()) do
+				if child:IsA("BasePart") then
+					local tk = child:GetAttribute("TargetKind")
+					if tk == "Static" or tk == "MovingGold" then
+						partById[child.Name] = child
+						table.insert(candidates, {
+							id = child.Name,
+							kind = if tk == "MovingGold" then "GoldTarget" else "Target",
+							x = child.Position.X,
+							y = child.Position.Y,
+							z = child.Position.Z,
+						})
+					end
 				end
 			end
 		end
 	else
-		local map = workspace:FindFirstChild("BallBrawl_Map_v2")
-		if map then
-			for _, desc in ipairs(map:GetDescendants()) do
-				if desc:IsA("Model") and desc.PrimaryPart then
-					local kind = desc:GetAttribute("EntityKind")
-					if kind == "PvEMob" or kind == "BiomeBoss" then
-						consider(desc.PrimaryPart.Position)
-					end
-				end
-			end
-		end
-		if zone == "LockedBossPvP" then
-			for _, plr in ipairs(Players:GetPlayers()) do
-				if plr ~= localPlayer and plr.Character then
-					local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-					if hrp and hrp:IsA("BasePart") then
-						consider(hrp.Position)
-					end
-				end
-			end
-		end
+		collectBiomeCandidates(zone, activeBiome, candidates, partById)
 	end
-	return bestDir
+
+	local chosen = CombatLogic.selectAutoAimTarget(origin.X, origin.Y, origin.Z, candidates)
+	return if chosen then partById[chosen.id] else nil
 end
 
-function BallThrowController.fireThrow()
-	local hrp = getRootAndHum()
-	local cam = workspace.CurrentCamera
-	if not hrp or not cam then
-		return
-	end
-	local now = os.clock()
-	local speedStat = tonumber(localPlayer:GetAttribute("ThrowSpeed")) or 1.0
-	local cd = MathUtil.computeThrowCooldown(speedStat, 0)
-	if now - lastThrowAt < cd * 0.92 then
-		return
-	end
-	lastThrowAt = now
-
-	local origin = hrp.Position + Vector3.new(0, 1.4, 0)
+local function computeManualAim(origin: Vector3, cam: Camera): Vector3
 	local baseDir = cam.CFrame.LookVector
 	if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
 		local mouseLoc = UserInputService:GetMouseLocation()
@@ -138,9 +262,81 @@ function BallThrowController.fireThrow()
 		local targetPoint = ray.Origin + ray.Direction * 120
 		baseDir = (targetPoint - origin).Unit
 	end
-	local aimDir = computeMagneticAim(origin, baseDir)
-	Remotes.waitClient().ThrowBall:FireServer(aimDir)
-	AudioCatalog.play("Throw", 1.0 + math.random() * 0.15, 0.35)
+	return baseDir
+end
+
+local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
+	local hrp = getRootAndHum()
+	local cam = workspace.CurrentCamera
+	if not hrp or not cam then
+		return
+	end
+	local now = os.clock()
+	local speedStat = tonumber(localPlayer:GetAttribute("ThrowSpeed")) or 1.0
+	local turboBonus = if padLocked
+			and localPlayer:GetAttribute("Pass_AutoFireRange") == true
+		then 0.25
+		else 0
+	local cd = MathUtil.computeThrowCooldown(speedStat, turboBonus)
+	if now - lastThrowAt < cd * 0.94 then
+		return
+	end
+	lastThrowAt = now
+
+	local origin = hrp.Position + Vector3.new(0, 1.4, 0)
+	local useHoming = isAfkShot or autoAimEnabled
+	local lockedPart: BasePart? = overrideTarget
+	if not lockedPart and useHoming then
+		lockedPart = findAutoAimTarget(origin)
+		updateLockReticle(lockedPart)
+	end
+
+	local aimDir: Vector3
+	if lockedPart and lockedPart.Parent then
+		local delta = lockedPart.Position - origin
+		aimDir = if delta.Magnitude > 0.1 then delta.Unit else hrp.CFrame.LookVector
+		if not isAfkShot then
+			local lookFlat =
+				Vector3.new(lockedPart.Position.X, hrp.Position.Y, lockedPart.Position.Z)
+			if (lookFlat - hrp.Position).Magnitude > 0.5 then
+				hrp.CFrame = hrp.CFrame:Lerp(CFrame.lookAt(hrp.Position, lookFlat), 0.72)
+			end
+		end
+	else
+		aimDir = computeManualAim(origin, cam)
+	end
+
+	AnimationController.playThrowAnim(localPlayer)
+	Remotes.waitClient().ThrowBall:FireServer(aimDir, useHoming, lockedPart)
+	AudioCatalog.play("Throw", 1.0 + math.random() * 0.14, if isAfkShot then 0.12 else 0.28)
+end
+
+function BallThrowController.fireThrow()
+	executeThrow(nil, false)
+end
+
+function BallThrowController.setHoldingFire(holding: boolean)
+	isHoldingFire = holding
+	if holding then
+		BallThrowController.fireThrow()
+	end
+end
+
+function BallThrowController.setAutoAimEnabled(enabled: boolean)
+	autoAimEnabled = enabled
+	localPlayer:SetAttribute("AutoAimEnabled", enabled)
+	HudGui.setAutoAimEnabled(enabled)
+	if not enabled then
+		updateLockReticle(nil)
+	end
+end
+
+function BallThrowController.toggleAutoAim()
+	BallThrowController.setAutoAimEnabled(not autoAimEnabled)
+end
+
+function BallThrowController.isAutoAimEnabled(): boolean
+	return autoAimEnabled
 end
 
 function BallThrowController.triggerDash()
@@ -184,7 +380,7 @@ local function spawnDamagePopup(pos: Vector3, text: string, color: Color3)
 
 	local bb = Instance.new("BillboardGui")
 	bb.Adornee = anchor
-	bb.Size = UDim2.fromOffset(120, 38)
+	bb.Size = UDim2.fromOffset(128, 40)
 	bb.AlwaysOnTop = true
 	bb.Parent = anchor
 
@@ -200,11 +396,95 @@ local function spawnDamagePopup(pos: Vector3, text: string, color: Color3)
 
 	TweenService
 		:Create(anchor, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			CFrame = anchor.CFrame + Vector3.new(0, 3.8, 0),
+			CFrame = anchor.CFrame + Vector3.new(0, 4.2, 0),
 		})
 		:Play()
 	task.delay(0.7, function()
 		anchor:Destroy()
+	end)
+end
+
+local function triggerImpactFeedback(
+	impactPos: Vector3,
+	hitKind: string,
+	isCrit: boolean,
+	damage: number,
+	hitInst: Instance?
+)
+	if hitKind == "GoldTarget" then
+		local col = Color3.fromRGB(250, 204, 21)
+		AudioCatalog.play("GoldCombo", 1.25, 0.45)
+		spawnDamagePopup(impactPos, "2x GOLD +SPD!", col)
+		AnimationController.playImpactEffect(impactPos, hitKind, true, col, hitInst)
+	elseif hitKind == "Target" then
+		local col = Color3.fromRGB(74, 222, 128)
+		AudioCatalog.play("TargetHit", 1.05, 0.28)
+		spawnDamagePopup(impactPos, "+DMG!", col)
+		AnimationController.playImpactEffect(impactPos, hitKind, false, col, hitInst)
+	elseif hitKind == "Mob" or hitKind == "Boss" or hitKind == "PvP" then
+		local col = if isCrit then Color3.fromRGB(250, 204, 21) else Color3.fromRGB(255, 110, 90)
+		AudioCatalog.play("BossHit", if isCrit then 1.35 else 1.0, 0.45)
+		local dmgTxt = MathUtil.formatNumber(damage)
+		spawnDamagePopup(impactPos, if isCrit then `CRIT {dmgTxt}!` else `-{dmgTxt}`, col)
+		AnimationController.playImpactEffect(impactPos, hitKind, isCrit, col, hitInst)
+	elseif hitKind == "Surface" then
+		AnimationController.playImpactEffect(
+			impactPos,
+			"Surface",
+			false,
+			Color3.fromRGB(200, 220, 255),
+			nil
+		)
+	end
+end
+
+local function runPostImpactBounce(
+	ball: Model,
+	impactPos: Vector3,
+	incomingVel: Vector3,
+	normal: Vector3
+)
+	local n = if normal.Magnitude > 0.1 then normal.Unit else Vector3.yAxis
+	local reflected = incomingVel - 2 * incomingVel:Dot(n) * n
+	local bounceVel = reflected * 0.32
+		+ Vector3.new(
+			(math.random() - 0.5) * 14,
+			math.max(12, math.abs(reflected.Y) * 0.4),
+			(math.random() - 0.5) * 14
+		)
+	local pos = impactPos
+	local startAt = os.clock()
+	local bounceDur = 0.42
+	local floorY = math.max(1.2, impactPos.Y - 4.5)
+	local spinAngle = 0
+	local conn: RBXScriptConnection? = nil
+
+	conn = RunService.RenderStepped:Connect(function(dt: number)
+		local elapsed = os.clock() - startAt
+		if elapsed >= bounceDur or not ball.Parent then
+			if conn then
+				conn:Disconnect()
+				conn = nil
+			end
+			if ball.Parent then
+				ball:Destroy()
+			end
+			return
+		end
+		local stepDt = math.min(dt, 0.05)
+		bounceVel += Vector3.new(0, -68 * stepDt, 0)
+		pos += bounceVel * stepDt
+		if pos.Y < floorY then
+			pos = Vector3.new(pos.X, floorY, pos.Z)
+			bounceVel =
+				Vector3.new(bounceVel.X * 0.72, math.abs(bounceVel.Y) * 0.48, bounceVel.Z * 0.72)
+		end
+		spinAngle += stepDt * 14
+		local fade = math.clamp(1 - (elapsed / bounceDur), 0.18, 1)
+		ball:PivotTo(CFrame.new(pos) * CFrame.Angles(spinAngle, spinAngle * 0.5, 0))
+		if ball.PrimaryPart then
+			ball.PrimaryPart.Transparency = math.clamp(1 - fade, 0, 0.92)
+		end
 	end)
 end
 
@@ -216,6 +496,12 @@ local function onProjectileBroadcast(data: any)
 	then
 		return
 	end
+	local shooterId = tonumber(data.shooterId)
+	local shooterPlr = if shooterId then Players:GetPlayerByUserId(shooterId) else nil
+	if shooterPlr and shooterPlr ~= localPlayer then
+		AnimationController.playThrowAnim(shooterPlr)
+	end
+
 	local skinCol: Color3? = nil
 	if type(data.ballSkin) == "string" then
 		local spec = MonetizationConfigs.COSMETICS[data.ballSkin]
@@ -225,40 +511,87 @@ local function onProjectileBroadcast(data: any)
 	end
 	local ball =
 		ProceduralModels.createBallVisual(tostring(data.ballTierId or "RubberBall"), skinCol)
-	ball:PivotTo(CFrame.new(data.origin))
+	local startPos = getThrowHandOrigin(shooterPlr, data.origin)
+	local serverOrigin: Vector3 = data.origin
+	local staticEnd: Vector3 = data.endPos
+	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
+	local homingPart = if data.isHoming == true
+			and hitInst
+			and hitInst:IsA("BasePart")
+		then hitInst
+		else nil
+	local dur = math.clamp(tonumber(data.travelSec) or 0.25, 0.08, 1.65)
+	local launchVel: Vector3 = if typeof(data.launchVel) == "Vector3"
+		then data.launchVel
+		else (staticEnd - serverOrigin).Unit * (tonumber(data.speed) or 115)
+	local normal: Vector3 = if typeof(data.normal) == "Vector3" then data.normal else Vector3.yAxis
+	local hitKind = tostring(data.hitKind or "Miss")
+	local isCrit = data.isCrit == true
+	local damage = tonumber(data.damage) or 1
+
+	ball:PivotTo(CFrame.new(startPos, staticEnd))
 	ball.Parent = workspace
 
-	local dist = (data.endPos - data.origin).Magnitude
-	local dur = math.clamp(dist / math.max(40, tonumber(data.speed) or 115), 0.06, 0.9)
-	local root = ball.PrimaryPart
-	if root then
-		local tween = TweenService:Create(root, TweenInfo.new(dur, Enum.EasingStyle.Linear), {
-			CFrame = CFrame.new(data.endPos),
-		})
-		tween:Play()
-		tween.Completed:Connect(function()
-			if data.hitKind == "GoldTarget" then
-				AudioCatalog.play("GoldCombo", 1.25, 0.55)
-				spawnDamagePopup(data.endPos, "2x GOLD +SPD!", Color3.fromRGB(250, 204, 21))
-			elseif data.hitKind == "Target" then
-				AudioCatalog.play("TargetHit", 1.05, 0.4)
-				spawnDamagePopup(data.endPos, "+DMG!", Color3.fromRGB(74, 222, 128))
-			elseif data.hitKind == "Mob" or data.hitKind == "Boss" or data.hitKind == "PvP" then
-				AudioCatalog.play("BossHit", if data.isCrit then 1.35 else 1.0, 0.45)
-				local dmgTxt = MathUtil.formatNumber(tonumber(data.damage) or 1)
-				spawnDamagePopup(
-					data.endPos,
-					if data.isCrit then `CRIT {dmgTxt}!` else `-{dmgTxt}`,
-					if data.isCrit
-						then Color3.fromRGB(250, 204, 21)
-						else Color3.fromRGB(255, 110, 90)
-				)
+	local startTime = os.clock()
+	local prevPos = startPos
+	local lastVel = launchVel
+	local arcBoost = math.clamp((staticEnd - startPos).Magnitude * 0.08, 0.8, 5.5)
+	local conn: RBXScriptConnection? = nil
+
+	conn = RunService.RenderStepped:Connect(function(dt: number)
+		local elapsed = os.clock() - startTime
+		local alpha = math.clamp(elapsed / dur, 0, 1)
+		local nextPos: Vector3
+		if homingPart and homingPart.Parent then
+			-- Real-time homing curve right into the moving target's live center!
+			local liveDest = homingPart.Position
+			local linear = startPos:Lerp(liveDest, alpha)
+			nextPos = linear + Vector3.new(0, 4 * alpha * (1 - alpha) * arcBoost, 0)
+		else
+			-- True ballistic gravity arc blended smoothly from hand launch to server curve
+			local sx, sy, sz = CombatLogic.sampleBallisticPosition(
+				serverOrigin.X,
+				serverOrigin.Y,
+				serverOrigin.Z,
+				launchVel.X,
+				launchVel.Y,
+				launchVel.Z,
+				elapsed,
+				CombatLogic.BALL_GRAVITY
+			)
+			local handBlend = math.clamp(1 - alpha * 4, 0, 1)
+			nextPos = Vector3.new(sx, sy, sz) + (startPos - serverOrigin) * handBlend
+		end
+
+		local stepVel = (nextPos - prevPos) / math.max(0.008, dt)
+		if stepVel.Magnitude > 1 then
+			lastVel = stepVel
+		end
+		prevPos = nextPos
+
+		if ball.Parent then
+			local rollSpin = elapsed * 20
+			local lookPos = nextPos
+				+ (if lastVel.Magnitude > 0.5 then lastVel.Unit else Vector3.zAxis)
+			ball:PivotTo(CFrame.lookAt(nextPos, lookPos) * CFrame.Angles(-rollSpin, 0, 0))
+		end
+
+		if alpha >= 1 then
+			if conn then
+				conn:Disconnect()
+				conn = nil
 			end
-			ball:Destroy()
-		end)
-	else
-		ball:Destroy()
-	end
+			local impactPos = if homingPart and homingPart.Parent
+				then homingPart.Position
+				else staticEnd
+			triggerImpactFeedback(impactPos, hitKind, isCrit, damage, hitInst)
+			if hitKind ~= "Miss" and ball.Parent then
+				runPostImpactBounce(ball, impactPos, lastVel, normal)
+			elseif ball.Parent then
+				ball:Destroy()
+			end
+		end
+	end)
 end
 
 local function onBossTelegraph(data: any)
@@ -307,6 +640,7 @@ local function onBossTelegraph(data: any)
 end
 
 function BallThrowController.start()
+	BallThrowController.setAutoAimEnabled(autoAimEnabled)
 	local remotes = Remotes.waitClient()
 	remotes.ProjectileBroadcast.OnClientEvent:Connect(onProjectileBroadcast)
 	remotes.BossTelegraph.OnClientEvent:Connect(onBossTelegraph)
@@ -319,6 +653,8 @@ function BallThrowController.start()
 			isSprinting = true
 		elseif input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.ButtonB then
 			BallThrowController.triggerDash()
+		elseif input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonY then
+			BallThrowController.toggleAutoAim()
 		elseif
 			input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.KeyCode == Enum.KeyCode.ButtonR2
@@ -339,7 +675,7 @@ function BallThrowController.start()
 		end
 	end)
 
-	RunService.Heartbeat:Connect(function()
+	RunService.Heartbeat:Connect(function(dt: number)
 		local now = os.clock()
 		HudGui.setDashCooldown(math.max(0, DASH_COOLDOWN - (now - lastDashAt)))
 
@@ -348,20 +684,22 @@ function BallThrowController.start()
 			return
 		end
 
-		-- Check Stationary Training Firing Pad
 		local pad = findMyFiringPad()
-		local nearPad = pad ~= nil and (hrp.Position - pad.Position).Magnitude <= 6.2
+		local nearPad = pad ~= nil and (hrp.Position - pad.Position).Magnitude <= 6.8
 		if nearPad ~= isOnTrainingPad then
 			isOnTrainingPad = nearPad
 			padLocked = nearPad
 			remotes.SetTrainingStance:FireServer(padLocked)
+			HudGui.setAfkTrainingActive(padLocked)
+			AnimationController.setTrainingStance(padLocked)
 		end
 		if padLocked and hum.Jump then
 			padLocked = false
 			remotes.SetTrainingStance:FireServer(false)
+			HudGui.setAfkTrainingActive(false)
+			AnimationController.setTrainingStance(false)
 		end
 
-		-- Compute authoritative WalkSpeed (18 walk / 24 sprint, Frost Slow -20%, Mini-Stun 0)
 		local stunUntil = tonumber(localPlayer:GetAttribute("MiniStunUntil")) or 0
 		local slowUntil = tonumber(localPlayer:GetAttribute("FrostSlowUntil")) or 0
 		if now < stunUntil then
@@ -374,9 +712,28 @@ function BallThrowController.start()
 			hum.WalkSpeed = base
 		end
 
-		-- Continuous firing when held OR Auto-Fire Range Game Pass on Training Pad
-		local autoFire = padLocked and localPlayer:GetAttribute("Pass_AutoFireRange") == true
-		if isHoldingFire or autoFire then
+		if autoAimEnabled and not padLocked then
+			local lockedPart = findAutoAimTarget(hrp.Position + Vector3.new(0, 1.4, 0))
+			if lockedPart ~= currentLockedPart then
+				updateLockReticle(lockedPart)
+			end
+		elseif currentLockedPart ~= nil then
+			updateLockReticle(nil)
+		end
+
+		if padLocked and pad then
+			local hasTurbo = localPlayer:GetAttribute("Pass_AutoFireRange") == true
+			local target = pickAfkTrainingTarget(pad, hasTurbo)
+			if target then
+				if hum.MoveDirection.Magnitude < 0.05 then
+					local lookAt = Vector3.new(target.Position.X, hrp.Position.Y, target.Position.Z)
+					local desiredCF = CFrame.lookAt(hrp.Position, lookAt)
+					local turnAlpha = 1 - math.exp(-10 * math.min(dt, 0.1))
+					hrp.CFrame = hrp.CFrame:Lerp(desiredCF, turnAlpha)
+				end
+				executeThrow(target, true)
+			end
+		elseif isHoldingFire then
 			BallThrowController.fireThrow()
 		end
 	end)

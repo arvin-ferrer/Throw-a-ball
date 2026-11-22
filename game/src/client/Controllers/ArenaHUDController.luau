@@ -70,8 +70,8 @@ local function buildTopBanner(gui: ScreenGui)
 	local banner = Theme.makeFrame(
 		gui,
 		"PhaseBanner",
-		UDim2.fromOffset(360, 56),
-		UDim2.new(0.5, -180, 0, 8),
+		UDim2.fromOffset(456, 56),
+		UDim2.new(0.5, -228, 0, 8),
 		Theme.Colors.Panel,
 		12
 	)
@@ -81,7 +81,7 @@ local function buildTopBanner(gui: ScreenGui)
 		"HUB PLAZA • PvE SAFE",
 		UDim2.new(1, -16, 0, 24),
 		UDim2.fromOffset(8, 4),
-		16,
+		15,
 		Theme.Colors.Text,
 		true
 	)

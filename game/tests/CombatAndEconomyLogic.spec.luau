@@ -46,6 +46,67 @@ local okSpam = CombatLogic.validateThrowRequest({
 })
 assertTrue(not okSpam, "Cooldown spam rejected")
 
+local okFreeAfk, _, baseCd = CombatLogic.validateThrowRequest({
+	lastThrowAt = 10.0,
+	now = 11.0,
+	throwSpeedStat = 1,
+	activePets = {},
+	hasTurboRangeBonus = false,
+	originX = 0,
+	originY = 5,
+	originZ = 0,
+	dirX = 0,
+	dirY = 0,
+	dirZ = 1,
+})
+local okTurbo, _, turboCd = CombatLogic.validateThrowRequest({
+	lastThrowAt = 10.0,
+	now = 11.0,
+	throwSpeedStat = 1,
+	activePets = {},
+	hasTurboRangeBonus = true,
+	originX = 0,
+	originY = 5,
+	originZ = 0,
+	dirX = 0,
+	dirY = 0,
+	dirZ = 1,
+})
+assertTrue(
+	okFreeAfk and okTurbo and turboCd < baseCd,
+	"Free AFK throw valid and Turbo Range reduces cooldown"
+)
+
+-- 1b. Auto-Aim target selection (range cap, Boss/PvP priority, nearest mob)
+local pickedBoss = CombatLogic.selectAutoAimTarget(0, 5, 0, {
+	{ id = "farMob", kind = "Mob", x = 0, y = 5, z = 200 },
+	{ id = "nearMob", kind = "Mob", x = 0, y = 5, z = 40 },
+	{ id = "boss", kind = "Boss", x = 0, y = 5, z = 55 },
+})
+assertTrue(pickedBoss ~= nil and pickedBoss.id == "boss", "Auto-Aim prioritizes Boss in range")
+
+local pickedNear = CombatLogic.selectAutoAimTarget(0, 5, 0, {
+	{ id = "mobA", kind = "Mob", x = 0, y = 5, z = 65 },
+	{ id = "mobB", kind = "Mob", x = 18, y = 5, z = 10 },
+	{ id = "tooFar", kind = "Boss", x = 0, y = 5, z = 220 },
+})
+assertTrue(
+	pickedNear ~= nil and pickedNear.id == "mobB",
+	"Auto-Aim ignores out-of-range and picks nearest Mob"
+)
+
+-- 1c. Ballistic throw physics (gravity drop + upward loft arc)
+local vx, vy, vz = CombatLogic.computeBallisticLaunchVelocity(0, 0, -1, 120, 0.10)
+local px0, py0, pz0 = CombatLogic.sampleBallisticPosition(0, 5, 0, vx, vy, vz, 0)
+local pxMid, pyMid, pzMid = CombatLogic.sampleBallisticPosition(0, 5, 0, vx, vy, vz, 0.25)
+local pxLate, pyLate, pzLate = CombatLogic.sampleBallisticPosition(0, 5, 0, vx, vy, vz, 1.0)
+assertTrue(px0 == 0 and py0 == 5 and pz0 == 0, "Ballistic t=0 starts at origin")
+assertTrue(pyMid > py0 and pzMid < pz0, "Ballistic loft rises smoothly at mid-flight")
+assertTrue(
+	pyLate < py0 and pxLate == 0 and pzLate < pzMid,
+	"Ballistic gravity curves ball downward"
+)
+
 -- 2. Training off-pad rejection vs on-pad Moving Gold 2x + Throw Speed
 local offPad = CombatLogic.evaluateTrainingHit({
 	isOnAssignedPad = false,

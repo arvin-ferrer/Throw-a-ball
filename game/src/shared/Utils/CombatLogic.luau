@@ -33,6 +33,7 @@ export type ThrowValidationInput = {
 	now: number,
 	throwSpeedStat: number,
 	activePets: { OwnedPetSnapshot },
+	hasTurboRangeBonus: boolean?,
 	originX: number,
 	originY: number,
 	originZ: number,
@@ -82,11 +83,22 @@ export type DamageEvalResult = {
 	explosiveAoEFraction: number,
 }
 
+export type AutoAimCandidate = {
+	id: string,
+	kind: "Boss" | "PvP" | "Mob" | "GoldTarget" | "Target",
+	x: number,
+	y: number,
+	z: number,
+	priorityBonus: number?,
+}
+
 local CombatLogic = {}
 
 CombatLogic.COOLDOWN_TOLERANCE = 0.85
 CombatLogic.CRIT_MULTIPLIER = 1.75
 CombatLogic.LEECH_CAP_PER_HIT_FRAC = 0.15
+CombatLogic.AUTO_AIM_MAX_RANGE = 185
+CombatLogic.BALL_GRAVITY = 42
 
 function CombatLogic.getActiveTraitBonuses(activePets: { OwnedPetSnapshot }): (number, number)
 	local throwSpeedBonus = 0
@@ -117,7 +129,8 @@ function CombatLogic.validateThrowRequest(input: ThrowValidationInput): (boolean
 		return false, "ZeroDirection", 0
 	end
 	local swiftBonus = CombatLogic.getActiveTraitBonuses(input.activePets)
-	local cd = MathUtil.computeThrowCooldown(input.throwSpeedStat, swiftBonus)
+	local turboBonus = if input.hasTurboRangeBonus then 0.25 else 0
+	local cd = MathUtil.computeThrowCooldown(input.throwSpeedStat, swiftBonus + turboBonus)
 	local elapsed = input.now - input.lastThrowAt
 	if elapsed < cd * CombatLogic.COOLDOWN_TOLERANCE then
 		return false, "RateLimited", cd
@@ -237,6 +250,69 @@ function CombatLogic.evaluateBallHit(input: DamageEvalInput): DamageEvalResult
 			else 0,
 		explosiveAoEFraction = if perks.ExplosiveAoE then perks.ExplosiveAoE.effectiveValue else 0,
 	}
+end
+
+function CombatLogic.selectAutoAimTarget(
+	originX: number,
+	originY: number,
+	originZ: number,
+	candidates: { AutoAimCandidate },
+	maxRange: number?
+): AutoAimCandidate?
+	local limit = maxRange or CombatLogic.AUTO_AIM_MAX_RANGE
+	local best: AutoAimCandidate? = nil
+	local bestScore = math.huge
+
+	for _, cand in ipairs(candidates) do
+		local dx = cand.x - originX
+		local dy = cand.y - originY
+		local dz = cand.z - originZ
+		local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+		if dist >= 1.5 and dist <= limit then
+			local weight = if cand.kind == "Boss"
+				then 0.55
+				elseif cand.kind == "PvP" then 0.72
+				elseif cand.kind == "GoldTarget" then 0.65
+				else 1.0
+			local bonus = cand.priorityBonus or 0
+			local score = dist * weight - bonus
+			if score < bestScore then
+				bestScore = score
+				best = cand
+			end
+		end
+	end
+	return best
+end
+
+function CombatLogic.computeBallisticLaunchVelocity(
+	dirX: number,
+	dirY: number,
+	dirZ: number,
+	speed: number,
+	upwardLoft: number?
+): (number, number, number)
+	local mag = math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ)
+	if mag < 1e-4 then
+		return 0, 0, -speed
+	end
+	local ux, uy, uz = dirX / mag, dirY / mag, dirZ / mag
+	local loft = upwardLoft or 0.08
+	return ux * speed, (uy + loft) * speed, uz * speed
+end
+
+function CombatLogic.sampleBallisticPosition(
+	originX: number,
+	originY: number,
+	originZ: number,
+	velX: number,
+	velY: number,
+	velZ: number,
+	t: number,
+	gravity: number?
+): (number, number, number)
+	local g = gravity or CombatLogic.BALL_GRAVITY
+	return originX + velX * t, originY + velY * t - 0.5 * g * t * t, originZ + velZ * t
 end
 
 return CombatLogic

@@ -205,10 +205,15 @@ local function applyMutationAndHalo(
 					p.Anchored = false
 				end
 			end
-			local w = Instance.new("WeldConstraint")
-			w.Part0 = root
-			w.Part1 = hRoot
-			w.Parent = hRoot
+			local m = Instance.new("Motor6D")
+			m.Name = "ApexHaloMotor"
+			m.Part0 = root
+			m.Part1 = hRoot
+			m.C0 = CFrame.new(0, yOff, 0) * CFrame.Angles(0, 0, math.rad(90))
+			m.C1 = CFrame.new()
+			m:SetAttribute("AnimRole", "OrbitShard")
+			m:SetAttribute("AnimSpeed", 2.2)
+			m.Parent = root
 			halo.Parent = model
 		else
 			local ring = makePart(
@@ -422,11 +427,21 @@ function ProceduralModels.styleTrainingTargets(trainingRange: Instance, targetTi
 		or EconomyConfigs.TRAINING_TARGETS[1]
 	local primary = rgb(tier.primaryColor)
 	local targetPrefab = findAssetPrefab("Targets", tier.id)
+	local pad = trainingRange:FindFirstChild("FiringPad")
+
+	local function facingCF(targetPart: BasePart): CFrame
+		if pad and pad:IsA("BasePart") then
+			local lookAt = Vector3.new(pad.Position.X, targetPart.Position.Y, pad.Position.Z)
+			return CFrame.lookAt(targetPart.Position, lookAt) * CFrame.Angles(0, math.rad(90), 0)
+		end
+		return targetPart.CFrame * CFrame.Angles(0, math.rad(90), 0)
+	end
 
 	for _, child in ipairs(trainingRange:GetChildren()) do
 		if child:IsA("BasePart") then
 			if string.find(child.Name, "Target_Static_") then
 				child.Color = primary
+				child.Transparency = if targetPrefab then 1 else 0
 				child.Material = if tier.id == "CrystalDrone" or tier.id == "ObsidianCore"
 					then Enum.Material.Neon
 					else Enum.Material.SmoothPlastic
@@ -437,7 +452,7 @@ function ProceduralModels.styleTrainingTargets(trainingRange: Instance, targetTi
 				if targetPrefab and targetPrefab:IsA("Model") and targetPrefab.PrimaryPart then
 					local skin = targetPrefab:Clone()
 					skin.Name = "TargetSkin"
-					skin:PivotTo(child.CFrame)
+					skin:PivotTo(facingCF(child))
 					for _, p in ipairs(skin:GetDescendants()) do
 						if p:IsA("BasePart") then
 							p.CanQuery = false
@@ -450,6 +465,29 @@ function ProceduralModels.styleTrainingTargets(trainingRange: Instance, targetTi
 			elseif child.Name == "Target_MovingGold" then
 				child.Color = Color3.fromRGB(255, 212, 46)
 				child.Material = Enum.Material.Neon
+				child.Transparency = 1
+				local oldGold = child:FindFirstChild("TargetSkin")
+				if oldGold then
+					oldGold:Destroy()
+				end
+				local goldPrefab = findAssetPrefab("Targets", "MovingGold")
+				if goldPrefab and goldPrefab:IsA("Model") and goldPrefab.PrimaryPart then
+					local skin = goldPrefab:Clone()
+					skin.Name = "TargetSkin"
+					skin:PivotTo(facingCF(child))
+					for _, p in ipairs(skin:GetDescendants()) do
+						if p:IsA("BasePart") then
+							p.CanQuery = false
+							p.CanCollide = false
+							p.Anchored = false
+						end
+					end
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = child
+					w.Part1 = skin.PrimaryPart
+					w.Parent = skin.PrimaryPart
+					skin.Parent = child
+				end
 			end
 		end
 	end

@@ -307,7 +307,25 @@ function PlotService.teleportCharacter(player: Player, targetCF: CFrame)
 	if not char then
 		return
 	end
-	char:PivotTo(targetCF + Vector3.new(0, 3.5, 0))
+	-- Always land strictly upright (zero pitch/roll even if the pad is a rotated Cylinder!)
+	local pos = targetCF.Position + Vector3.new(0, 4.2, 0)
+	local flatLook = Vector3.new(targetCF.LookVector.X, 0, targetCF.LookVector.Z)
+	local uprightCF = if flatLook.Magnitude > 0.1
+		then CFrame.lookAt(pos, pos + flatLook.Unit)
+		else CFrame.new(pos)
+	char:PivotTo(uprightCF)
+
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if hrp and hrp:IsA("BasePart") then
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.PlatformStand = false
+		hum.Sit = false
+		hum:ChangeState(Enum.HumanoidStateType.Running)
+	end
 end
 
 function PlotService.teleportToHubPlot(player: Player)
