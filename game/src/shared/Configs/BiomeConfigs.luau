@@ -45,6 +45,16 @@ BiomeConfigs.Biomes = table.freeze({
 	MoltenCaldera = make("MoltenCaldera", "ObsidianWyrm", 1200, 6.0, {}),
 })
 
+-- Arena payouts (GDD §3.2: every participant earns Coins, EXP and Boss Gems; the winner also
+-- gets the egg + bonus Gems). Provisional tuning: 1 Gem per fight + 3 for a win keeps a
+-- gem-crafted egg (ShopConfigs.GemEggPrices: Meadow 5) at roughly 4-5 fights, as GDD §8.4 wants.
+BiomeConfigs.ArenaRewards = table.freeze({
+	participantCoinsPerRecDamage = 25, -- Meadow (15 Rec. DMG) pays 375 Coins
+	participantExp = 60,
+	participantBossGems = 1,
+	winnerBonusBossGems = 3,
+})
+
 function BiomeConfigs.get(biomeId: string): BiomeConfig?
 	return BiomeConfigs.Biomes[biomeId]
 end
