@@ -8,6 +8,7 @@ A cross-platform Roblox game repository pairing a **Training & Pet-Income Tycoon
 
 - **Canonical Game Design Document:** [docs/GameIdea_Evolved_GDD.md](docs/GameIdea_Evolved_GDD.md) | [PDF (9 pages)](docs/GameIdea_Evolved_GDD.pdf)
 - **Team Onboarding (Windows / macOS / Linux):** [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md)
+- **3-Person Work Split & Issue Backlog:** [docs/TEAM_WORKFLOW_3P.md](docs/TEAM_WORKFLOW_3P.md)
 - **Roblox Game Codebase Guide:** [game/README.md](game/README.md)
 - **Shared AI Agent Rules:** [AGENTS.md](AGENTS.md) (root) · [.agents/rules/gemini.md](.agents/rules/gemini.md) · [.claude/CLAUDE.md](.claude/CLAUDE.md)
 - **Market Research & Validation Vault:** [research/README.md](research/README.md) · [Visual Summary](research/reports/Research_Results_Visual_Summary.md)

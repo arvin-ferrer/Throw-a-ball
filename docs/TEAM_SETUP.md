@@ -84,8 +84,10 @@ args = ["mcp-for-blender"]
 
 ## 4. Daily Team Collaboration Workflow (Preventing Conflicts)
 
+> **3-Person Split, Contracts & Sprint Backlog:** See [TEAM_WORKFLOW_3P.md](TEAM_WORKFLOW_3P.md) for exact folder ownership (**Dev A: Server/Economy**, **Dev B: Client/Combat/UI**, **Dev C: 3D/Maps/VFX**), `CollectionService` workspace contracts, and the 20-issue parallel sprint roadmap.
+
 | Role | Where You Work | Sync & Merge Rule |
 | :--- | :--- | :--- |
-| **Scripters / Engineers** | Git branch → `game/src/**` & `game/tests/**` | Test locally via `cd game && rojo serve` against a local place copy. Run `python scripts/check.py` before opening a PR. **Never** connect two teammates' `rojo serve` sessions to the same live Team Create place at once! |
-| **3D / Environment Builders** | Roblox Studio (Map/Terrain) & `game/assets/blender/` | Because [game/default.project.json](../game/default.project.json) enforces `"$ignoreUnknownInstances": true`, Rojo preserves Studio-built Terrain/Parts/Meshes safely. Export Blender assets via `python scripts/blender_run.py <script.py>`. |
-| **Reviewers / Visual QA** | PR diff + `game/assets/renders/*.png` | Verify `python scripts/check.py` passes, check `AGENTS.md` security invariants (`PolicyService`, server authority, PvP phase guard), and review render previews before merging to `main`. |
+| **Dev A — Server Systems (`role:server`)** | Git branch → `game/src/server/**`, `game/src/shared/Configs/**`, `game/tests/**` | Test locally via `cd game && rojo serve` against a local place copy. Run `python scripts/check.py` before opening a PR. **Never** connect two teammates' `rojo serve` sessions to the same live Team Create place at once! |
+| **Dev B — Client Combat & UI (`role:client`)** | Git branch → `game/src/client/**`, `game/src/shared/Utils/**`, `game/tests/**` | Build against typed `Remotes.luau` + local mock harness so UI/controls never block on server work. Run `python scripts/check.py` and verify mobile Device Simulator ergonomics before opening a PR. |
+| **Dev C — 3D / Environment Builder (`role:3d-map`)** | Roblox Studio (Map/Terrain) & `game/assets/**` | Because [game/default.project.json](../game/default.project.json) enforces `"$ignoreUnknownInstances": true`, Rojo preserves Studio-built Terrain/Parts/Meshes safely. Follow the `CollectionService` tag contract in [TEAM_WORKFLOW_3P.md](TEAM_WORKFLOW_3P.md) and export Blender assets via `python scripts/blender_run.py <script.py>`. |
