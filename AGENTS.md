@@ -1,7 +1,7 @@
 # Ball Brawl: Boss Eggs — Shared Agent Rules (`AGENTS.md`)
 
-**Canonical Design Spec:** [GameIdea_Evolved_GDD.md](./GameIdea_Evolved_GDD.md) (`v1.1`)  
-**Team Onboarding Guide:** [TEAM_SETUP.md](./TEAM_SETUP.md) (Windows, macOS & Linux)  
+**Canonical Design Spec:** [docs/GameIdea_Evolved_GDD.md](./docs/GameIdea_Evolved_GDD.md) (`v1.1`)  
+**Team Onboarding Guide:** [docs/TEAM_SETUP.md](./docs/TEAM_SETUP.md) (Windows, macOS & Linux)  
 **Game Project Root:** `./game/` (Rojo + Rokit + Strict Luau + Lune)  
 **3D Asset Root:** `./game/assets/blender/` (Blender 5.x + `mcp-for-blender`)
 

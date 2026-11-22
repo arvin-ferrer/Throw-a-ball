@@ -14,7 +14,7 @@ if not feature:
 
 phase("1. Tech Director Plan (Gemini)")
 plan = await agent(
-    f"Read GameIdea_Evolved_GDD.md and AGENTS.md. Produce a concise implementation plan for:\n"
+    f"Read docs/GameIdea_Evolved_GDD.md and AGENTS.md. Produce a concise implementation plan for:\n"
     f"{feature}\n"
     f"Specify exact files under game/src/ and game/tests/ plus edge cases to test.",
     schema={

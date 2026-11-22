@@ -30,7 +30,7 @@ python scripts/setup_team.py
 *(On macOS/Linux you may use `python3 scripts/setup_team.py`.)*
 
 What this does automatically:
-1. Installs the exact pinned Roblox toolchain from [game/rokit.toml](game/rokit.toml) (`rojo`, `wally`, `lune`, `selene`, `stylua`, `luau-lsp`).
+1. Installs the exact pinned Roblox toolchain from [game/rokit.toml](../game/rokit.toml) (`rojo`, `wally`, `lune`, `selene`, `stylua`, `luau-lsp`).
 2. Clones/syncs the curated `26` Roblox & Blender expert skills from `scenario-labs/skills` into `.agents/skills/` and `.claude/skills/` (using Windows-safe directory copies on Windows and symlinks on macOS/Linux; these third-party folders are gitignored so teammates never get broken symlinks!).
 3. Installs the **`mcp-for-blender`** addon into your Blender addons folder (`uvx mcp-for-blender install-addon`).
 
@@ -47,7 +47,7 @@ Expected output: `ALL GATES PASSED.` (StyLua + Selene + Lune unit tests + Rojo b
 ## 3. Connect Your MCP Servers & Studio/Blender Plugins
 
 ### Project-Level MCP Config
-[.mcp.json](.mcp.json) is checked into Git with zero machine-specific paths (`npx` and `uvx` resolved from `PATH`), so **Claude Code** picks up `robloxstudio` and `blender` automatically.
+[.mcp.json](../.mcp.json) is checked into Git with zero machine-specific paths (`npx` and `uvx` resolved from `PATH`), so **Claude Code** picks up `robloxstudio` and `blender` automatically.
 
 For **Antigravity** (`~/.gemini/config/mcp_config.json`), add:
 ```json
@@ -87,5 +87,5 @@ args = ["mcp-for-blender"]
 | Role | Where You Work | Sync & Merge Rule |
 | :--- | :--- | :--- |
 | **Scripters / Engineers** | Git branch → `game/src/**` & `game/tests/**` | Test locally via `cd game && rojo serve` against a local place copy. Run `python scripts/check.py` before opening a PR. **Never** connect two teammates' `rojo serve` sessions to the same live Team Create place at once! |
-| **3D / Environment Builders** | Roblox Studio (Map/Terrain) & `game/assets/blender/` | Because [game/default.project.json](game/default.project.json) enforces `"$ignoreUnknownInstances": true`, Rojo preserves Studio-built Terrain/Parts/Meshes safely. Export Blender assets via `python scripts/blender_run.py <script.py>`. |
+| **3D / Environment Builders** | Roblox Studio (Map/Terrain) & `game/assets/blender/` | Because [game/default.project.json](../game/default.project.json) enforces `"$ignoreUnknownInstances": true`, Rojo preserves Studio-built Terrain/Parts/Meshes safely. Export Blender assets via `python scripts/blender_run.py <script.py>`. |
 | **Reviewers / Visual QA** | PR diff + `game/assets/renders/*.png` | Verify `python scripts/check.py` passes, check `AGENTS.md` security invariants (`PolicyService`, server authority, PvP phase guard), and review render previews before merging to `main`. |

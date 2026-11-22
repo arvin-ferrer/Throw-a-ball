@@ -1,6 +1,6 @@
 # Claude Code Project Instructions (`CLAUDE.md`)
 
-Follow all shared architecture, security, and cross-platform collaboration rules in [AGENTS.md](./AGENTS.md) and the canonical design in [GameIdea_Evolved_GDD.md](./GameIdea_Evolved_GDD.md).
+Follow all shared architecture, security, and cross-platform collaboration rules in [AGENTS.md](./AGENTS.md) and the canonical design in [docs/GameIdea_Evolved_GDD.md](./docs/GameIdea_Evolved_GDD.md).
 
 ## Claude-Specific Responsibilities
 - Act as **Lead Roblox Systems Engineer**: architect and implement server-authoritative Luau services (`game/src/server/Services/`), DataStore/ProfileStore persistence, 3-phase Arena state machines, atomic Dual-Currency (`Coins` + `Boss Gems`) transactions, and `PolicyService` gating.

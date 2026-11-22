@@ -9,15 +9,15 @@ description: >-
 # Ball Brawl: Boss Eggs — Cross-Platform Agentic Pipeline Runbook
 
 ## 1. Universal Environment Facts (Windows / macOS / Linux)
-- **GDD:** `GameIdea_Evolved_GDD.md` (`v1.1`)
-- **Team Onboarding:** `TEAM_SETUP.md` (run `python scripts/setup_team.py` once after cloning)
+- **GDD:** `docs/GameIdea_Evolved_GDD.md` (`v1.1`)
+- **Team Onboarding:** `docs/TEAM_SETUP.md` (run `python scripts/setup_team.py` once after cloning)
 - **Rojo Project:** `game/` (`game/default.project.json`, `game/rokit.toml`)
 - **Headless Blender Runner:** `python scripts/blender_run.py <script.py>` (auto-detects `BLENDER_BIN`, Linux Flatpak `org.blender.Blender`, macOS `Blender.app`, Windows `Program Files`, or `PATH`).
 - **Quality Gate:** `python scripts/check.py` (StyLua + Selene + Lune unit tests + `rojo build`).
 - **Live MCP Servers:** `robloxstudio` (`npx -y @chrrxs/robloxstudio-mcp@latest`) and `blender` (`uvx mcp-for-blender`).
 
 ## 2. Standard Feature Loop (Red -> Green -> Studio)
-1. **Plan (Gemini / `agy`):** Confirm requirement against `GameIdea_Evolved_GDD.md` and identify target modules (`shared/Configs`, `server/Services`, `client/Controllers`, `tests/`).
+1. **Plan (Gemini / `agy`):** Confirm requirement against `docs/GameIdea_Evolved_GDD.md` and identify target modules (`shared/Configs`, `server/Services`, `client/Controllers`, `tests/`).
 2. **Test First (Codex / `codex`):** Add or extend a Lune spec in `game/tests/*.spec.luau` testing pure logic & edge cases.
 3. **Implement (Claude / `claude`):** Implement strict Luau (`--!strict`) module under `game/src/` with server-authoritative validation.
 4. **Verify Gate:** Run `python scripts/check.py`. Fix every warning/failure before committing or opening a PR.

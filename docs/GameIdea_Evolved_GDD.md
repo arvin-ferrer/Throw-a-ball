@@ -1,7 +1,7 @@
 # Game Design Document — Evolved `GameIdea.txt` (Working Title: *Ball Brawl: Boss Eggs*)
 
 **Document Status:** Aligned Design Specification (`v1.1` — Full Dual-Currency & Income-Generating Pet Economy)  
-**Source Concept:** [GameIdea.txt](GameIdea.txt) (Refined via interactive design alignment)  
+**Source Concept:** [archive/GameIdea.txt](archive/GameIdea.txt) (Refined via interactive design alignment)  
 **Target Platform:** Roblox (Cross-platform: Mobile-first ergonomics + PC/Console)  
 **Core Genre:** Training & Pet-Income Tycoon × High-Stakes 3-Phase PvE / Boss / PvP Egg Scramble
 
