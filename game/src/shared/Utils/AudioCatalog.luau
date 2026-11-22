@@ -20,7 +20,8 @@ local SOUND_IDS: { [string]: string } = {
 	HatchReveal = "rbxassetid://12222253",
 	ClaimTick = "rbxassetid://12221976",
 	Victory = "rbxassetid://12222253",
-	Dash = "rbxassetid://12222200",
+	Dash = "rbxassetid://9119713951",
+	DashBurst = "rbxassetid://9113677992",
 }
 
 -- Comfortable default master scale so classic Roblox SFX & fanfares never blast player ears
@@ -111,6 +112,46 @@ end
 function AudioCatalog.playCashSweep(comboStep: number)
 	local pitch = 1.0 + math.min(comboStep, 12) * 0.06
 	AudioCatalog.play("CoinSweep", pitch, 0.42)
+end
+
+function AudioCatalog.playJettDash(parentOverride: Instance?)
+	if isMuted or masterVolumeScale <= 0.001 then
+		return
+	end
+	local targetParent = parentOverride or SoundService
+	local scale = math.clamp(masterVolumeScale, 0, 1)
+
+	-- Layer 1: Crisp explosive wind snap transient
+	local burst = Instance.new("Sound")
+	burst.SoundId = SOUND_IDS.DashBurst
+	burst.PlaybackSpeed = 1.42 + (math.random() - 0.5) * 0.08
+	burst.Volume = math.clamp(0.68 * scale, 0, 0.55)
+	burst.RollOffMaxDistance = 95
+	burst.Parent = targetParent
+
+	-- Layer 2: Airy Tailwind high-shimmer wind whoosh tail
+	local tail = Instance.new("Sound")
+	tail.SoundId = SOUND_IDS.Dash
+	tail.PlaybackSpeed = 1.22 + (math.random() - 0.5) * 0.06
+	tail.Volume = math.clamp(0.75 * scale, 0, 0.6)
+	tail.RollOffMaxDistance = 95
+	local eq = Instance.new("EqualizerSoundEffect")
+	eq.HighGain = 5
+	eq.MidGain = 1.5
+	eq.LowGain = -4
+	eq.Parent = tail
+	tail.Parent = targetParent
+
+	burst:Play()
+	tail:Play()
+	task.delay(1.3, function()
+		if burst.Parent then
+			burst:Destroy()
+		end
+		if tail.Parent then
+			tail:Destroy()
+		end
+	end)
 end
 
 applyToExistingMusic()

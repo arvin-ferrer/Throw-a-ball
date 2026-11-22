@@ -27,8 +27,9 @@ local BallThrowController = {}
 
 local WALK_SPEED = 18
 local SPRINT_SPEED = 24
-local DASH_SPEED = 56
-local DASH_DURATION = 0.35
+local DASH_PEAK_SPEED = 88
+local DASH_END_SPEED = 30
+local DASH_DURATION = 0.26
 local DASH_COOLDOWN = 2.5
 
 local localPlayer = Players.LocalPlayer
@@ -349,22 +350,50 @@ function BallThrowController.triggerDash()
 		return
 	end
 	lastDashAt = now
-	Remotes.waitClient().DashRequest:FireServer()
-	AudioCatalog.play("Dash", 1.25, 0.45)
 
-	local moveDir = if hum.MoveDirection.Magnitude > 0.1
-		then hum.MoveDirection.Unit
-		else hrp.CFrame.LookVector
+	-- 8-way directional Valorant Jett Tailwind burst (follows WASD / thumbstick or facing)
+	local rawMove = hum.MoveDirection
+	local flatDir = Vector3.new(rawMove.X, 0, rawMove.Z)
+	local moveDir = if flatDir.Magnitude > 0.1
+		then flatDir.Unit
+		else Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z).Unit
+	if moveDir.Magnitude < 0.05 then
+		moveDir = Vector3.zAxis
+	end
+
+	Remotes.waitClient().DashRequest:FireServer(moveDir)
+	AnimationController.playJettDash(localPlayer, moveDir, DASH_DURATION)
+	AudioCatalog.playJettDash()
+
 	local att = Instance.new("Attachment")
 	att.Parent = hrp
 	local lv = Instance.new("LinearVelocity")
 	lv.Attachment0 = att
-	lv.MaxForce = hrp.AssemblyMass * workspace.Gravity * 25
-	lv.VectorVelocity = Vector3.new(moveDir.X * DASH_SPEED, 2, moveDir.Z * DASH_SPEED)
+	lv.MaxForce = hrp.AssemblyMass * workspace.Gravity * 32
+	lv.VectorVelocity = Vector3.new(moveDir.X * DASH_PEAK_SPEED, 1.2, moveDir.Z * DASH_PEAK_SPEED)
 	lv.Parent = hrp
-	task.delay(DASH_DURATION, function()
-		lv:Destroy()
-		att:Destroy()
+
+	-- Snappy explosive start + crisp tapered wind-stop (no floaty overshoot)
+	local startAt = os.clock()
+	local conn: RBXScriptConnection? = nil
+	conn = RunService.Heartbeat:Connect(function()
+		local alpha = (os.clock() - startAt) / DASH_DURATION
+		if alpha >= 1 or not lv.Parent or not hrp.Parent then
+			if conn then
+				conn:Disconnect()
+				conn = nil
+			end
+			if lv.Parent then
+				lv:Destroy()
+			end
+			if att.Parent then
+				att:Destroy()
+			end
+			return
+		end
+		local ease = 1 - (alpha * alpha)
+		local spd = DASH_END_SPEED + (DASH_PEAK_SPEED - DASH_END_SPEED) * ease
+		lv.VectorVelocity = Vector3.new(moveDir.X * spd, 0.8, moveDir.Z * spd)
 	end)
 end
 
@@ -644,6 +673,21 @@ function BallThrowController.start()
 	local remotes = Remotes.waitClient()
 	remotes.ProjectileBroadcast.OnClientEvent:Connect(onProjectileBroadcast)
 	remotes.BossTelegraph.OnClientEvent:Connect(onBossTelegraph)
+	remotes.DashRequest.OnClientEvent:Connect(function(userId: any, dir: any)
+		if tonumber(userId) == localPlayer.UserId or typeof(dir) ~= "Vector3" then
+			return
+		end
+		local other = Players:GetPlayerByUserId(tonumber(userId) or 0)
+		if other then
+			AnimationController.playJettDash(other, dir, DASH_DURATION)
+			local hrp = if other.Character
+				then other.Character:FindFirstChild("HumanoidRootPart")
+				else nil
+			if hrp and hrp:IsA("BasePart") then
+				AudioCatalog.playJettDash(hrp)
+			end
+		end
+	end)
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
 		if gameProcessed then

@@ -21,11 +21,22 @@ type JointPair = {
 	leftShoulder: Instance?,
 	waist: Instance?,
 	rightElbow: Instance?,
+	leftElbow: Instance?,
+	rightHip: Instance?,
+	leftHip: Instance?,
+	rightKnee: Instance?,
+	leftKnee: Instance?,
 }
 
 type ThrowState = {
 	startTime: number,
 	duration: number,
+}
+
+type DashState = {
+	startTime: number,
+	duration: number,
+	dir: Vector3,
 }
 
 type RigMotorEntry = {
@@ -39,6 +50,7 @@ type RigMotorEntry = {
 
 local localPlayer = Players.LocalPlayer
 local activeThrows: { [Player]: ThrowState } = {}
+local activeDashes: { [Player]: DashState } = {}
 local rigMotors: { [Motor6D]: RigMotorEntry } = {}
 local spinBases: { [BasePart]: { cf: CFrame, speed: number, axis: string } } = {}
 local floatBases: { [BasePart]: { cf: CFrame, phase: number } } = {}
@@ -61,11 +73,21 @@ local function resolveCharacterJoints(char: Model): JointPair
 	local leftShoulder = findJoint(char, "LeftShoulder") or findJoint(char, "Left Shoulder")
 	local waist = findJoint(char, "Waist") or findJoint(char, "RootJoint")
 	local rightElbow = findJoint(char, "RightElbow")
+	local leftElbow = findJoint(char, "LeftElbow")
+	local rightHip = findJoint(char, "RightHip") or findJoint(char, "Right Hip")
+	local leftHip = findJoint(char, "LeftHip") or findJoint(char, "Left Hip")
+	local rightKnee = findJoint(char, "RightKnee")
+	local leftKnee = findJoint(char, "LeftKnee")
 	return {
 		rightShoulder = rightShoulder,
 		leftShoulder = leftShoulder,
 		waist = waist,
 		rightElbow = rightElbow,
+		leftElbow = leftElbow,
+		rightHip = rightHip,
+		leftHip = leftHip,
+		rightKnee = rightKnee,
+		leftKnee = leftKnee,
 	}
 end
 
@@ -100,18 +122,84 @@ local function computeThrowCurve(alpha: number): (number, number, number, number
 	end
 end
 
+local function computeDashEnvelope(alpha: number): number
+	-- Instant explosive snap into Tailwind lean (0..0.18), sustained wind-glide (0.18..0.68), smooth spring recovery
+	if alpha < 0.18 then
+		local t = alpha / 0.18
+		return 1 - (1 - t) * (1 - t)
+	elseif alpha < 0.68 then
+		return 1.0
+	else
+		local t = (alpha - 0.68) / 0.32
+		return 1 - (t * t * (3 - 2 * t))
+	end
+end
+
+local function applyJettDashPose(char: Model, joints: JointPair, dashSt: DashState, alpha: number)
+	local env = computeDashEnvelope(alpha)
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local localFwd = 1
+	local localRight = 0
+	if hrp and hrp:IsA("BasePart") then
+		local flatDir = Vector3.new(dashSt.dir.X, 0, dashSt.dir.Z)
+		if flatDir.Magnitude > 0.05 then
+			local unitDir = flatDir.Unit
+			localFwd = math.clamp(hrp.CFrame.LookVector:Dot(unitDir), -1, 1)
+			localRight = math.clamp(hrp.CFrame.RightVector:Dot(unitDir), -1, 1)
+		end
+	end
+
+	-- Aerodynamic torso lean INTO the wind-dash direction
+	local leanPitch = math.rad(-34 * localFwd) * env
+	local leanRoll = math.rad(-30 * localRight) * env
+	local leanYaw = math.rad(16 * localRight) * env
+	multiplyTransform(joints.waist, CFrame.Angles(leanPitch, leanYaw, leanRoll))
+
+	-- Swept-back Jett wind-slicer arms + tucked trailing legs
+	multiplyTransform(
+		joints.rightShoulder,
+		CFrame.Angles(math.rad(-54) * env, 0, math.rad(28) * env)
+	)
+	multiplyTransform(
+		joints.leftShoulder,
+		CFrame.Angles(math.rad(-54) * env, 0, math.rad(-28) * env)
+	)
+	multiplyTransform(joints.rightElbow, CFrame.Angles(math.rad(26) * env, 0, 0))
+	multiplyTransform(joints.leftElbow, CFrame.Angles(math.rad(26) * env, 0, 0))
+	multiplyTransform(
+		joints.rightHip,
+		CFrame.Angles(math.rad(28 * localFwd) * env, 0, math.rad(10 * localRight) * env)
+	)
+	multiplyTransform(
+		joints.leftHip,
+		CFrame.Angles(math.rad(-32 * localFwd) * env, 0, math.rad(-10 * localRight) * env)
+	)
+	multiplyTransform(joints.rightKnee, CFrame.Angles(math.rad(-38) * env, 0, 0))
+	multiplyTransform(joints.leftKnee, CFrame.Angles(math.rad(-18) * env, 0, 0))
+end
+
 local function applyCharacterAnimations(now: number)
 	for _, plr in ipairs(Players:GetPlayers()) do
 		local char = plr.Character
 		if not char then
 			continue
 		end
+		local dashSt = activeDashes[plr]
 		local throwSt = activeThrows[plr]
 		local isLocalTraining = (plr == localPlayer) and trainingStanceActive
-		if not throwSt and not isLocalTraining then
+		if not dashSt and not throwSt and not isLocalTraining then
 			continue
 		end
 		local joints = resolveCharacterJoints(char)
+
+		if dashSt then
+			local alpha = (now - dashSt.startTime) / dashSt.duration
+			if alpha >= 1 then
+				activeDashes[plr] = nil
+			else
+				applyJettDashPose(char, joints, dashSt, alpha)
+			end
+		end
 
 		if throwSt then
 			local alpha = (now - throwSt.startTime) / throwSt.duration
@@ -124,8 +212,7 @@ local function applyCharacterAnimations(now: number)
 				multiplyTransform(joints.leftShoulder, CFrame.Angles(leftPitch, 0, math.rad(-10)))
 				multiplyTransform(joints.waist, CFrame.Angles(math.rad(-6), torsoYaw, 0))
 			end
-		elseif isLocalTraining then
-			-- Rhythmic athletic ready bounce between AFK auto-throws
+		elseif isLocalTraining and not dashSt then
 			local bob = math.sin(now * 4.2)
 			multiplyTransform(
 				joints.rightShoulder,
@@ -255,6 +342,197 @@ local function stepWorldProps(now: number, camPos: Vector3)
 		end
 		local bobY = math.sin(now * 2.4 + data.phase) * 0.9
 		part.CFrame = data.cf + Vector3.new(0, bobY, 0)
+	end
+end
+
+local function spawnDashAfterimage(cf: CFrame, dashDir: Vector3)
+	local ghost = Instance.new("Part")
+	ghost.Name = "JettDashAfterimage"
+	ghost.Anchored = true
+	ghost.CanCollide = false
+	ghost.CanTouch = false
+	ghost.CanQuery = false
+	ghost.CastShadow = false
+	ghost.Material = Enum.Material.Neon
+	ghost.Color = Color3.fromRGB(165, 243, 255)
+	ghost.Transparency = 0.42
+	ghost.Size = Vector3.new(2.2, 4.4, 1.4)
+	ghost.CFrame = cf * CFrame.Angles(math.rad(-18), 0, 0)
+	ghost.Parent = workspace
+
+	local streak = Instance.new("Part")
+	streak.Name = "WindStreak"
+	streak.Anchored = true
+	streak.CanCollide = false
+	streak.CanTouch = false
+	streak.CanQuery = false
+	streak.CastShadow = false
+	streak.Material = Enum.Material.Neon
+	streak.Color = Color3.fromRGB(240, 252, 255)
+	streak.Transparency = 0.28
+	streak.Size = Vector3.new(0.45, 0.45, 5.2)
+	streak.CFrame = CFrame.lookAt(cf.Position, cf.Position + dashDir)
+	streak.Parent = workspace
+
+	TweenService
+		:Create(ghost, TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+			Size = Vector3.new(1.0, 4.8, 2.8),
+		})
+		:Play()
+	TweenService
+		:Create(streak, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+			Size = Vector3.new(0.1, 0.1, 8.5),
+		})
+		:Play()
+	task.delay(0.28, function()
+		if ghost.Parent then
+			ghost:Destroy()
+		end
+		if streak.Parent then
+			streak:Destroy()
+		end
+	end)
+end
+
+local function spawnJettWindVFX(char: Model, hrp: BasePart, dashDir: Vector3, duration: number)
+	local startPos = hrp.Position
+	local flatDir = Vector3.new(dashDir.X, 0, dashDir.Z)
+	local dir = if flatDir.Magnitude > 0.05 then flatDir.Unit else hrp.CFrame.LookVector
+
+	-- 1. Sonic Tailwind launch shockwave ring perpendicular to dash vector
+	local ring = Instance.new("Part")
+	ring.Name = "JettTailwindRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanTouch = false
+	ring.CanQuery = false
+	ring.CastShadow = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = Color3.fromRGB(190, 248, 255)
+	ring.Transparency = 0.15
+	ring.Size = Vector3.new(0.26, 2.2, 2.2)
+	ring.CFrame = CFrame.lookAt(startPos, startPos + dir) * CFrame.Angles(0, math.rad(90), 0)
+	ring.Parent = workspace
+
+	TweenService
+		:Create(ring, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+			Size = Vector3.new(0.08, 11.5, 11.5),
+			Transparency = 1,
+		})
+		:Play()
+
+	-- 2. Explosive backward wind-mist & slipstream sparks
+	local burst = Instance.new("ParticleEmitter")
+	burst.Rate = 0
+	burst.Speed = NumberRange.new(16, 36)
+	burst.Lifetime = NumberRange.new(0.16, 0.34)
+	burst.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.85),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	burst.Color = ColorSequence.new(Color3.fromRGB(240, 252, 255), Color3.fromRGB(56, 217, 255))
+	burst.LightEmission = 1
+	burst.LightInfluence = 0
+	burst.SpreadAngle = Vector2.new(38, 38)
+	burst.EmissionDirection = Enum.NormalId.Left
+	burst.Parent = ring
+	burst:Emit(24)
+	task.delay(0.42, function()
+		if ring.Parent then
+			ring:Destroy()
+		end
+	end)
+
+	-- 3. Sleek multi-ribbon Tailwind trails attached across torso/shoulders
+	local cleanupInsts: { Instance } = {}
+	local offsets = {
+		{ Vector3.new(0, 1.3, 0), Vector3.new(0, 0.4, 0), Color3.fromRGB(240, 252, 255) },
+		{ Vector3.new(-1.1, 0.6, 0), Vector3.new(-1.1, -0.4, 0), Color3.fromRGB(125, 240, 255) },
+		{ Vector3.new(1.1, 0.6, 0), Vector3.new(1.1, -0.4, 0), Color3.fromRGB(56, 189, 248) },
+	}
+	for _, o in ipairs(offsets) do
+		local a0 = Instance.new("Attachment")
+		a0.Position = o[1]
+		a0.Parent = hrp
+		local a1 = Instance.new("Attachment")
+		a1.Position = o[2]
+		a1.Parent = hrp
+		local tr = Instance.new("Trail")
+		tr.Attachment0 = a0
+		tr.Attachment1 = a1
+		tr.Lifetime = 0.26
+		tr.MinLength = 0.05
+		tr.LightEmission = 0.9
+		tr.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), o[3])
+		tr.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.08),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		tr.WidthScale = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		tr.Parent = hrp
+		table.insert(cleanupInsts, a0)
+		table.insert(cleanupInsts, a1)
+		table.insert(cleanupInsts, tr)
+	end
+	task.delay(duration + 0.3, function()
+		for _, inst in ipairs(cleanupInsts) do
+			if inst.Parent then
+				inst:Destroy()
+			end
+		end
+	end)
+
+	-- 4. Three staggered cyan wind-ghost afterimages along the dash path
+	for _, delaySec in ipairs({ 0.02, 0.08, 0.15 }) do
+		task.delay(delaySec, function()
+			if char.Parent and hrp.Parent then
+				spawnDashAfterimage(hrp.CFrame, dir)
+			end
+		end)
+	end
+end
+
+function AnimationController.playJettDash(player: Player?, dashDir: Vector3, duration: number?)
+	if not player then
+		return
+	end
+	local dur = duration or 0.28
+	activeDashes[player] = {
+		startTime = os.clock(),
+		duration = dur + 0.08,
+		dir = dashDir,
+	}
+	local char = player.Character
+	local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+	if char and hrp and hrp:IsA("BasePart") then
+		spawnJettWindVFX(char, hrp, dashDir, dur)
+	end
+	-- Snappy Valorant Tailwind camera FOV punch for the local player
+	if player == localPlayer then
+		local cam = workspace.CurrentCamera
+		if cam then
+			local baseFov = 70
+			TweenService:Create(
+				cam,
+				TweenInfo.new(0.07, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+				{ FieldOfView = 84 }
+			):Play()
+			task.delay(0.11, function()
+				if cam.Parent then
+					TweenService:Create(
+						cam,
+						TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{ FieldOfView = baseFov }
+					):Play()
+				end
+			end)
+		end
 	end
 end
 

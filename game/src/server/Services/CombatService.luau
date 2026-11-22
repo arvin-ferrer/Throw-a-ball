@@ -549,7 +549,7 @@ function CombatService.start()
 	local remotes = Remotes.ensureServer()
 	remotes.ThrowBall.OnServerEvent:Connect(onThrowBall)
 
-	remotes.DashRequest.OnServerEvent:Connect(function(player: Player)
+	remotes.DashRequest.OnServerEvent:Connect(function(player: Player, moveDir: any)
 		local now = os.clock()
 		if (lastDashTime[player.UserId] or 0) + DASH_COOLDOWN > now then
 			return
@@ -559,6 +559,18 @@ function CombatService.start()
 		end
 		lastDashTime[player.UserId] = now
 		player:SetAttribute("LastDashAt", now)
+		local safeDir = Vector3.zAxis
+		if
+			typeof(moveDir) == "Vector3"
+			and MathUtil.isFinite(moveDir.X)
+			and MathUtil.isFinite(moveDir.Z)
+		then
+			local flat = Vector3.new(moveDir.X, 0, moveDir.Z)
+			if flat.Magnitude > 0.05 then
+				safeDir = flat.Unit
+			end
+		end
+		remotes.DashRequest:FireAllClients(player.UserId, safeDir)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)
