@@ -9,7 +9,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from generate_diagrams import generate_all_diagrams, generate_report_diagrams
+from generate_diagrams import (
+    generate_all_diagrams,
+    generate_evolved_gdd_diagrams,
+    generate_report_diagrams,
+)
 
 DEFAULT_HEADER_LEFT = r"Roblox Deep Market Research \& Product Validation (Nov 2026)"
 DEFAULT_HEADER_RIGHT = r"Solo Indie Visual Results"
@@ -251,6 +255,9 @@ def _replace_mermaid_blocks(md_text: str, charts_dir: Path) -> str:
         ("Gate 1 Decision", "09_30day_validation_roadmap.png", "30-Day Solo Validation and Gate 1 Pivot Roadmap"),
         ("Personal Vault Hub", "10_c2_core_gameplay_loop.png", "C2 Egg Heist Core 6-Step Gameplay Loop"),
         ("Any Traffic Source", "11_master_rfy_pipeline.png", "Late-2026 Home RFY Retrieval and 28-Day Ranking Pipeline"),
+        ("1. Hub Personal Plot", "14_evolved_gdd_core_loop.png", "Ball Brawl: Boss Eggs Core Gameplay Loop"),
+        ("PvE_Open", "15_evolved_gdd_three_phase_fsm.png", "Per-Biome 3-Phase Arena State Machine"),
+        ("Placed Base Pets", "16_evolved_gdd_pet_economy.png", "Dual-Currency and Income-Generating Pet Economy"),
         ("Stationary Training Range", "12_gameidea_broken_loop.png", "Audit of Preliminary GameIdea.txt Broken Gameplay Loop"),
         ("Core Throw/Orb & Carry Physics", "13_c2_mvp_dependency_dag.png", "C2 Egg Heist 145-Hour Solo MVP Module Dependency DAG"),
     )
@@ -312,6 +319,7 @@ def build_pdf(
         raise FileNotFoundError(f"Input Markdown not found: {input_md}")
     generate_all_diagrams(charts_dir)
     generate_report_diagrams(charts_dir)
+    generate_evolved_gdd_diagrams(charts_dir)
     processed = preprocess_markdown_for_pdf(
         input_md.read_text(encoding="utf-8"),
         charts_dir,

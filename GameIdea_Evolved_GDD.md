@@ -1,9 +1,9 @@
 # Game Design Document — Evolved `GameIdea.txt` (Working Title: *Ball Brawl: Boss Eggs*)
 
-**Document Status:** Aligned Design Specification (`v1.0`)  
+**Document Status:** Aligned Design Specification (`v1.1` — Full Dual-Currency & Income-Generating Pet Economy)  
 **Source Concept:** [GameIdea.txt](GameIdea.txt) (Refined via interactive design alignment)  
 **Target Platform:** Roblox (Cross-platform: Mobile-first ergonomics + PC/Console)  
-**Core Genre:** Training & Base Simulator × High-Stakes 3-Phase PvE / Boss / PvP Egg Scramble
+**Core Genre:** Training & Pet-Income Tycoon × High-Stakes 3-Phase PvE / Boss / PvP Egg Scramble
 
 ---
 
@@ -39,11 +39,11 @@ flowchart LR
 ```
 
 ### 2.2 First 5 Minutes Onboarding Flow
-- **0–20s (Instant Clarity):** Player spawns on their own **Personal Plot** in the Shared Hub Plaza, immediately seeing their **Stationary Training Range**, empty **Base Pedestals**, neighboring players' glowing Creatures, and the towering **3 Biome Portals** right across the plaza.
-- **20–60s (First Power-Up):** A visual floor guide leads the player onto their Training Range firing pad. Clicking/tapping stationary and moving targets immediately ticks up **Ball Damage** and **Throw Speed** with crisp hitstop and floating numbers.
-- **1:00–2:30 (First Portal & PvE Farming):** Player walks through **Portal 1 (Emerald Meadow — Rec. 15 Ball DMG)** into the open PvE layer, fights agile meadow mobs while moving/dodging freely, levels up **Max HP**, and sees the live Boss Opt-In countdown.
-- **2:30–4:30 (First Boss & PvP Scramble):** Opt-in prompt triggers. Player enters the locked Boss Room, defeats the **Moss Golem**, gets a **Full Heal**, and experiences the heart-pounding **5-second hold-to-claim** PvP Egg Scramble (uncontested if solo, chaotic brawl if grouped).
-- **4:30–5:00 (First Hatch & Loop Closure):** Returning to their Plot, the player places the Meadow Egg on Pedestal #1, watches a snappy **3-second hatch reveal**, gains passive Coin income, and equips their first **Active Ball Perk**.
+- **0–30s (Instant Hatch & Cash Pad Dopamine):** Player spawns on their own **Personal Plot** in the Shared Hub Plaza with a **Free Minute-0 Starter Egg** waiting on Pedestal #1. Pressing **Hatch** triggers a crisp **3-second reveal** into the *Training Pup* (`5 Coins/s`, `+5% Training Gain`), immediately lighting up its glowing **Pedestal Cash Pad**. Stepping over the pad sweeps their first Coins with burst VFX—teaching the pet-income loop in 30 seconds flat.
+- **30–75s (First Power-Up):** A visual floor guide leads the player onto their **Stationary Training Range** firing pad. Shooting stationary and moving targets ticks up **Ball Damage** and **Throw Speed**, and their first Cash Pad sweep buys Target Tier 2 right away.
+- **1:15–2:45 (First Portal & PvE Farming):** Player walks through **Portal 1 (Emerald Meadow — Rec. 15 Ball DMG)** into the open PvE layer with their *Training Pup* actively following beside them (without pausing its pedestal Coin income!), fights agile meadow mobs while moving/dodging freely, levels up **Max HP**, and sees the live Boss Opt-In countdown.
+- **2:45–4:30 (First Boss & PvP Scramble):** Opt-in prompt triggers. Player enters the locked Boss Room, defeats the **Mossback Golem**, gets a **Full Heal**, and experiences the heart-pounding **5-second hold-to-claim** PvP Egg Scramble. Winning grants the Biome Boss Egg immediately; even non-winners earn **Coins + EXP + Boss Gems** (progressing toward crafting a standard Biome Egg or unlocking Pet Traits/Slots).
+- **4:30–5:00 (Second Hatch & Loop Closure):** Returning to their Plot, the player sweeps their stacked Pedestal Cash Pads, places their new Biome Egg on Pedestal #2, levels up their pet with Coins, and prepares to push into higher damage tiers or Portal 2.
 
 ---
 
@@ -72,7 +72,7 @@ stateDiagram-v2
 | :--- | :--- | :--- | :--- |
 | **Phase 1: PvE Layer** | Always open via Biome Portal; players may leave to Hub anytime. | PvE only (no player-vs-player damage). Active mob spawns drop EXP and biome-scaled Ball Damage gains. | When the biome's PvE timer completes, a 15-second **Opt-In Modal** appears to all players in that biome (`Join Boss` vs `Stay in PvE`), displaying how many players are queued and the highest visible Power Rating in the queue. |
 | **Phase 2: Boss Phase** | **Locked.** Only opted-in players are teleported into the Biome Boss Room. Decliners remain uninterrupted in the Open PvE Layer. | PvE only (friendly fire OFF). Boss uses telegraphed melee/AoE attacks. Dying removes you from the room back to the Open PvE Layer. | Defeating the Boss immediately spawns **1 glowing Boss Egg** in the arena center, restores all surviving fighters to **100% Max HP**, grants a 3-second countdown/grace positioning window, and triggers Phase 3. |
-| **Phase 3: PvP Egg Scramble** | **Locked** until concluded. | **PvP ON — Uncapped Raw Stats + Single-Life Elimination.** Full grinded Ball Damage, Throw Speed, Max HP, and Equipped Creature Perks apply. Dying eliminates you back to the Hub/PvE Layer with consolation Coins & EXP. | Hold the **Egg Claim Hotkey / ProximityPrompt for 5.0 continuous seconds**. Any damage taken (or moving out of radius) cancels the hold progress. Completing the 5s hold grants the **1 Boss Egg**, immediately ends PvP, awards Coins & EXP to all participants, and teleports survivors back to the Open PvE Layer. |
+| **Phase 3: PvP Egg Scramble** | **Locked** until concluded. | **PvP ON — Uncapped Raw Stats + Single-Life Elimination.** Full grinded Ball Damage, Throw Speed, Max HP, and Equipped Creature Perks apply. Dying eliminates you back to the Hub/PvE Layer with consolation Coins, EXP & Boss Gems. | Hold the **Egg Claim Hotkey / ProximityPrompt for 5.0 continuous seconds**. Any damage taken (or moving out of radius) cancels the hold progress. Completing the 5s hold grants the **1 Boss Egg** (+ bonus Gems), immediately ends PvP, awards Coins, EXP & Boss Gems to all participants, and teleports survivors back to the Open PvE Layer. |
 
 ### 3.3 Edge Cases & Anti-Stalemate Safeguards
 - **Solo Opt-In (1-CCU Soft Launch):** If only 1 player opts into Boss Phase, the Boss spawns at `1.0× Base HP`. Upon defeating it, the Egg drops and the player completes the 5-second claim uncontested—ensuring 100% playability in low-population servers.
@@ -126,40 +126,96 @@ Players grow through **3 Core Attributes**, with complementary roles split clean
 ### 7.1 Shared Hub Plaza (Social Flexing)
 - **Layout:** A vibrant circular **Central Portal Plaza** surrounded by `8–12` **Personal Player Plots** facing inward (inspired by *Steal an Egg*'s social plot visibility).
 - **Personal Plot Contents:**
-  - **Front Showcase Zone:** `4` starting **Base Pedestals** (expandable via Coins and optional Extra Pedestal Game Pass) displaying your hatched Creatures with floating Coin-per-second tags and Mutation visual effects.
+  - **Front Showcase Zone:** `4` starting **Base Pedestals** (expandable up to **12 Pedestals + a 2nd-Floor Showcase** via Coins & Gems, plus optional Extra Pedestal Game Pass), each paired with a glowing physical **Cash Pad** displaying accumulated Coins and `Coins/sec` rates.
   - **Side/Rear Lane:** Your personal **Stationary Training Range** with visible Target Tier upgrades.
-  - **Plot Privacy:** Plots are **100% PvE-safe**—other players can walk up to admire your Creatures and Codex rank, but cannot steal or disrupt your base or training range.
+  - **Plot Privacy:** Plots are **100% PvE-safe**—other players can walk up to admire your Pets, Mutations, Ascension Badge, and Codex rank, but cannot steal or disrupt your base, Cash Pads, or training range.
 - **Central Portals:** All Biome Portals stand side-by-side in the center of the Hub with towering visual arches, **Recommended Ball Damage** holograms, live **Next Boss Opt-In Timer**, and current **PvE Player Count**. Entry is **100% unrestricted**—any player may test their luck in any biome from Minute 1.
 
 ### 7.2 Egg Inventory & Instant 3-Second Pedestal Hatching
-- Winning a Boss Egg in PvP (or purchasing a Shop/Seasonal Egg) places it into your **Egg Backpack** (no tedious forced incubation timers).
-- Walk to any open **Base Pedestal** on your Plot and press **Hatch** to trigger a **3-second high-dopamine reveal** (wobble, rarity light beam visible across the Hub Plaza, mutation burst, and creature spawn directly onto the pedestal).
-- Duplicate or lower-tier creatures can be **Sold for Coins** or **Fused (`3× Same Creature → Upgraded Star/Tier`)** to keep every hatch valuable and prevent pedestal clutter.
+- New players receive a **Free Minute-0 Starter Egg** placed directly on Pedestal #1 so they experience hatching and Cash Pad collection within 30 seconds.
+- Winning a Boss Egg in PvP, crafting a Standard Biome Egg with **Boss Gems**, or purchasing a Shop/Seasonal Egg places it into your **Egg Backpack** (no tedious forced incubation timers).
+- Walk to any open **Base Pedestal** on your Plot and press **Hatch** to trigger a **3-second high-dopamine reveal** (wobble, rarity light beam visible across the Hub Plaza, mutation burst, and Pet spawn directly onto the pedestal with its Cash Pad activating immediately).
 
 ---
 
-## 8. Creature System: Passive Income, Mutations & Active Ball Perks
+## 8. Dual-Currency Economy & Income-Generating Pet System
 
-### 8.1 Dual Payoff Mechanics
-1. **Passive Base Income (Pedestals):** Every Creature placed on a Hub Base Pedestal generates **Coins/sec** (including **bounded offline earnings up to 12 hours** to drive D1 return sessions). Coins fund Training Range Target upgrades, Ball Shop tiers, Extra Pedestal slots, and Active Slot unlocks.
-2. **Active Ball Perks (`1–3` Equipped Slots):** Players select `1` (starter), `2` (Level 10 + Coins), or `3` (Level 25 + Coins) owned Creatures as **Active Combat Cores**. Equipped perks modify your throwable ball in PvE, Boss, and PvP combat (stacking distinct perk types; duplicate perk types use the highest tier):
-   - *Frost Slow:* Ball hits chill Bosses/Rivals (`-20%` move speed for `2.0s`).
-   - *Ember Burn:* Applies `15%` bonus damage over `3.0s` (pressures PvP rivals trying to re-channel the 5s egg claim!).
-   - *Chain Ricochet:* Ball bounces to `1` nearby mob/rival for `45%` damage.
-   - *Heavy Knockback:* Adds a strong impulse knockback on hit (clutch for blasting rivals off the Boss Egg!).
-   - *Vampiric Leech:* Restores `4%` of damage dealt as HP (capped per second).
-   - *Crit Surge:* `+12%` chance for a `1.75×` critical ball throw.
+### 8.1 Dual Currency Architecture (`Coins` + `Boss Gems`)
 
-### 8.2 Mutation Tiers (Multipliers & Visual Flex)
-Every hatched Creature rolls an independent **Mutation** (boosted significantly during the **5-Minute Overcharged Boss Event**):
+```mermaid
+flowchart LR
+    PETS["Placed Base Pets\nPedestal Cash Pads\n(<=12h Offline @ 50%)"] --> COINS["COINS\n(Primary Soft Currency)"]
+    PVE_MOBS["Biome PvE Mobs &\nDuplicate Pet Sales"] --> COINS
+    BOSS_PVP["Boss Participation,\nPvP Kills/Wins & Codex"] --> GEMS["BOSS GEMS\n(Prestige Active Currency)"]
+    COINS --> SINK_C["Coin Sinks\nTraining Targets | Ball Tiers\nPet Leveling (Lv 1-25)\nPedestal Slots | Soft Ascension"]
+    GEMS --> SINK_G["Gem Sinks\nEquip Slots (2 & 3) | Trait Rerolls\nOffline Vault (50%->100%)\nCraft Standard Biome Egg"]
+```
 
-| Mutation | Base Coin Multiplier | Perk Potency Bonus | Source Availability |
+| Currency | Primary Sources | Core Sinks | Economic Role |
+| :--- | :--- | :--- | :--- |
+| **Coins** | **Base Pet Cash Pads** (primary engine), Biome PvE mob kills, Boss/PvP payouts, selling duplicate pets | Training Range Target Tiers, Throwable Ball Shop Tiers, **Pet Leveling (`Lv 1–25`)**, Base Pedestal Slots (`4 → 12`), **Soft Ascension** threshold | Fast-scaling tycoon progression engine; drives visible growth every minute and fuels attribute/ball upgrades. |
+| **Boss Gems** | Boss Phase participation, PvP Scramble wins & eliminations, Codex discoveries, Daily Milestones *(never passively farmed by idle pets)* | **Active Pet Equip Slots** (Slot 2 & 3), **Pet Trait Rerolls**, **Offline Vault Efficiency** (`50% → 75% → 100%`), **Gem-Craftable Standard Biome Eggs**, Prestige Cosmetics | Anti-inflation prestige currency; guarantees every Boss Opt-In is rewarding even when losing uncapped PvP. |
+
+### 8.2 Physical Pedestal Cash Pads & Bounded Offline Accrual
+- **Walk-Over Cash Pads:** Every Pet placed on a Base Pedestal accumulates Coins directly onto a glowing physical **Cash Pad** in front of its pedestal (mirroring *Steal an Egg*'s tactile collection feel). Walking over a pad sweeps its stored Coins with pitch-escalating chime VFX; players who own the optional **Magnet Coin Collect** QoL pass automatically vacuum nearby pads across their plot.
+- **Bounded 12-Hour Offline Income:** While offline, placed Pets continue filling their Pedestal Cash Pads for up to **12 hours** at a **50% base offline efficiency** (upgradeable via Boss Gems to `75%` and `100%`). Logging back in displays a gleaming bank of full Cash Pads ready to sweep immediately—driving strong D1/D7 return habits without rewarding 24/7 AFK bots.
+
+### 8.3 Unified Pets — Zero Combat vs. Income Trade-Off
+- Every hatched creature is a **Unified Pet**: once placed on a Base Pedestal, it generates Coins/sec continuously.
+- Players toggle `1` (starter), `2` (Level 10 + Boss Gems), or `3` (Level 25 + Boss Gems) of their placed/owned Pets as **Active Combat Followers**. Active Followers physically float beside you in the Hub & Biomes and grant their **Active Ball Perk** in PvE, Boss, and PvP arenas **without pausing or reducing their Base Pedestal Coin income**.
+- **Active Ball Perks** (distinct perk types stack; duplicate types apply the highest tier):
+  - *Training Boost (Starter):* `+5%` Ball Damage gain on the Training Range.
+  - *Frost Slow:* Ball hits chill Bosses/Rivals (`-20%` move speed for `2.0s`).
+  - *Ember Burn:* Applies `15%` bonus damage over `3.0s` (pressures rivals attempting the 5s egg claim).
+  - *Chain Ricochet:* Ball bounces to `1` nearby mob/rival for `45%` damage.
+  - *Heavy Knockback:* Adds strong impulse knockback on hit (clutch for blasting rivals off the Boss Egg).
+  - *Vampiric Leech:* Restores `4%` of damage dealt as HP (capped per second).
+  - *Crit Surge:* `+12%` chance for a `1.75×` critical ball throw.
+
+### 8.4 Anti-Lockout Onboarding & Gem-Craftable Biome Eggs
+- **Free Minute-0 Starter Egg:** Spawns pre-placed on Pedestal #1 for every new player (`Training Pup` — `5 Coins/s`, `+5% Training Boost`), guaranteeing instant Cash Pad literacy before entering a single PvP fight.
+- **Gem-Craftable Standard Biome Eggs:** Because PvP uses uncapped raw stats and drops 1 Egg per Boss, non-winners earn **Boss Gems** every match. Saving ~`4–5` fights worth of Gems lets any player craft a **Standard Biome Egg** for their chosen biome—preventing uncapped-PvP lockout while keeping **5-Min Overcharged & Void-Touched Mutations strictly exclusive to won PvP Boss Eggs**.
+
+### 8.5 Pet Income Formula, Leveling, Star Fusion & Trait Rerolls
+Every placed Pet's server-computed income rate follows a single deterministic formula:
+
+`PetCoinsPerSec = BaseRate * MutationMult * StarMult * (1 + 0.12 * (PetLevel - 1)) * TraitMult * AscensionCoinMult`
+
+1. **Coin Leveling (`Lv 1 → Lv 25`):** Feed **Coins** directly into any Pet to boost its `Coins/sec` by `+12%` per level (up to `3.88×` at Lv 25), creating a continuous, high-satisfaction Coin sink at every biome tier.
+2. **3-to-1 Duplicate Star Fusion (`1★ → 2★ → 3★`):** Combine `3×` identical Pets to promote one Star Tier:
+   - `1★` (Base): `1.00×` Coins/s, Base Active Perk
+   - `2★` (Fused): `1.75×` Coins/s, `+15%` Active Perk potency
+   - `3★` (Apex): `3.00×` Coins/s, `+30%` Active Perk potency + golden halo VFX
+3. **Gem Trait Reroll:** Spend **Boss Gems** at the Hub Trait Altar to roll `1` bonus passive Trait on any Pet:
+
+| Trait | Roll Weight | Effect |
+| :--- | :---: | :--- |
+| **Greedy** | `30%` | `+25%` Pet `Coins/sec` on its Base Pedestal |
+| **Swift** | `25%` | `+10%` Player Throw Speed while Active Follower |
+| **Brawler** | `20%` | `+8%` Player Ball Damage while Active Follower |
+| **Overclocked** | `15%` | `+20%` Offline Accrual Efficiency for that Pedestal |
+| **Tycoon (Rare)** | `10%` | `+50%` Pet `Coins/sec` + `+10%` Global Plot Cash Pad Bonus |
+
+### 8.6 Mutation Tiers (Multipliers & Visual Flex)
+Every hatched Pet rolls an independent **Mutation** (boosted significantly during the **5-Minute Overcharged Boss Event**):
+
+| Mutation | Coin Multiplier | Perk Potency Bonus | Source Availability |
 | :--- | :---: | :---: | :--- |
 | **Normal** | `1.0×` | Base | All Eggs |
 | **Shiny** | `1.5×` | `+10%` | All Eggs |
 | **Golden** | `2.5×` | `+20%` | All Eggs |
-| **Overcharged** | `4.0×` | `+30%` | **5-Min Overcharged Boss Eggs ONLY** |
-| **Void-Touched** | `6.0×` | `+40%` | **5-Min Overcharged Boss Eggs (Ultra Rare)** |
+| **Overcharged** | `4.0×` | `+30%` | **5-Min Overcharged PvP Boss Eggs ONLY** |
+| **Void-Touched** | `6.0×` | `+40%` | **5-Min Overcharged PvP Boss Eggs (Ultra Rare)** |
+
+### 8.7 Base Pedestal Expansion, Soft Ascension & Account-Bound MVP Policy
+- **Multi-Tier Base Expansion (`4 → 8 → 12` Pedestals):**
+  - **Tier 1 (Starter Plot):** `4` Pedestals (free on join).
+  - **Tier 2 (Expanded Courtyard):** Unlocks Pedestals `5–8` (bought individually with scaling Coins).
+  - **Tier 3 (2nd-Floor Showcase Balcony):** Unlocks Pedestals `9–12` (Coins + Boss Gems), giving veteran plots an iconic multi-story skyline around the Hub Plaza. *(Optional `+2` Pedestal Game Pass adds VIP bonus pedestals up to `14` max.)*
+- **Soft Ascension (Resets Coins ONLY — Zero Painful Wipes):**
+  - Once a player reaches the current Ascension Coin threshold, they may **Ascend**: resets **Coins only** (keeping **100%** of hatched Pets, Pet Levels/Stars/Traits, Ball Damage, Player Level, Ball Tiers, and Boss Gems!).
+  - Each Ascension Rank grants a permanent **`+25%` Global Coin Multiplier**, **`+5%` Training Speed**, and an evolving overhead **Ascension Crest**—creating an infinite, frustration-free late-game Coin sink.
+- **Economy Integrity (Account-Bound for MVP):** All Pets, Eggs, Coins, and Boss Gems are strictly **account-bound at MVP** to eliminate duping/scam risk and guarantee earned progression. Level-gated **Pet-for-Pet Trading** (with zero currency trading and atomic server escrow) is scoped for **Post-Launch Update 2** once the economy matures.
 
 ---
 
@@ -167,11 +223,12 @@ Every hatched Creature rolls an independent **Mutation** (boosted significantly 
 
 Launching with **3 high-contrast Biomes** balances solo-dev art scope with a clear, aspirational progression ladder (expandable to **Biome 4: Storm Ruins** and **Biome 5: Void Citadel** in Update 1 & 2).
 
-| Biome Portal | Rec. Ball DMG | PvE Mobs | Biome Boss & Signature Attack | Boss Egg Creatures & Active Ball Perks |
+| Biome Portal | Rec. Ball DMG | PvE Mobs | Biome Boss & Signature Attack | Boss Egg Pets, Base Income (`Coins/s`) & Active Perks |
 | :--- | :---: | :--- | :--- | :--- |
-| **1. Emerald Meadow** | `15 DMG` | Moss Slimes, Bramble Boars | **Mossback Golem** — Telegraphed ground-slam shockwave + rolling boulder throw. | *Pebble Cub* (Heavy Knockback), *Dew Sprite* (Vampiric Leech), *Thorn Stag* (Crit Surge), *Golem Heart* [Mythic] (Shockwave Splash) |
-| **2. Frostbite Cavern** | `150 DMG` | Ice Wraiths, Crystal Wolves | **Glacier Yeti** — Frost breath cone (slows) + falling icicle rings. | *Snow Fox* (Frost Slow), *Shard Owl* (Chain Ricochet), *Permafrost Bear* (Shield on Throw), *Cryo Titan* [Mythic] (Deep Freeze Mini-Stun) |
-| **3. Molten Caldera** | `1,200 DMG` | Cinder Imps, Magma Hounds | **Obsidian Wyrm** — Sweeping lava breath + erupting floor geysers. | *Ash Lizard* (Ember Burn), *Pyro Hawk* (Projectile Speed + Burn), *Lava Rhino* (Heavy Knockback + Burn), *Inferno Drake* [Mythic] (Explosive AoE + Burn) |
+| **0. Hub Starter** | `0 DMG` | *(Free Pedestal #1 Egg)* | *None (Minute-0 Onboarding)* | *Training Pup* (`5/s`, +5% Training Boost) |
+| **1. Emerald Meadow** | `15 DMG` | Moss Slimes, Bramble Boars | **Mossback Golem** — Telegraphed ground-slam shockwave + rolling boulder throw. | *Pebble Cub* (`12/s`, Heavy Knockback), *Dew Sprite* (`18/s`, Vampiric Leech), *Thorn Stag* (`30/s`, Crit Surge), *Golem Heart* [Mythic] (`65/s`, Shockwave Splash) |
+| **2. Frostbite Cavern** | `150 DMG` | Ice Wraiths, Crystal Wolves | **Glacier Yeti** — Frost breath cone (slows) + falling icicle rings. | *Snow Fox* (`75/s`, Frost Slow), *Shard Owl* (`115/s`, Chain Ricochet), *Permafrost Bear* (`190/s`, Shield on Throw), *Cryo Titan* [Mythic] (`420/s`, Deep Freeze Mini-Stun) |
+| **3. Molten Caldera** | `1,200 DMG` | Cinder Imps, Magma Hounds | **Obsidian Wyrm** — Sweeping lava breath + erupting floor geysers. | *Ash Lizard* (`450/s`, Ember Burn), *Pyro Hawk* (`680/s`, Speed + Burn), *Lava Rhino* (`1,100/s`, Knockback + Burn), *Inferno Drake* [Mythic] (`2,500/s`, Explosive AoE + Burn) |
 
 - **Dynamic Boss Scaling Formula:** `BossMaxHP = BaseBiomeBossHP * (1 + 0.35 * (OptInPlayerCount - 1))`
   - Solo (`1` player): `1.00×` Base HP (smooth 45–60s fight at Recommended Damage).
@@ -207,30 +264,36 @@ src/
 ├── shared/
 │   ├── Configs/
 │   │   ├── BiomeConfigs.luau       -- Portal Rec DMG, Base Boss HP, Mob tables, Cycle timers
-│   │   ├── CreatureConfigs.luau    -- Creatures, Base Coins/s, Active Ball Perks, Mutations
-│   │   ├── EggConfigs.luau         -- Exact drop weight tables (Boss, Overcharged, Shop, Seasonal)
-│   │   └── UpgradeConfigs.luau     -- Training Target tiers, Ball tiers, Attribute formulas
+│   │   ├── PetConfigs.luau         -- Pets, Base Coins/s, Active Ball Perks, Mutations, Star Fusion
+│   │   ├── TraitConfigs.luau       -- Gem Trait Reroll weights & bonuses (Greedy, Swift, Tycoon)
+│   │   ├── EggConfigs.luau         -- Exact drop weight tables (Starter, Boss, Overcharged, Shop, Seasonal)
+│   │   └── EconomyConfigs.luau     -- Target/Ball tiers, Pet Lv 1-25 curve, Pedestal 4->12 & Ascension costs
 │   └── Net/
-│       └── Remotes.luau            -- Typed RemoteEvents/Functions (ThrowBall, OptIn, ClaimEgg, Hatch)
+│       └── Remotes.luau            -- Typed Remotes (ThrowBall, OptIn, ClaimEgg, CollectPad, UpgradePet, Ascend)
 ├── server/
 │   ├── Services/
-│   │   ├── DataService.luau        -- ProfileStore persistence + <=12h offline Coin cap
+│   │   ├── DataService.luau        -- ProfileStore persistence (Coins, Boss Gems, Pets, LastLogoutTime)
+│   │   ├── EconomyService.luau     -- Dual currency ledger, Gem Egg Crafting, Base Expansion & Soft Ascension
+│   │   ├── PetIncomeService.luau   -- Server Cash Pad accrual, <=12h offline calc (50%->100%), Level/Fusion/Traits
 │   │   ├── PolicyGuardService.luau -- PolicyService Paid Random Items gating & receipt validation
-│   │   ├── PlotService.luau        -- Hub Plot assignment, Base Pedestals, Training Range targets
-│   │   ├── CombatService.luau      -- Swept-ray throw validation, Active Perks, Uncapped PvP damage
+│   │   ├── PlotService.luau        -- Hub Plot assignment (4->12 pedestals + 2nd floor), Training Range pads
+│   │   ├── CombatService.luau      -- Swept-ray throw validation, Active Follower Perks, Uncapped PvP damage
 │   │   ├── ArenaCycleService.luau  -- Per-biome 3-Phase State Machine + 5-min Overcharged Scheduler
 │   │   └── BossAIService.luau      -- Telegraphed Boss attacks + +35%/player HP scaling
 └── client/
     ├── Controllers/
     │   ├── BallThrowController.luau -- Stationary Training Pad lock vs Free-Move/Dodge + Mobile Aim Assist
+    │   ├── PlotCashController.luau  -- Glowing Cash Pad UI counters, walk-over burst VFX, Magnet sweep feedback
     │   ├── ArenaHUDController.luau  -- Phase banner, Opt-In modal (queue Power Ratings), 5s Claim bar
-    │   └── HatchVFXController.luau  -- 3s Pedestal reveal effects, Creature idle animations, Power Aura
+    │   └── HatchVFXController.luau  -- 3s Pedestal reveal effects, Active Follower rigs, Power/Ascension Aura
 ```
 
 ### Key Security & Anti-Cheat Invariants
+- **Server-Authoritative Cash Pads & Offline Accrual:** Clients render interpolated Cash Pad counters for smooth visuals, but the **server** computes exact elapsed seconds (`math.min(dt, 12 * 3600)` offline cap) and validates player proximity (or Magnet Pass ownership) before crediting Coins.
 - **Server-Validated Training Hits:** Training Range target hits enforce server-side Throw Speed cooldown checks and verify the player is standing on their own assigned firing pad (blocking remote-spam damage exploits).
 - **Server-Owned 5-Second Egg Claim:** The client shows a smooth 5.0s progress ring, but the **server** tracks `claimStartTime`, proximity distance, and immediately cancels the claim token on any server-validated PvP damage event.
 - **Anti-Desync State Guard:** Players cannot deal PvP damage outside `Phase == "PvP_EggScramble"`, and players in the Open PvE Layer or Hub Plaza are strictly invulnerable to PvP projectiles.
+- **Atomic Economy Transactions:** Pet Leveling, `3-to-1` Star Fusion, Gem Trait Rerolls, and Soft Ascension execute atomically on the server to prevent double-spend or duplicate-pet race conditions.
 
 ---
 
@@ -239,6 +302,6 @@ src/
 | Phase | Target Window | Core Deliverables | Validation Gate |
 | :--- | :--- | :--- | :--- |
 | **Phase 1: Core Combat & 3-Phase Loop** | Weeks 1–2 | Stationary Training Range pad, free-move Throwable Ball + Dodge, Biome 1 (Meadow) Open PvE + Locked Boss/PvP Room, Boss AI, Full Heal + Uncapped PvP + 5s Egg Claim + Sudden Death ring. | Playtest with 2–4 testers: verify 0 soft-locks across opt-in, solo run, mid-claim interrupt, and disconnect edge cases. |
-| **Phase 2: Base Plots, Hatching & Perks** | Weeks 3–4 | Shared Hub Plaza Plots, Base Pedestals + 3s Hatch Reveal, `DataService` persistence (<=12h offline Coins), 6 Active Ball Perks, Mutation rolls, 5-Min Overcharged Boss scheduler, Ball & Target Upgrade Shops. | Confirm full 10-minute loop feels snappy on mid-tier Android mobile (`60 FPS` target, responsive touch aiming). |
-| **Phase 3: Full 3-Biome Content & Monetization** | Weeks 5–6 | Biome 2 (Frostbite Cavern) & Biome 3 (Molten Caldera) maps/mobs/bosses/creatures, Codex UI, Overhead Power Aura, Game Passes (`2× Training`, `2× Coins/EXP`, `Auto-Fire`, `Slots`), Permanent + Seasonal Shop Eggs with `PolicyService` compliance. | QA pass on `ArePaidRandomItemsRestricted = true` mock account; verify 100% odds display and receipt safety. |
-| **Phase 4: Soft Launch & Tuning** | Week 7+ | Telemetry hooks (First-Play Bounce `<60s`/`61–180s`, Opt-In Rate, PvP Scramble duration, Avg Session Length, D1 Retention), economy pacing balance, Update 1 tease (Biome 4: Storm Ruins). | Hit >12m average session length and healthy Boss Opt-In participation before scaling ad spend. |
+| **Phase 2: Dual Currency, Cash Pads & Pet Progression** | Weeks 3–4 | Shared Hub Plaza Plots (`4 → 12` pedestals + 2nd-floor tier), Minute-0 Free Starter Egg, Glowing Cash Pads + `<=12h` offline accrual (`50% → 100%`), `Coins` + `Boss Gems` economy, Unified Active Followers (`1–3` Perks), Pet Leveling (`Lv 1–25`), `3-to-1` Star Fusion, Gem Trait Rerolls, Gem-Craftable Biome Eggs, and Soft Ascension. | Confirm 30-second first hatch & Cash Pad sweep feels crisp on mid-tier Android mobile (`60 FPS`), and verify atomic Coin/Gem/Fusion unit tests. |
+| **Phase 3: Full 3-Biome Content & Monetization** | Weeks 5–6 | Biome 2 (Frostbite Cavern) & Biome 3 (Molten Caldera) maps/mobs/bosses/pets, 5-Min Overcharged Event, Codex UI, Overhead Power & Ascension Auras, Game Passes (`2× Training`, `2× Coins/EXP`, `Auto-Fire`, `Magnet Collect`, `+2 Pedestals`), Permanent + Seasonal Shop Eggs with `PolicyService` compliance. | QA pass on `ArePaidRandomItemsRestricted = true` mock account; verify 100% odds display and receipt safety. |
+| **Phase 4: Soft Launch & LiveOps Expansion** | Week 7+ | Telemetry hooks (First-Play Bounce `<60s`/`61–180s`, Opt-In Rate, Cash Pad collection frequency, Soft Ascension curve, D1/D7 Retention), economy balancing, Update 1 (Biome 4: Storm Ruins), Update 2 (Level-gated Pet-for-Pet Trading). | Hit `>12m` average session length and healthy Boss Opt-In participation before scaling ad spend. |

@@ -12,7 +12,11 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from build_pdf import build_pdf, preprocess_markdown_for_pdf
-from generate_diagrams import generate_all_diagrams, generate_report_diagrams
+from generate_diagrams import (
+    generate_all_diagrams,
+    generate_evolved_gdd_diagrams,
+    generate_report_diagrams,
+)
 
 
 class TestBuildPdf(unittest.TestCase):
@@ -72,6 +76,24 @@ class TestBuildPdf(unittest.TestCase):
         self.assertIn("11_master_rfy_pipeline.png", out)
         self.assertIn("\\newpage\n\n# Deliverable A", out)
         self.assertIn("\\newpage\n\n# Appendix: Verified Sources Registry", out)
+
+    def test_generates_evolved_gdd_diagrams_and_maps_mermaid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = generate_evolved_gdd_diagrams(Path(tmp))
+            self.assertEqual(len(paths), 3)
+            for path in paths:
+                self.assertTrue(path.exists())
+                with Image.open(path) as img:
+                    self.assertGreater(img.width, 1000)
+        sample = (
+            "```mermaid\nflowchart LR\n  HUB[\"1. Hub Personal Plot\"] --> PVE\n```\n\n"
+            "```mermaid\nstateDiagram-v2\n  [*] --> PvE_Open\n```\n\n"
+            "```mermaid\nflowchart LR\n  PETS[\"Placed Base Pets\"] --> COINS\n```\n"
+        )
+        out = preprocess_markdown_for_pdf(sample, Path("/tmp/charts"))
+        self.assertIn("14_evolved_gdd_core_loop.png", out)
+        self.assertIn("15_evolved_gdd_three_phase_fsm.png", out)
+        self.assertIn("16_evolved_gdd_pet_economy.png", out)
 
     def test_builds_valid_pdf_with_wide_table_and_currency(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

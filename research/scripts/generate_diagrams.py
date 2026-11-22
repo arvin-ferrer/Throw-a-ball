@@ -321,6 +321,102 @@ def generate_all_diagrams(out_dir: Path) -> list[Path]:
     ]
 
 
+def diagram_evolved_core_loop(out_dir: Path) -> Path:
+    """Render Evolved GameIdea.txt end-to-end 6-step Hub, PvE, Boss & PvP loop."""
+    fig, ax = plt.subplots(figsize=(12.2, 4.4))
+    ax.set_xlim(-0.025, 1.025)
+    ax.set_ylim(-0.04, 1.04)
+    ax.axis("off")
+    ax.set_title(
+        "Ball Brawl: Boss Eggs — Core Gameplay Loop (Training, Portals, 3-Phase Arena & Base)",
+        fontsize=11.4, fontweight="bold", color=PALETTE["navy"], pad=8,
+    )
+    top = [
+        (0.015, "1. Hub Personal Plot\nPassive Base Coins\nStationary Range", "#EFF6FF", PALETTE["blue"]),
+        (0.268, "2. Unrestricted Portal\nCheck Rec. Ball DMG\nEnter Open Biome PvE", "#F0FDF4", PALETTE["teal"]),
+        (0.521, "3. Phase 1: Biome PvE\nFarm EXP & DMG Mobs\nWait for Cycle Opt-In", "#F0FDF4", PALETTE["teal"]),
+        (0.774, "4. Phase 2: Boss Room\nLocked Opt-In Arena\nPvE (+35% HP/Player)", "#FEF3C7", PALETTE["amber"]),
+    ]
+    for idx, (x, text, fc, ec) in enumerate(top):
+        _draw_box(ax, x, 0.56, 0.195, 0.34, text, fc, ec, fontsize=8.0, bold=(idx == 3))
+        if idx < len(top) - 1:
+            _draw_arrow(ax, x + 0.214, 0.73, top[idx + 1][0] - 0.018, 0.73, PALETTE["navy"])
+
+    _draw_box(ax, 0.521, 0.08, 0.448, 0.34, "5. Phase 3: PvP EGG SCRAMBLE (Winner-Takes-All 1 Egg)\nFull Heal + Uncapped Raw Stats + Single-Life Elimination\nHold 5s Claim Prompt (Hit Interrupts) | Losers Get Coins & EXP", "#FFF1F2", PALETTE["rose"], fontsize=8.0, bold=True)
+    _draw_box(ax, 0.015, 0.08, 0.448, 0.34, "6. Hub Pedestal Hatch (3s Reveal) & Dual Payoff\nPlace on Safe Plot Pedestals -> <=12h Offline Passive Coins\nEquip 1-3 Active Ball Perks (Frost, Burn, Bounce, Knockback)", "#ECFDF5", PALETTE["emerald"], fontsize=8.0, bold=True)
+
+    _draw_arrow(ax, 0.871, 0.542, 0.871, 0.440, PALETTE["rose"])
+    _draw_arrow(ax, 0.503, 0.25, 0.481, 0.25, PALETTE["emerald"])
+    _draw_arrow(ax, 0.112, 0.440, 0.112, 0.542, PALETTE["teal"])
+    return _save_diagram(fig, out_dir / "14_evolved_gdd_core_loop.png")
+
+
+def diagram_evolved_three_phase_fsm(out_dir: Path) -> Path:
+    """Render the per-biome 3-Phase Arena state machine and Overcharged cycle."""
+    fig, ax = plt.subplots(figsize=(12.2, 3.6))
+    ax.set_xlim(-0.025, 1.025)
+    ax.set_ylim(-0.04, 1.04)
+    ax.axis("off")
+    ax.set_title(
+        "Per-Biome 3-Phase Arena State Machine (Separate Open PvE Layer + Locked Boss/PvP Room)",
+        fontsize=11.3, fontweight="bold", color=PALETTE["navy"], pad=8,
+    )
+    boxes = [
+        (0.015, "Phase 1: PvE_Open\nAlways Enterable\nFarm EXP & DMG\n(PvP Strictly OFF)", "#EFF6FF", PALETTE["blue"]),
+        (0.268, "OptIn_Window (15s)\n90-120s Regular Cycle\n5:00 Overcharged Event\nJoin Boss vs Stay PvE", "#F0FDF4", PALETTE["teal"]),
+        (0.521, "Phase 2: Boss_Phase\nEntry LOCKED\nTeleport Opt-Ins\n1-to-N Scaled Boss", "#FEF3C7", PALETTE["amber"]),
+        (0.774, "Phase 3: PvP Scramble\n1 Egg + Full Heal\nUncapped Elimination\n5s Claim / 75s Ring", "#FFF1F2", PALETTE["rose"]),
+    ]
+    for idx, (x, text, fc, ec) in enumerate(boxes):
+        _draw_box(ax, x, 0.26, 0.195, 0.58, text, fc, ec, fontsize=8.0, bold=(idx >= 2))
+        if idx < len(boxes) - 1:
+            _draw_arrow(ax, x + 0.214, 0.55, boxes[idx + 1][0] - 0.018, 0.55, PALETTE["navy"])
+
+    ax.annotate(
+        "", xy=(0.112, 0.235), xytext=(0.871, 0.235),
+        arrowprops={"arrowstyle": "-|>,head_width=0.28,head_length=0.45", "color": PALETTE["emerald"], "lw": 1.7, "connectionstyle": "arc3,rad=-0.11"},
+    )
+    ax.text(0.492, 0.03, "Egg Claimed (or Wipe / Timeout) -> Award Coins & EXP -> Reset Room to PvE_Open", ha="center", va="center", fontsize=8.2, fontweight="bold", color=PALETTE["emerald"])
+    return _save_diagram(fig, out_dir / "15_evolved_gdd_three_phase_fsm.png")
+
+
+def diagram_evolved_pet_economy(out_dir: Path) -> Path:
+    """Render the Dual-Currency (Coins + Boss Gems) & Pet Cash Pad economy flow."""
+    fig, ax = plt.subplots(figsize=(12.2, 4.2))
+    ax.set_xlim(-0.025, 1.025)
+    ax.set_ylim(-0.04, 1.04)
+    ax.axis("off")
+    ax.set_title(
+        "Dual-Currency & Income-Generating Pet Economy (Coins + Boss Gems + Soft Ascension)",
+        fontsize=11.3, fontweight="bold", color=PALETTE["navy"], pad=8,
+    )
+    _draw_box(ax, 0.015, 0.62, 0.235, 0.28, "Placed Base Pets (4 -> 12 Pads)\nPhysical Cash Pads + <=12h Offline (50%)\nZero Trade-Off w/ 1-3 Active Followers", "#EFF6FF", PALETTE["blue"], fontsize=7.6)
+    _draw_box(ax, 0.015, 0.34, 0.235, 0.21, "Biome PvE Mobs &\nDuplicate Pet Sales", "#F0FDF4", PALETTE["teal"], fontsize=7.8)
+    _draw_box(ax, 0.015, 0.06, 0.235, 0.22, "Boss Phase, PvP Scramble\nWins/Kills & Codex Milestones\n(Never Passively Farmed)", "#FEF3C7", PALETTE["amber"], fontsize=7.6)
+
+    _draw_box(ax, 0.320, 0.50, 0.215, 0.38, "COINS\nPrimary Soft Currency\n(Tycoon Growth Engine)", "#ECFDF5", PALETTE["emerald"], fontsize=8.4, bold=True)
+    _draw_box(ax, 0.320, 0.06, 0.215, 0.34, "BOSS GEMS\nPrestige Active Currency\n(Anti-Inflation Valve)", "#FFF1F2", PALETTE["rose"], fontsize=8.4, bold=True)
+
+    _draw_box(ax, 0.605, 0.50, 0.380, 0.38, "COIN SINKS (Repeatable Growth)\nTraining Target Tiers | Throwable Ball Shop\nPet Leveling (Lv 1-25) | Base Pedestals (4->12)\nSoft Ascension (Resets Coins ONLY -> +25% Coins)", "#ECFDF5", PALETTE["teal"], fontsize=7.6, bold=True)
+    _draw_box(ax, 0.605, 0.06, 0.380, 0.34, "GEM SINKS (Prestige & Anti-Lockout)\nActive Pet Slots (2 & 3) | Pet Trait Rerolls\nOffline Vault (50%->100%) | Prestige Cosmetics\nCraft Standard Biome Egg (PvP Loser Protection)", "#FEF3C7", PALETTE["amber"], fontsize=7.6, bold=True)
+
+    _draw_arrow(ax, 0.268, 0.74, 0.303, 0.72, PALETTE["blue"])
+    _draw_arrow(ax, 0.268, 0.45, 0.303, 0.58, PALETTE["teal"])
+    _draw_arrow(ax, 0.268, 0.17, 0.303, 0.22, PALETTE["amber"])
+    _draw_arrow(ax, 0.553, 0.69, 0.588, 0.69, PALETTE["emerald"])
+    _draw_arrow(ax, 0.553, 0.23, 0.588, 0.23, PALETTE["rose"])
+    return _save_diagram(fig, out_dir / "16_evolved_gdd_pet_economy.png")
+
+
+def generate_evolved_gdd_diagrams(out_dir: Path) -> list[Path]:
+    """Generate companion diagrams for GameIdea_Evolved_GDD.md PDF export."""
+    return [
+        diagram_evolved_core_loop(out_dir),
+        diagram_evolved_three_phase_fsm(out_dir),
+        diagram_evolved_pet_economy(out_dir),
+    ]
+
+
 def generate_report_diagrams(out_dir: Path) -> list[Path]:
     """Generate the three master-report architectural PNG diagrams for PDF embedding."""
     return [
