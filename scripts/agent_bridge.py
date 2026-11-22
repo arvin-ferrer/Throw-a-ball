@@ -69,6 +69,9 @@ def send(agent: str, step: str, task: str) -> Path:
     result = LOOP_DIR / f"{step}.md"
     result.unlink(missing_ok=True)
     match = f"id:{win_id}"
+    # Esc first: dismisses startup popups (e.g. agy's announcements) that would eat the prompt.
+    subprocess.run(["kitty", "@", "--to", sock, "send-key", "--match", match, "escape"], check=True)
+    time.sleep(0.3)
     subprocess.run(["kitty", "@", "--to", sock, "send-text", "--match", match, build_prompt(step, task)], check=True)
     time.sleep(0.5)  # let the TUI finish the paste before Enter
     subprocess.run(["kitty", "@", "--to", sock, "send-key", "--match", match, "enter"], check=True)

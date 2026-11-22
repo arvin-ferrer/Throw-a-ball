@@ -29,6 +29,8 @@ type Runtime = {
 	fsm: ArenaState,
 	folder: Instance,
 	roomSpawns: { CFrame },
+	bossSpawn: CFrame,
+	roomRadius: number,
 	pveReturn: CFrame,
 	eggPosition: Vector3,
 	egg: BasePart?,
@@ -38,6 +40,7 @@ type Runtime = {
 local REMOTE_MIN_INTERVAL = 0.2 -- seconds between accepted intents per player per remote
 local BROADCAST_INTERVAL = 1
 local OPT_IN_RANGE_STUDS = 1000 -- half of the map's BiomeSpacingX: "standing in this biome"
+local ROOM_MARGIN_STUDS = 40 -- beyond the farthest room spawn = outside the locked room
 
 local ArenaCycleService = {}
 
@@ -58,6 +61,10 @@ local function pivotOf(inst: Instance?): CFrame?
 		return inst:GetPivot()
 	end
 	return nil
+end
+
+local function flatDistance(a: Vector3, b: Vector3): number
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
 end
 
 local function collectRoomSpawns(arena: Instance): { CFrame }
@@ -85,7 +92,13 @@ local function buildRuntime(biomeFolder: Instance, now: number): Runtime?
 	if #spawns == 0 then
 		spawns = { pedestal * CFrame.new(0, 0, 10) }
 	end
+	local roomRadius = 0
+	for _, cf in spawns do
+		roomRadius = math.max(roomRadius, flatDistance(cf.Position, pedestal.Position))
+	end
 	return {
+		bossSpawn = pivotOf(arena:FindFirstChild("BossSpawn")) or spawns[1],
+		roomRadius = roomRadius + ROOM_MARGIN_STUDS,
 		biomeId = config.biomeId,
 		fsm = ArenaStateMachine.new(
 			{ biomeId = config.biomeId, baseBossHp = config.baseBossHp },
@@ -117,10 +130,6 @@ local function teleport(userId: number, cf: CFrame)
 		root.AssemblyLinearVelocity = Vector3.zero
 		character:PivotTo(cf + Vector3.new(0, 4, 0))
 	end
-end
-
-local function flatDistance(a: Vector3, b: Vector3): number
-	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
 end
 
 -- Forward declaration: action handlers re-enter the FSM (storm damage cancels claims).
@@ -315,23 +324,22 @@ local function handleRoomAction(rt: Runtime, a: ArenaAction): boolean
 	return true
 end
 
+-- External hooks run in their own thread: a hook that errors or yields can never stall
+-- room cleanup (egg removal, teleports) that follows in the same action list.
 local function handleRewardAction(rt: Runtime, a: ArenaAction)
 	if a.kind == "SpawnBoss" and callbacks.onSpawnBoss then
-		callbacks.onSpawnBoss(
-			rt.biomeId,
-			a.bossMaxHp or 0,
-			a.isOvercharged == true,
-			rt.roomSpawns[1]
-		)
+		local hp, oc = a.bossMaxHp or 0, a.isOvercharged == true
+		task.spawn(callbacks.onSpawnBoss, rt.biomeId, hp, oc, rt.bossSpawn)
 	elseif a.kind == "DespawnBoss" and callbacks.onDespawnBoss then
-		callbacks.onDespawnBoss(rt.biomeId)
+		task.spawn(callbacks.onDespawnBoss, rt.biomeId)
 	elseif a.kind == "EggClaimed" and a.playerId then
 		broadcastClaim(rt, a, "Completed")
 		if callbacks.onAwardEgg then
-			callbacks.onAwardEgg(a.playerId, rt.biomeId, a.eggType or "StandardBossEgg")
+			local eggType = a.eggType or "StandardBossEgg"
+			task.spawn(callbacks.onAwardEgg, a.playerId, rt.biomeId, eggType)
 		end
 	elseif a.kind == "AwardConsolation" and callbacks.onAwardConsolation then
-		callbacks.onAwardConsolation(a.playerIds or {}, rt.biomeId)
+		task.spawn(callbacks.onAwardConsolation, a.playerIds or {}, rt.biomeId)
 	elseif a.kind == "ClaimStarted" then
 		broadcastClaim(rt, a, "Claiming")
 	elseif a.kind == "ClaimCancelled" then
@@ -369,6 +377,44 @@ local function checkClaimRadius(rt: Runtime, now: number)
 	end
 end
 
+-- The biome whose PvE layer this position stands in (nearest arrival pad within range).
+local function biomeAt(position: Vector3): Runtime?
+	local best, bestDist = nil, OPT_IN_RANGE_STUDS
+	for _, rt in runtimes do
+		local dist = flatDistance(position, rt.pveReturn.Position)
+		if dist <= bestDist then
+			best, bestDist = rt, dist
+		end
+	end
+	return best
+end
+
+local function isFighterInRoom(rt: Runtime, userId: number): boolean
+	local root, humanoid = rootOf(userId)
+	return root ~= nil
+		and humanoid ~= nil
+		and humanoid.Health > 0
+		and flatDistance(root.Position, rt.eggPosition) <= rt.roomRadius
+end
+
+-- Roster must match reality every frame: the FSM only knows what we tell it, so dead,
+-- respawned, departed or out-of-biome players are removed before it can lock or award.
+local function reconcile(rt: Runtime, now: number)
+	for userId in table.clone(rt.fsm.optedIn) do
+		local root, humanoid = rootOf(userId)
+		if not (root and humanoid and humanoid.Health > 0) or biomeAt(root.Position) ~= rt then
+			dispatch(rt, ArenaStateMachine.disconnect(rt.fsm, userId, now).actions)
+		end
+	end
+	for userId in table.clone(rt.fsm.alivePlayers) do
+		if not isFighterInRoom(rt, userId) then
+			unwatchDeath(rt, userId)
+			dispatch(rt, ArenaStateMachine.eliminate(rt.fsm, userId, now).actions)
+		end
+	end
+	checkClaimRadius(rt, now)
+end
+
 local function onHeartbeat()
 	local now = os.clock()
 	local overcharge = now >= nextOverchargedAt
@@ -383,7 +429,7 @@ local function onHeartbeat()
 		if overcharge then
 			dispatch(rt, ArenaStateMachine.triggerOvercharged(rt.fsm, now).actions)
 		end
-		checkClaimRadius(rt, now)
+		reconcile(rt, now)
 		dispatch(rt, ArenaStateMachine.tick(rt.fsm, now).actions)
 		if broadcast then
 			broadcastState(rt, now)
@@ -403,29 +449,44 @@ local function allowIntent(player: Player, remote: string): boolean
 	return true
 end
 
-local function onOptIn(player: Player, biomeId: unknown, wantsIn: unknown)
-	if typeof(biomeId) ~= "string" or not allowIntent(player, "OptIn") then
-		return
+local function isBusyElsewhere(userId: number, except: Runtime): boolean
+	for _, rt in runtimes do
+		if rt ~= except and (rt.fsm.optedIn[userId] or rt.fsm.alivePlayers[userId]) then
+			return true
+		end
 	end
-	local rt = runtimes[biomeId]
+	return false
+end
+
+-- Intent schema shared with ClientNet's mock (PR #21): OptIn(true|false|{accepted: boolean}).
+-- The biome is never taken from the client; it is wherever the player's character stands.
+local function onOptIn(player: Player, payload: unknown)
+	if not allowIntent(player, "OptIn") or not callbacks.onSpawnBoss then
+		return -- no boss provider wired: never lock players into an empty room
+	end
+	local accepted = if type(payload) == "table"
+		then (payload :: any).accepted == true
+		else payload == true
 	local root = rootOf(player.UserId)
-	-- Only players actually standing in that biome's PvE layer may queue for its room.
-	if
-		not (rt and root)
-		or flatDistance(root.Position, rt.pveReturn.Position) > OPT_IN_RANGE_STUDS
-	then
+	local rt = root and biomeAt(root.Position)
+	if not rt or isBusyElsewhere(player.UserId, rt) then
 		return
 	end
 	local now = os.clock()
-	local result = if wantsIn == false
-		then ArenaStateMachine.optOut(rt.fsm, player.UserId, now)
-		else ArenaStateMachine.optIn(rt.fsm, player.UserId, now)
+	local result = if accepted
+		then ArenaStateMachine.optIn(rt.fsm, player.UserId, now)
+		else ArenaStateMachine.optOut(rt.fsm, player.UserId, now)
 	dispatch(rt, result.actions)
 end
 
-local function onClaimEgg(player: Player, holding: unknown)
-	if allowIntent(player, "ClaimEgg") then
-		requestClaim(player, holding ~= false)
+-- ClaimEgg("Start"|"Cancel"|{action: "Start"|"Cancel"}). Releases skip the rate limit so a
+-- quick start->release can never leave a claim armed.
+local function onClaimEgg(player: Player, payload: unknown)
+	local action = if type(payload) == "table" then (payload :: any).action else payload
+	if action == "Cancel" then
+		requestClaim(player, false)
+	elseif action == "Start" and allowIntent(player, "ClaimEgg") then
+		requestClaim(player, true)
 	end
 end
 
