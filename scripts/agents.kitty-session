@@ -1,0 +1,7 @@
+# Live agent loop layout: Gemini (left) and Codex (right), no approval prompts.
+# Open from the repo root:
+#   kitty --detach --session "$PWD/scripts/agents.kitty-session" -o allow_remote_control=socket-only --listen-on unix:/tmp/kitty-agents
+# Codex is sandboxed to this workspace (no network); Gemini auto-approves in its auto mode.
+layout horizontal
+launch --title "Gemini (agy)" --hold agy --mode auto
+launch --title "Codex" --hold codex -a never -s workspace-write
