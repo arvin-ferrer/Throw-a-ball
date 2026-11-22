@@ -30,17 +30,21 @@ type Runtime = {
 	folder: Instance,
 	roomSpawns: { CFrame },
 	bossSpawn: CFrame,
+	pveCenter: Vector3, -- PvEGround disc: "standing in this biome"
+	pveRadius: number,
+	roomCenter: Vector3, -- ArenaFloor disc: "inside the locked room"
 	roomRadius: number,
 	pveReturn: CFrame,
 	eggPosition: Vector3,
 	egg: BasePart?,
 	deathConns: { [number]: RBXScriptConnection },
+	admitted: { [number]: Model }, -- the exact character that entered the room
 }
 
 local REMOTE_MIN_INTERVAL = 0.2 -- seconds between accepted intents per player per remote
 local BROADCAST_INTERVAL = 1
-local OPT_IN_RANGE_STUDS = 1000 -- half of the map's BiomeSpacingX: "standing in this biome"
-local ROOM_MARGIN_STUDS = 40 -- beyond the farthest room spawn = outside the locked room
+local ZONE_MARGIN_STUDS = 6 -- standing on the rim still counts
+local ROOM_HEIGHT_STUDS = 80 -- above/below the floor by more than this = out of the room
 
 local ArenaCycleService = {}
 
@@ -65,6 +69,19 @@ end
 
 local function flatDistance(a: Vector3, b: Vector3): number
 	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+
+-- Floors are thin discs/slabs: their footprint radius is half the largest dimension.
+local function discOf(
+	part: Instance?,
+	fallbackCenter: Vector3,
+	fallbackRadius: number
+): (Vector3, number)
+	if part and part:IsA("BasePart") then
+		local s = part.Size
+		return part.Position, math.max(s.X, s.Y, s.Z) / 2 + ZONE_MARGIN_STUDS
+	end
+	return fallbackCenter, fallbackRadius
 end
 
 local function collectRoomSpawns(arena: Instance): { CFrame }
@@ -92,13 +109,18 @@ local function buildRuntime(biomeFolder: Instance, now: number): Runtime?
 	if #spawns == 0 then
 		spawns = { pedestal * CFrame.new(0, 0, 10) }
 	end
-	local roomRadius = 0
-	for _, cf in spawns do
-		roomRadius = math.max(roomRadius, flatDistance(cf.Position, pedestal.Position))
-	end
+	local stormRadius = ArenaStateMachine.CONSTANTS.DEFAULT_STORM_INITIAL_RADIUS_STUDS
+	local roomCenter, roomRadius =
+		discOf(arena:FindFirstChild("ArenaFloor"), pedestal.Position, stormRadius)
+	local pveCenter, pveRadius =
+		discOf(pve and pve:FindFirstChild("PvEGround"), arrival.Position, 260)
 	return {
 		bossSpawn = pivotOf(arena:FindFirstChild("BossSpawn")) or spawns[1],
-		roomRadius = roomRadius + ROOM_MARGIN_STUDS,
+		pveCenter = pveCenter,
+		pveRadius = pveRadius,
+		roomCenter = roomCenter,
+		roomRadius = roomRadius,
+		admitted = {},
 		biomeId = config.biomeId,
 		fsm = ArenaStateMachine.new(
 			{ biomeId = config.biomeId, baseBossHp = config.baseBossHp },
@@ -282,12 +304,17 @@ local function enterRoom(rt: Runtime, ids: { number })
 	for i, userId in ids do
 		teleport(userId, rt.roomSpawns[(i - 1) % #rt.roomSpawns + 1])
 		watchDeath(rt, userId)
+		local player = Players:GetPlayerByUserId(userId)
+		if player and player.Character then
+			rt.admitted[userId] = player.Character
+		end
 	end
 end
 
 local function leaveRoom(rt: Runtime, ids: { number })
 	for _, userId in ids do
 		unwatchDeath(rt, userId)
+		rt.admitted[userId] = nil
 		local _, humanoid = rootOf(userId)
 		if humanoid and humanoid.Health > 0 then
 			teleport(userId, rt.pveReturn)
@@ -324,22 +351,22 @@ local function handleRoomAction(rt: Runtime, a: ArenaAction): boolean
 	return true
 end
 
--- External hooks run in their own thread: a hook that errors or yields can never stall
--- room cleanup (egg removal, teleports) that follows in the same action list.
+-- External hooks are deferred: they run after this whole action list (egg removal,
+-- teleports) is applied, and a hook that errors or yields can never stall that cleanup.
 local function handleRewardAction(rt: Runtime, a: ArenaAction)
 	if a.kind == "SpawnBoss" and callbacks.onSpawnBoss then
 		local hp, oc = a.bossMaxHp or 0, a.isOvercharged == true
-		task.spawn(callbacks.onSpawnBoss, rt.biomeId, hp, oc, rt.bossSpawn)
+		task.defer(callbacks.onSpawnBoss, rt.biomeId, hp, oc, rt.bossSpawn)
 	elseif a.kind == "DespawnBoss" and callbacks.onDespawnBoss then
-		task.spawn(callbacks.onDespawnBoss, rt.biomeId)
+		task.defer(callbacks.onDespawnBoss, rt.biomeId)
 	elseif a.kind == "EggClaimed" and a.playerId then
 		broadcastClaim(rt, a, "Completed")
 		if callbacks.onAwardEgg then
 			local eggType = a.eggType or "StandardBossEgg"
-			task.spawn(callbacks.onAwardEgg, a.playerId, rt.biomeId, eggType)
+			task.defer(callbacks.onAwardEgg, a.playerId, rt.biomeId, eggType)
 		end
 	elseif a.kind == "AwardConsolation" and callbacks.onAwardConsolation then
-		task.spawn(callbacks.onAwardConsolation, a.playerIds or {}, rt.biomeId)
+		task.defer(callbacks.onAwardConsolation, a.playerIds or {}, rt.biomeId)
 	elseif a.kind == "ClaimStarted" then
 		broadcastClaim(rt, a, "Claiming")
 	elseif a.kind == "ClaimCancelled" then
@@ -377,39 +404,55 @@ local function checkClaimRadius(rt: Runtime, now: number)
 	end
 end
 
--- The biome whose PvE layer this position stands in (nearest arrival pad within range).
+-- The biome whose PvEGround disc this position stands over (Hub and other biomes: nil).
 local function biomeAt(position: Vector3): Runtime?
-	local best, bestDist = nil, OPT_IN_RANGE_STUDS
 	for _, rt in runtimes do
-		local dist = flatDistance(position, rt.pveReturn.Position)
-		if dist <= bestDist then
-			best, bestDist = rt, dist
+		if flatDistance(position, rt.pveCenter) <= rt.pveRadius then
+			return rt
 		end
 	end
-	return best
+	return nil
 end
 
-local function isFighterInRoom(rt: Runtime, userId: number): boolean
+local function isAliveAt(userId: number): (BasePart?, Humanoid?)
 	local root, humanoid = rootOf(userId)
+	if root and humanoid and humanoid.Health > 0 then
+		return root, humanoid
+	end
+	return nil, nil
+end
+
+-- Alive, still the character that was admitted, and over the arena floor's height band.
+local function isFighterInRoom(rt: Runtime, userId: number): boolean
+	local root = isAliveAt(userId)
 	return root ~= nil
-		and humanoid ~= nil
-		and humanoid.Health > 0
-		and flatDistance(root.Position, rt.eggPosition) <= rt.roomRadius
+		and root.Parent == rt.admitted[userId]
+		and flatDistance(root.Position, rt.roomCenter) <= rt.roomRadius
+		and math.abs(root.Position.Y - rt.roomCenter.Y) <= ROOM_HEIGHT_STUDS
+end
+
+local function dropFighter(rt: Runtime, userId: number, now: number)
+	unwatchDeath(rt, userId)
+	rt.admitted[userId] = nil
+	-- A player who already left the server is a disconnect (no consolation), not a death.
+	local result = if Players:GetPlayerByUserId(userId)
+		then ArenaStateMachine.eliminate(rt.fsm, userId, now)
+		else ArenaStateMachine.disconnect(rt.fsm, userId, now)
+	dispatch(rt, result.actions)
 end
 
 -- Roster must match reality every frame: the FSM only knows what we tell it, so dead,
 -- respawned, departed or out-of-biome players are removed before it can lock or award.
 local function reconcile(rt: Runtime, now: number)
 	for userId in table.clone(rt.fsm.optedIn) do
-		local root, humanoid = rootOf(userId)
-		if not (root and humanoid and humanoid.Health > 0) or biomeAt(root.Position) ~= rt then
+		local root = isAliveAt(userId)
+		if not root or biomeAt(root.Position) ~= rt then
 			dispatch(rt, ArenaStateMachine.disconnect(rt.fsm, userId, now).actions)
 		end
 	end
 	for userId in table.clone(rt.fsm.alivePlayers) do
 		if not isFighterInRoom(rt, userId) then
-			unwatchDeath(rt, userId)
-			dispatch(rt, ArenaStateMachine.eliminate(rt.fsm, userId, now).actions)
+			dropFighter(rt, userId, now)
 		end
 	end
 	checkClaimRadius(rt, now)
@@ -464,10 +507,11 @@ local function onOptIn(player: Player, payload: unknown)
 	if not allowIntent(player, "OptIn") or not callbacks.onSpawnBoss then
 		return -- no boss provider wired: never lock players into an empty room
 	end
-	local accepted = if type(payload) == "table"
-		then (payload :: any).accepted == true
-		else payload == true
-	local root = rootOf(player.UserId)
+	local accepted = if type(payload) == "table" then (payload :: any).accepted else payload
+	if type(accepted) ~= "boolean" then
+		return -- malformed intent: ignore rather than guess
+	end
+	local root = isAliveAt(player.UserId)
 	local rt = root and biomeAt(root.Position)
 	if not rt or isBusyElsewhere(player.UserId, rt) then
 		return
@@ -539,7 +583,11 @@ end
 function ArenaCycleService.canDealPvPDamage(attacker: Player, victim: Player): boolean
 	local now = os.clock()
 	for _, rt in runtimes do
-		if ArenaStateMachine.canDealPvPDamage(rt.fsm, attacker.UserId, victim.UserId, now) then
+		if
+			ArenaStateMachine.canDealPvPDamage(rt.fsm, attacker.UserId, victim.UserId, now)
+			and isFighterInRoom(rt, attacker.UserId)
+			and isFighterInRoom(rt, victim.UserId)
+		then
 			return true
 		end
 	end
