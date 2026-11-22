@@ -14,7 +14,9 @@ Rojo + Rokit strict-Luau workspace and 3D asset pipeline for **Ball Brawl: Boss 
 | `src/client/UI/` | `StarterPlayerScripts/Client/UI` | Mobile-first HUD, Opt-In modals, Codex, Shop & `PolicyService` odds display. |
 | `tests/` | *(Lune offline runtime)* | Fast `*.spec.luau` unit tests executed by `python scripts/check.py`. |
 
-## Asset Layout (`assets/`)
+## Asset & Studio Map Layout (`assets/` & `Workspace.BallBrawl_Map_v2`)
+
+The initial detailed map (`BallBrawl_Map_v2` — `1,747` descendants across `Hub` with `8` personal plots, `6` service stations, `5` portal arches, and `3` MVP Biomes with `PvELayer` + `BossPvPArena`) lives in Roblox Studio under `Workspace.BallBrawl_Map_v2` and is protected from Rojo overwrites by `"$ignoreUnknownInstances": true` in [default.project.json](default.project.json). See [docs/TEAM_WORKFLOW_3P.md](../docs/TEAM_WORKFLOW_3P.md) for the exact attributes and 26 `CollectionService` tags.
 
 | Path | Contents |
 | :--- | :--- |
