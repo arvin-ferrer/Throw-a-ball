@@ -34,8 +34,8 @@ body:
       label: Workspace Hierarchy, CollectionService Tags & Naming Contract
       description: Exact Studio folder paths, part names, or tags required by Server/Client scripts (see docs/TEAM_WORKFLOW_3P.md §2).
       placeholder: |
-        - Workspace path: `Workspace.Biomes.EmeraldMeadow.BossRoom`
-        - Required Tags: `BossSpawnPoint`, `EggClaimPedestal`, `StormCenter`
+        - Workspace path: `Workspace.BallBrawl_Map_v2.Biomes.EmeraldMeadow.BossPvPArena`
+        - Required Tags: `BossSpawn`, `BossEggPedestal`, `SuddenDeathRing`, `ArenaPlayerSpawn`
         - Export paths (if Blender): `game/assets/blender/...`, `game/assets/exports/...glb`, `game/assets/renders/...png`
     validations:
       required: true
