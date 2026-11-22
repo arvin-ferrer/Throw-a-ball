@@ -17,6 +17,7 @@ local CombatService = require(Services.CombatService)
 local EconomyService = require(Services.EconomyService)
 local PetIncomeService = require(Services.PetIncomeService)
 local PlotService = require(Services.PlotService)
+local PolicyGuardService = require(Services.PolicyGuardService)
 local MobService = require(Services.MobService)
 local PerkService = require(Services.PerkService)
 local PortalService = require(Services.PortalService)
@@ -28,6 +29,7 @@ local MAP_NAME = "BallBrawl_Map_v2"
 local remotesFolder = Remotes.setupServer(ReplicatedStorage)
 EconomyService.start(remotesFolder, PetIncomeService.onProfileLoaded) -- profiles load even without a map
 PetIncomeService.start(remotesFolder)
+PolicyGuardService.start(remotesFolder) -- ProcessReceipt + PolicyService gate
 
 -- Every arena participant: Coins + a Gem (EconomyService) and EXP (CombatService level curve).
 local function payParticipants(userIds: { number }, biomeId: string)

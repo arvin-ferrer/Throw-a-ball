@@ -58,7 +58,7 @@ end
 function ActivePerks.resolve(pets: { any }): Perks
 	local perks: Perks = {}
 	for _, pet in pets do
-		local species = type(pet) == "table" and PetConfigs.Species[pet.petId]
+		local species = if type(pet) == "table" then PetConfigs.Species[pet.petId] else nil
 		if species then
 			local tier = tierOf(pet.stars)
 			for _, perk in COMBOS[species.activePerk] or { species.activePerk } do
