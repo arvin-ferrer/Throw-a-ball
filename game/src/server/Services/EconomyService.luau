@@ -159,8 +159,13 @@ local function onShopPurchase(player: Player, kind: unknown, arg: unknown, reque
 	return { ok = result.ok, reason = result.reason, replayed = result.replayed }
 end
 
-function EconomyService.start(remotesFolder: Folder)
-	DataService.start(onLoaded)
+function EconomyService.start(remotesFolder: Folder, afterLoad: ((Player, Ledger) -> ())?)
+	DataService.start(function(player, data)
+		onLoaded(player, data)
+		if afterLoad then
+			afterLoad(player, data) -- e.g. offline pad income (#10)
+		end
+	end)
 	local shop = remotesFolder:FindFirstChild(Remotes.Names.ShopPurchase)
 	if shop and shop:IsA("RemoteFunction") then
 		shop.OnServerInvoke = onShopPurchase

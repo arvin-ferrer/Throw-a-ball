@@ -469,6 +469,11 @@ function EconomyLedger.softAscend(data: PlayerData, id: string): TransactionResu
 	return commit(data, id, "softAscend", nil)
 end
 
+-- Sibling ledgers (PetFusion) share one receipt namespace per profile: an id used for a coin
+-- grant can never be reused for a pet move. precheck returns a finished result or nil.
+EconomyLedger.precheck = precheck
+EconomyLedger.commit = commit
+
 -- Queries --------------------------------------------------------------------------------------
 
 function EconomyLedger.getOfflineEfficiency(data: PlayerData): number
