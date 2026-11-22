@@ -1,140 +1,161 @@
 --!strict
--- GDD v1.1 §§4, 8.4, 8.6, and 10. Shop names, species, and odds are provisional.
--- TODO: Replace each 0 with its Creator Dashboard ID before enabling the offer.
--- A zero ID is disabled. Give changed paid rewards a new product ID and retain old pools for hatches.
+--[[
+	MonetizationConfigs.luau
+	Game Passes, Cosmetics, Paid Random Eggs, and Non-Random Direct Bundles
+	for PolicyService ArePaidRandomItemsRestricted compliance (GDD §10).
+]]
 
-export type OddsRow = { petId: string, mutation: string, basisPoints: number }
-
-export type PaidEggPool = {
-	kind: string, -- "PermanentEgg" | "SeasonalEgg"
-	odds: { OddsRow },
+export type GamePassSpec = {
+	key: string,
+	displayName: string,
+	description: string,
+	passId: number,
+	attributeName: string,
 }
 
-export type Bundle = { petId: string, mutation: string, cosmeticKey: string }
-
-export type DeveloperProduct = {
-	productId: number,
-	kind: string, -- "PermanentEgg" | "SeasonalEgg" | "DirectBundle" | "Cosmetic"
-	poolKey: string?,
-	directBundleKey: string?,
-	bundle: Bundle?,
-	cosmeticKey: string?,
+export type DirectBundleSpec = {
+	id: string,
+	replacesEggId: string,
+	displayName: string,
+	description: string,
+	devProductId: number,
+	guaranteedPetId: string,
+	guaranteedMutation: string,
+	guaranteedBallSkin: string,
 }
 
-export type GamePass = { passId: number, displayName: string }
-
-export type Catalog = {
-	gamePasses: { [string]: GamePass },
-	products: { [string]: DeveloperProduct },
-	paidEggPools: { [string]: PaidEggPool },
+export type CosmeticSpec = {
+	id: string,
+	category: "BallSkin" | "HatchVFX" | "EliminationVFX" | "PlotTheme",
+	displayName: string,
+	costGems: number,
+	color: { number },
 }
 
 local MonetizationConfigs = {}
 
-MonetizationConfigs.ODDS_TOTAL_BASIS_POINTS = 10_000
-MonetizationConfigs.RECENT_PURCHASE_LIMIT = 100
+MonetizationConfigs.GAME_PASSES = {
+	DoubleTraining = {
+		key = "DoubleTraining",
+		displayName = "2x Training Speed",
+		description = "Doubles Ball Damage & Throw Speed gains on your Training Range.",
+		passId = 190001001,
+		attributeName = "Pass_DoubleTraining",
+	},
+	DoubleCoinsExp = {
+		key = "DoubleCoinsExp",
+		displayName = "2x Coins & EXP",
+		description = "Doubles Cash Pad Coins, PvE Coins, and EXP across all biomes.",
+		passId = 190001002,
+		attributeName = "Pass_DoubleCoinsExp",
+	},
+	AutoFireRange = {
+		key = "AutoFireRange",
+		displayName = "Turbo AFK Range",
+		description = "Boosts AFK Training Pad auto-fire speed by +25% with priority 2x Gold target lock.",
+		passId = 190001003,
+		attributeName = "Pass_AutoFireRange",
+	},
+	MagnetCollect = {
+		key = "MagnetCollect",
+		displayName = "Magnet Coin Collect",
+		description = "Automatically vacuums Cash Pad Coins across your Personal Plot.",
+		passId = 190001004,
+		attributeName = "Pass_MagnetCollect",
+	},
+	ExtraPedestals = {
+		key = "ExtraPedestals",
+		displayName = "+2 Base Pedestal Slots",
+		description = "Unlocks VIP Bonus Pedestals #13 and #14 on your Personal Plot.",
+		passId = 190001005,
+		attributeName = "Pass_ExtraPedestals",
+	},
+} :: { [string]: GamePassSpec }
 
--- §10.1. These shop-exclusive IDs are independent of the gameplay-earned PetConfigs species.
-MonetizationConfigs.ShopPets = table.freeze({
-	ArcadeAxolotl = table.freeze({
-		displayName = "Arcade Axolotl",
-		baseCoinsPerSec = 42,
-		activePerk = "TrainingBoost",
-	}),
-	NeonKitsune = table.freeze({
-		displayName = "Neon Kitsune",
-		baseCoinsPerSec = 86,
-		activePerk = "ChainRicochet",
-	}),
-	FrostfestHare = table.freeze({
-		displayName = "Frostfest Hare",
-		baseCoinsPerSec = 48,
-		activePerk = "FrostSlow",
-	}),
-	SnowglobeDrake = table.freeze({
-		displayName = "Snowglobe Drake",
-		baseCoinsPerSec = 92,
-		activePerk = "ShieldOnThrow",
-	}),
-})
-MonetizationConfigs.Cosmetics = table.freeze({
-	ArcadeTrail = "Arcade Trail",
-	FrostfestBallSkin = "Frostfest Ball Skin",
-	AuroraBallSkin = "Aurora Ball Skin",
-})
+-- Shown ONLY when PolicyService reports ArePaidRandomItemsRestricted == true.
+-- Zero RNG: clearly pictures the exact Pet + Ball Skin granted.
+MonetizationConfigs.DIRECT_BUNDLES = {
+	Direct_PrismPack = {
+		id = "Direct_PrismPack",
+		replacesEggId = "Shop_PrismEgg",
+		displayName = "Prism Starlight Pack (Direct)",
+		description = "Guaranteed Starlight Beetle (Normal) + Prism Trail Ball Skin. Zero RNG!",
+		devProductId = 190000201,
+		guaranteedPetId = "StarlightBeetle",
+		guaranteedMutation = "Normal",
+		guaranteedBallSkin = "PrismTrail",
+	},
+	Direct_CyberPack = {
+		id = "Direct_CyberPack",
+		replacesEggId = "Seasonal_CyberEgg",
+		displayName = "Cyber Neon Pack (Direct)",
+		description = "Guaranteed Neon Moth (Normal) + Cyber Pulse Ball Skin. Zero RNG!",
+		devProductId = 190000202,
+		guaranteedPetId = "NeonMoth",
+		guaranteedMutation = "Normal",
+		guaranteedBallSkin = "CyberPulse",
+	},
+} :: { [string]: DirectBundleSpec }
 
--- §§10.1–10.2. Each paid egg offer has a fixed bundle for restricted players.
-local products: { [string]: DeveloperProduct } = {
-	ArcadeEgg = table.freeze({
-		productId = 0, -- TODO: permanent random egg product ID
-		kind = "PermanentEgg",
-		poolKey = "ArcadeV1",
-		directBundleKey = "ArcadeBundle",
-	}),
-	FrostfestEgg = table.freeze({
-		productId = 0, -- TODO: seasonal random egg product ID
-		kind = "SeasonalEgg",
-		poolKey = "FrostfestV1",
-		directBundleKey = "FrostfestBundle",
-	}),
-	ArcadeBundle = table.freeze({
-		productId = 0, -- TODO: permanent direct bundle product ID
-		kind = "DirectBundle",
-		bundle = table.freeze({
-			petId = "ArcadeAxolotl",
-			mutation = "Normal",
-			cosmeticKey = "ArcadeTrail",
-		}),
-	}),
-	FrostfestBundle = table.freeze({
-		productId = 0, -- TODO: seasonal direct bundle product ID
-		kind = "DirectBundle",
-		bundle = table.freeze({
-			petId = "FrostfestHare",
-			mutation = "Normal",
-			cosmeticKey = "FrostfestBallSkin",
-		}),
-	}),
-	AuroraSkin = table.freeze({
-		productId = 0, -- TODO: direct cosmetic product ID
-		kind = "Cosmetic",
-		cosmeticKey = "AuroraBallSkin",
-	}),
-}
+MonetizationConfigs.COSMETICS = {
+	PrismTrail = {
+		id = "PrismTrail",
+		category = "BallSkin",
+		displayName = "Prism Trail",
+		costGems = 45,
+		color = { 244, 114, 182 },
+	},
+	CyberPulse = {
+		id = "CyberPulse",
+		category = "BallSkin",
+		displayName = "Cyber Pulse",
+		costGems = 60,
+		color = { 34, 211, 238 },
+	},
+	SupernovaHatch = {
+		id = "SupernovaHatch",
+		category = "HatchVFX",
+		displayName = "Supernova Hatch Beam",
+		costGems = 70,
+		color = { 250, 204, 21 },
+	},
+	VoidShatter = {
+		id = "VoidShatter",
+		category = "EliminationVFX",
+		displayName = "Void Shatter KO",
+		costGems = 85,
+		color = { 139, 92, 246 },
+	},
+	RoyalMarblePlot = {
+		id = "RoyalMarblePlot",
+		category = "PlotTheme",
+		displayName = "Royal Marble Plot Theme",
+		costGems = 110,
+		color = { 248, 250, 252 },
+	},
+} :: { [string]: CosmeticSpec }
 
--- §10.2. Each outcome is a species and mutation pair with exact integer basis points.
-local paidEggPools: { [string]: PaidEggPool } = {
-	ArcadeV1 = table.freeze({
-		kind = "PermanentEgg",
-		odds = table.freeze({
-			table.freeze({ petId = "ArcadeAxolotl", mutation = "Normal", basisPoints = 7_750 }),
-			table.freeze({ petId = "NeonKitsune", mutation = "Shiny", basisPoints = 2_000 }),
-			table.freeze({ petId = "NeonKitsune", mutation = "Golden", basisPoints = 250 }),
-		}),
-	}),
-	FrostfestV1 = table.freeze({
-		kind = "SeasonalEgg",
-		odds = table.freeze({
-			table.freeze({ petId = "FrostfestHare", mutation = "Normal", basisPoints = 8_325 }),
-			table.freeze({ petId = "SnowglobeDrake", mutation = "Shiny", basisPoints = 1_650 }),
-			table.freeze({ petId = "SnowglobeDrake", mutation = "Golden", basisPoints = 25 }),
-		}),
-	}),
-}
+function MonetizationConfigs.getDirectBundleForEgg(eggId: string): DirectBundleSpec?
+	for _, bundle in pairs(MonetizationConfigs.DIRECT_BUNDLES) do
+		if bundle.replacesEggId == eggId then
+			return bundle
+		end
+	end
+	return nil
+end
 
--- §10.1. Ownership comes from Roblox, independently of Developer Product receipts.
-local gamePasses: { [string]: GamePass } = {
-	DoubleTraining = table.freeze({ passId = 0, displayName = "2× Training Speed" }), -- TODO: pass ID
-	DoubleCoinsExp = table.freeze({ passId = 0, displayName = "2× Coins & EXP" }), -- TODO: pass ID
-	AutoFire = table.freeze({ passId = 0, displayName = "Auto-Fire Range" }), -- TODO: pass ID
-	MagnetCollect = table.freeze({ passId = 0, displayName = "Magnet Coin Collect" }), -- TODO: pass ID
-	ExtraPedestals = table.freeze({ passId = 0, displayName = "+2 Pedestals" }), -- TODO: pass ID
-}
+function MonetizationConfigs.getProductByDevProductId(productId: number): (string?, string?)
+	if productId == 190000101 then
+		return "PaidEgg", "Shop_PrismEgg"
+	elseif productId == 190000102 then
+		return "PaidEgg", "Seasonal_CyberEgg"
+	end
+	for id, bundle in pairs(MonetizationConfigs.DIRECT_BUNDLES) do
+		if bundle.devProductId == productId then
+			return "DirectBundle", id
+		end
+	end
+	return nil, nil
+end
 
-MonetizationConfigs.Catalog = table.freeze({
-	gamePasses = table.freeze(gamePasses),
-	products = table.freeze(products),
-	paidEggPools = table.freeze(paidEggPools),
-})
-
-return table.freeze(MonetizationConfigs)
+return MonetizationConfigs

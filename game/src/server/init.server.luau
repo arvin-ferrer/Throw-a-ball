@@ -1,91 +1,51 @@
 --!strict
 --[[
-	Server bootstrap: create the remote contract, then start services against the
-	Studio-built map (Workspace.BallBrawl_Map_v2), which Rojo never touches.
-	Services talk only through the hooks wired here.
+	init.server.luau
+	Ordered 2-phase server bootstrap (Init then Start) for Ball Brawl: Boss Eggs (v1.1).
 ]]
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
-
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local EconomyConfigs = require(Shared.Configs.EconomyConfigs)
 local Remotes = require(Shared.Net.Remotes)
-local Services = script.Services
-local ArenaCycleService = require(Services.ArenaCycleService)
-local BossAIService = require(Services.BossAIService)
-local CombatService = require(Services.CombatService)
-local EconomyService = require(Services.EconomyService)
-local PetIncomeService = require(Services.PetIncomeService)
-local PlotService = require(Services.PlotService)
-local PolicyGuardService = require(Services.PolicyGuardService)
-local MobService = require(Services.MobService)
-local PerkService = require(Services.PerkService)
-local PortalService = require(Services.PortalService)
 
-local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
+Remotes.ensureServer()
 
-local MAP_NAME = "BallBrawl_Map_v2"
+local ServicesFolder = script:WaitForChild("Services")
+local DataService = require(ServicesFolder.DataService)
+local PolicyGuardService = require(ServicesFolder.PolicyGuardService)
+local PlotService = require(ServicesFolder.PlotService)
+local ArenaCycleService = require(ServicesFolder.ArenaCycleService)
+local BossAIService = require(ServicesFolder.BossAIService)
+local CombatService = require(ServicesFolder.CombatService)
+local PetIncomeService = require(ServicesFolder.PetIncomeService)
+local EconomyService = require(ServicesFolder.EconomyService)
+local TelemetryService = require(ServicesFolder.TelemetryService)
 
-local remotesFolder = Remotes.setupServer(ReplicatedStorage)
-EconomyService.start(remotesFolder, PetIncomeService.onProfileLoaded) -- profiles load even without a map
-PetIncomeService.start(remotesFolder)
-PolicyGuardService.start(remotesFolder) -- ProcessReceipt + PolicyService gate
+local orderedServices: { { name: string, mod: any } } = {
+	{ name = "DataService", mod = DataService },
+	{ name = "PolicyGuardService", mod = PolicyGuardService },
+	{ name = "PlotService", mod = PlotService },
+	{ name = "ArenaCycleService", mod = ArenaCycleService },
+	{ name = "BossAIService", mod = BossAIService },
+	{ name = "CombatService", mod = CombatService },
+	{ name = "PetIncomeService", mod = PetIncomeService },
+	{ name = "EconomyService", mod = EconomyService },
+	{ name = "TelemetryService", mod = TelemetryService },
+}
 
--- Every arena participant: Coins + a Gem (EconomyService) and EXP (CombatService level curve).
-local function payParticipants(userIds: { number }, biomeId: string)
-	EconomyService.awardConsolation(userIds, biomeId)
-	for _, userId in userIds do
-		local player = game:GetService("Players"):GetPlayerByUserId(userId)
-		if player then
-			CombatService.grantExp(player, BiomeConfigs.ArenaRewards.participantExp)
-		end
+for _, entry in ipairs(orderedServices) do
+	local ok, err = pcall(entry.mod.init)
+	if not ok then
+		warn(`[BallBrawlServer] Init error in {entry.name}: {err}`)
 	end
 end
 
-local map = Workspace:FindFirstChild(MAP_NAME)
-if map then
-	BossAIService.init(map, {
-		getFighterIds = ArenaCycleService.getFighterIds,
-		onDefeated = ArenaCycleService.notifyBossDefeated,
-	})
-	MobService.init(map)
-	PlotService.init(map)
-	PortalService.init(map)
-	CombatService.init(remotesFolder, {
-		canDealPvPDamage = ArenaCycleService.canDealPvPDamage,
-		notifyPvPDamage = ArenaCycleService.notifyPvPDamage,
-		getFighterBiome = ArenaCycleService.getFighterBiome,
-		getBossTarget = BossAIService.getHitTarget,
-		damageBoss = function(biomeId, amount, attackerId)
-			BossAIService.applyDamage(biomeId, amount, attackerId)
-		end,
-		getMobTargets = MobService.getTargets,
-		damageMob = function(mobId, amount)
-			return MobService.applyDamage(mobId, amount)
-		end,
-		grantCoins = function(player, amount, reason)
-			EconomyService.grantCoins(player, amount, reason)
-		end,
-		getTrainingMultiplier = function(player)
-			local _, training = EconomyService.getAscensionMultipliers(player)
-			return training * PerkService.trainingMultiplier(player)
-		end,
-		rollPerks = PerkService.rollHit,
-		applyPerkEffects = PerkService.applySideEffects,
-	})
-	ArenaCycleService.init(map, remotesFolder, {
-		onSpawnBoss = BossAIService.spawn,
-		onDespawnBoss = BossAIService.despawn,
-		getBossHealth = BossAIService.getHealth,
-		onAwardEgg = function(userId, biomeId, eggType)
-			EconomyService.awardArenaWin(userId, biomeId, eggType)
-			payParticipants({ userId }, biomeId) -- the winner is a participant too
-		end,
-		onAwardConsolation = payParticipants,
-	})
-	ArenaCycleService.start()
-else
-	warn(`[BallBrawlServer] Workspace.{MAP_NAME} not found; arena and combat disabled`)
+for _, entry in ipairs(orderedServices) do
+	local ok, err = pcall(entry.mod.start)
+	if not ok then
+		warn(`[BallBrawlServer] Start error in {entry.name}: {err}`)
+	end
 end
 
-print(`[BallBrawlServer] Bootstrapped (MaxOfflineSeconds={EconomyConfigs.MAX_OFFLINE_SECONDS})`)
+script:SetAttribute("BootOk", true)
+print(`[BallBrawlServer] All {#orderedServices} services initialized & started.`)

@@ -1,673 +1,547 @@
 --!strict
 --[[
-	ArenaCycleService (Issue #4): thin server wrapper around the pure ArenaStateMachine.
-	The FSM decides; this file only executes its ArenaActions against the live map
-	(Workspace.BallBrawl_Map_v2.Biomes.<BiomeId>) and validates every client intent.
+	ArenaCycleService.luau
+	Server-authoritative 3-Phase Biome Arena FSM + 5-Minute Overcharged Global Scheduler.
+	Manages Opt-In, Locked Boss Room teleports, Full Heal + 3s grace, Server-Owned 5.0s Egg Claim,
+	75s Sudden Death Storm Ring, and anti-desync PvP immunity guards.
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local ArenaStateMachine = require(Shared.Utils.ArenaStateMachine)
 local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
+local EconomyConfigs = require(Shared.Configs.EconomyConfigs)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local ArenaCycleLogic = require(Shared.Utils.ArenaCycleLogic)
+local MathUtil = require(Shared.Utils.MathUtil)
+local ProceduralModels = require(Shared.Utils.ProceduralModels)
 local Remotes = require(Shared.Net.Remotes)
 
-type ArenaState = ArenaStateMachine.ArenaState
-type ArenaAction = ArenaStateMachine.ArenaAction
+local DataService = require(script.Parent.DataService)
+local PlotService = require(script.Parent.PlotService)
 
-export type Callbacks = {
-	onSpawnBoss: ((biomeId: string, maxHp: number, isOvercharged: boolean, spawn: CFrame) -> ())?,
-	onDespawnBoss: ((biomeId: string) -> ())?,
-	onAwardEgg: ((userId: number, biomeId: string, eggType: string) -> ())?,
-	onAwardConsolation: ((userIds: { number }, biomeId: string) -> ())?,
-	getBossHealth: ((biomeId: string) -> (number?, number?))?,
-}
-
-type Runtime = {
+type ArenaRefs = {
 	biomeId: string,
-	fsm: ArenaState,
-	folder: Instance,
-	roomSpawns: { CFrame },
-	bossSpawn: CFrame,
-	pveCenter: Vector3, -- PvEGround disc: "standing in this biome"
-	pveRadius: number,
-	roomCenter: Vector3, -- ArenaFloor disc: "inside the locked room"
-	roomRadius: number,
-	pveReturn: CFrame,
-	eggPosition: Vector3,
-	egg: BasePart?,
-	deathConns: { [number]: RBXScriptConnection },
-	admitted: { [number]: Model }, -- the exact character that entered the room
+	arenaFolder: Instance,
+	bossSpawn: BasePart,
+	eggPedestal: BasePart,
+	eggPrompt: ProximityPrompt?,
+	suddenDeathRing: BasePart?,
+	optInSpawns: { BasePart },
+	eggVisual: Model?,
 }
-
-local REMOTE_MIN_INTERVAL = 0.2 -- seconds between accepted intents per player per remote
-local BROADCAST_INTERVAL = 1
-local ZONE_MARGIN_STUDS = 6 -- standing on the rim still counts
-local ROOM_HEIGHT_STUDS = 80 -- above/below the floor by more than this = out of the room
 
 local ArenaCycleService = {}
 
-local runtimes: { [string]: Runtime } = {}
-local callbacks: Callbacks = {}
-local remotesFolder: Folder? = nil
-local lastIntent: { [string]: number } = {}
-local heartbeatConn: RBXScriptConnection? = nil
-local nextOverchargedAt = 0
-local nextBroadcastAt = 0
+local biomeStates: { [string]: ArenaCycleLogic.BiomeArenaState } = {}
+local overchargedClock: ArenaCycleLogic.OverchargedClock =
+	ArenaCycleLogic.createOverchargedClock(os.clock())
+local arenaRefs: { [string]: ArenaRefs } = {}
+local playerArenaBiome: { [number]: string } = {}
+local spawnBossCallback: ((string, BasePart, number, boolean) -> ())? = nil
+local clearBossCallback: ((string) -> ())? = nil
+local telemetryCallback: ((string, { [string]: any }) -> ())? = nil
 
--- Map lookup ---------------------------------------------------------------------------
-
-local function pivotOf(inst: Instance?): CFrame?
-	if inst and inst:IsA("BasePart") then
-		return inst.CFrame
-	elseif inst and inst:IsA("Model") then
-		return inst:GetPivot()
-	end
-	return nil
-end
-
-local function flatDistance(a: Vector3, b: Vector3): number
-	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
-end
-
--- Floors are thin discs/slabs: their footprint radius is half the largest dimension.
-local function discOf(
-	part: Instance?,
-	fallbackCenter: Vector3,
-	fallbackRadius: number
-): (Vector3, number)
-	if part and part:IsA("BasePart") then
-		local s = part.Size
-		return part.Position, math.max(s.X, s.Y, s.Z) / 2 + ZONE_MARGIN_STUDS
-	end
-	return fallbackCenter, fallbackRadius
-end
-
-local function collectRoomSpawns(arena: Instance): { CFrame }
-	local spawns = {}
-	for _, child in arena:GetChildren() do
-		local cf = if child.Name:match("^OptInSpawn_") then pivotOf(child) else nil
-		if cf then
-			table.insert(spawns, cf)
-		end
-	end
-	return spawns
-end
-
-local function buildRuntime(biomeFolder: Instance, now: number): Runtime?
-	local config = BiomeConfigs.get(biomeFolder.Name)
-	local arena = biomeFolder:FindFirstChild("BossPvPArena")
-	local pve = biomeFolder:FindFirstChild("PvELayer")
-	local pedestal = pivotOf(arena and arena:FindFirstChild("EggClaimPedestal"))
-	local arrival = pivotOf(pve and pve:FindFirstChild("ArrivalPad"))
-	if not (config and arena and pedestal and arrival) then
-		warn(`[ArenaCycleService] Skipping {biomeFolder.Name}: missing config or map anchors`)
-		return nil
-	end
-	local spawns = collectRoomSpawns(arena)
-	if #spawns == 0 then
-		spawns = { pedestal * CFrame.new(0, 0, 10) }
-	end
-	local stormRadius = ArenaStateMachine.CONSTANTS.DEFAULT_STORM_INITIAL_RADIUS_STUDS
-	local roomCenter, roomRadius =
-		discOf(arena:FindFirstChild("ArenaFloor"), pedestal.Position, stormRadius)
-	local pveCenter, pveRadius =
-		discOf(pve and pve:FindFirstChild("PvEGround"), arrival.Position, 260)
-	return {
-		bossSpawn = pivotOf(arena:FindFirstChild("BossSpawn")) or spawns[1],
-		pveCenter = pveCenter,
-		pveRadius = pveRadius,
-		roomCenter = roomCenter,
-		roomRadius = roomRadius,
-		admitted = {},
-		biomeId = config.biomeId,
-		fsm = ArenaStateMachine.new(
-			{ biomeId = config.biomeId, baseBossHp = config.baseBossHp },
-			now
-		),
-		folder = arena,
-		roomSpawns = spawns,
-		pveReturn = arrival,
-		eggPosition = pedestal.Position,
-		egg = nil,
-		deathConns = {},
-	}
-end
-
--- Character helpers --------------------------------------------------------------------
-
-local function rootOf(userId: number): (BasePart?, Humanoid?)
-	local player = Players:GetPlayerByUserId(userId)
-	local character = player and player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	return if root and root:IsA("BasePart") then root else nil, humanoid
-end
-
-local function teleport(userId: number, cf: CFrame)
-	local root = rootOf(userId)
-	local character = root and root.Parent
-	if root and character and character:IsA("Model") then
-		root.AssemblyLinearVelocity = Vector3.zero
-		character:PivotTo(cf + Vector3.new(0, 4, 0))
-	end
-end
-
--- Forward declaration: action handlers re-enter the FSM (storm damage cancels claims).
-local dispatch: (rt: Runtime, actions: { ArenaAction }) -> ()
-
-local function watchDeath(rt: Runtime, userId: number)
-	local _, humanoid = rootOf(userId)
-	if not humanoid then
+local function discoverArenas()
+	local mapRoot = PlotService.getMapRoot()
+	local biomesFolder = if mapRoot then mapRoot:FindFirstChild("Biomes") else nil
+	if not biomesFolder then
 		return
 	end
-	rt.deathConns[userId] = humanoid.Died:Connect(function()
-		dispatch(rt, ArenaStateMachine.eliminate(rt.fsm, userId, os.clock()).actions)
-	end)
-end
-
-local function unwatchDeath(rt: Runtime, userId: number)
-	local conn = rt.deathConns[userId]
-	if conn then
-		conn:Disconnect()
-		rt.deathConns[userId] = nil
-	end
-end
-
--- Broadcasts (FireAllClients + biomeId; clients filter by the biome they stand in) -----
-
-local function fireAll(name: string, payload: { [string]: any })
-	if remotesFolder then
-		Remotes.getEvent(remotesFolder, name):FireAllClients(payload)
-	end
-end
-
-local function broadcastState(rt: Runtime, now: number)
-	local snap = ArenaStateMachine.getSnapshot(rt.fsm, now)
-	local remaining = if snap.phaseEndTime then math.max(0, snap.phaseEndTime - now) else 0
-	rt.folder:SetAttribute("Phase", snap.phase)
-	rt.folder:SetAttribute("StormActive", snap.stormActive)
-	rt.folder:SetAttribute("StormRadius", snap.stormRadius)
-	local bossHp, bossMaxHp = nil, nil
-	if callbacks.getBossHealth then
-		bossHp, bossMaxHp = callbacks.getBossHealth(rt.biomeId)
-	end
-	fireAll(Remotes.Names.ArenaStateChanged, {
-		biomeId = rt.biomeId,
-		phase = snap.phase,
-		isOvercharged = snap.isOvercharged,
-		phaseSecondsRemaining = remaining,
-		bossHp = bossHp,
-		bossMaxHp = bossMaxHp,
-		suddenDeathActive = snap.stormActive,
-		pvePlayerCount = #Players:GetPlayers() - snap.aliveCount,
-	})
-end
-
-local function broadcastOptIn(rt: Runtime, now: number)
-	local snap = ArenaStateMachine.getSnapshot(rt.fsm, now)
-	local config = BiomeConfigs.get(rt.biomeId)
-	fireAll(Remotes.Names.OptInPrompt, {
-		biomeId = rt.biomeId,
-		isOvercharged = snap.isOvercharged,
-		secondsRemaining = if snap.phaseEndTime then math.max(0, snap.phaseEndTime - now) else 0,
-		queuedPlayers = snap.optInCount,
-		highestPowerRating = 0, -- filled in once DataService (#9) exposes Power Rating
-		recommendedDamage = if config then config.recommendedDamage else 0,
-	})
-end
-
-local function broadcastClaim(rt: Runtime, action: ArenaAction, status: string)
-	local player = action.playerId and Players:GetPlayerByUserId(action.playerId)
-	fireAll(Remotes.Names.EggClaimUpdated, {
-		biomeId = rt.biomeId,
-		claimerUserId = action.playerId,
-		claimerName = if player then player.DisplayName else nil,
-		progressSeconds = 0,
-		durationSeconds = rt.fsm.config.eggClaimDurationSeconds,
-		status = status,
-		interruptReason = action.reason,
-	})
-end
-
--- Egg ------------------------------------------------------------------------------------
-
-local function requestClaim(player: Player, holding: boolean)
-	for _, rt in runtimes do
-		if rt.fsm.alivePlayers[player.UserId] then
-			local now = os.clock()
-			local root = rootOf(player.UserId)
-			if not holding then
-				dispatch(rt, ArenaStateMachine.cancelClaim(rt.fsm, player.UserId, now).actions)
-			elseif root then
-				local dist = (root.Position - rt.eggPosition).Magnitude
-				local result = ArenaStateMachine.startClaim(rt.fsm, player.UserId, dist, now)
-				dispatch(rt, result.actions)
+	for _, biomeId in ipairs(BiomeConfigs.ORDERED_MVP_BIOMES) do
+		local bFolder = biomesFolder:FindFirstChild(biomeId)
+		local arena = if bFolder then bFolder:FindFirstChild("BossPvPArena") else nil
+		if arena then
+			local bossSpawn = arena:FindFirstChild("BossSpawn")
+			local eggPed = arena:FindFirstChild("EggClaimPedestal")
+			local sdRing = arena:FindFirstChild("SuddenDeathRingMarker")
+			local spawns: { BasePart } = {}
+			for _, child in ipairs(arena:GetChildren()) do
+				if child:IsA("BasePart") and string.find(child.Name, "OptInSpawn_") then
+					table.insert(spawns, child)
+				end
 			end
-			return
+			table.sort(spawns, function(a, b)
+				return a.Name < b.Name
+			end)
+			if bossSpawn and bossSpawn:IsA("BasePart") and eggPed and eggPed:IsA("BasePart") then
+				local prompt = eggPed:FindFirstChildOfClass("ProximityPrompt")
+				if not prompt then
+					local created = Instance.new("ProximityPrompt")
+					created.Name = "Prompt"
+					created.Parent = eggPed
+					prompt = created
+				end
+				if prompt then
+					prompt.ActionText = "Hold 5s to Claim Egg"
+					prompt.ObjectText = "Boss Egg"
+					prompt.HoldDuration = 0.05
+					prompt.MaxActivationDistance = BiomeConfigs.EGG_CLAIM_RADIUS
+					prompt.Enabled = false
+				end
+				arenaRefs[biomeId] = {
+					biomeId = biomeId,
+					arenaFolder = arena,
+					bossSpawn = bossSpawn,
+					eggPedestal = eggPed,
+					eggPrompt = prompt,
+					suddenDeathRing = if sdRing and sdRing:IsA("BasePart") then sdRing else nil,
+					optInSpawns = spawns,
+					eggVisual = nil,
+				}
+			end
 		end
 	end
 end
 
-local function spawnEgg(rt: Runtime)
-	local egg = Instance.new("Part")
-	egg.Name = "BossEgg"
-	egg.Shape = Enum.PartType.Ball
-	egg.Size = Vector3.new(4, 5, 4)
-	egg.Material = Enum.Material.Neon
-	egg.Color = if rt.fsm.isOvercharged
-		then Color3.fromRGB(255, 170, 40)
-		else Color3.fromRGB(120, 255, 140)
-	egg.Anchored = true
-	egg.CanCollide = false
-	egg.Position = rt.eggPosition + Vector3.new(0, 4, 0)
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Claim Boss Egg"
-	-- Visual only: the server times the claim. +0.5s so the client's hold-end (latency) can't
-	-- arrive before the server completes and cancel a winning claim.
-	prompt.HoldDuration = rt.fsm.config.eggClaimDurationSeconds + 0.5
-	prompt.MaxActivationDistance = rt.fsm.config.eggClaimRadiusStuds
-	prompt.RequiresLineOfSight = false
-	prompt.PromptButtonHoldBegan:Connect(function(player)
-		requestClaim(player, true)
-	end)
-	prompt.PromptButtonHoldEnded:Connect(function(player)
-		requestClaim(player, false)
-	end)
-	prompt.Parent = egg
-	egg.Parent = rt.folder
-	rt.egg = egg
-end
-
-local function despawnEgg(rt: Runtime)
-	if rt.egg then
-		rt.egg:Destroy()
-		rt.egg = nil
-	end
-end
-
--- Storm ----------------------------------------------------------------------------------
-
-local function applyStorm(rt: Runtime, action: ArenaAction)
-	local radius, pct, dt = action.stormRadius, action.damagePctPerSec, action.dt
-	if not (radius and pct and dt) or dt <= 0 then
+local function setEggVisual(biomeId: string, eggId: string?, isOvercharged: boolean)
+	local ref = arenaRefs[biomeId]
+	if not ref then
 		return
 	end
-	for userId in table.clone(rt.fsm.alivePlayers) do
-		local root, humanoid = rootOf(userId)
-		if root and humanoid and flatDistance(root.Position, rt.eggPosition) > radius then
-			local amount = humanoid.MaxHealth * pct * dt
-			humanoid:TakeDamage(amount)
-			dispatch(rt, ArenaStateMachine.damage(rt.fsm, userId, amount, os.clock(), nil).actions)
+	if ref.eggVisual then
+		ref.eggVisual:Destroy()
+		ref.eggVisual = nil
+	end
+	if eggId then
+		local vis = ProceduralModels.createEggVisual(eggId, isOvercharged)
+		vis:PivotTo(ref.eggPedestal.CFrame * CFrame.new(0, 3.8, 0))
+		vis.Parent = ref.arenaFolder
+		ref.eggVisual = vis
+		if ref.eggPrompt then
+			ref.eggPrompt.Enabled = true
+		end
+	elseif ref.eggPrompt then
+		ref.eggPrompt.Enabled = false
+	end
+end
+
+local function fullHealPlayer(player: Player)
+	local char = player.Character
+	local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+	local profile = DataService.getProfile(player)
+	if hum and profile then
+		local maxHP = EconomyConfigs.getPlayerMaxHP(profile.level)
+		hum.MaxHealth = maxHP
+		hum.Health = maxHP
+	end
+end
+
+local function awardParticipation(
+	biomeId: string,
+	userIds: { number },
+	winnerId: number?,
+	eggId: string?
+)
+	local bossCfg = BiomeConfigs.getBossForBiome(biomeId)
+	if not bossCfg then
+		return
+	end
+	local remotes = Remotes.ensureServer()
+	for _, userId in ipairs(userIds) do
+		local plr = Players:GetPlayerByUserId(userId)
+		local profile = DataService.getProfileByUserId(userId)
+		if plr and profile then
+			local mult = if DataService.hasPass(plr, "Pass_DoubleCoinsExp") then 2 else 1
+			local coins = bossCfg.participationCoins * mult
+			local exp = bossCfg.participationExp * mult
+			local gems = bossCfg.participationGems
+			if winnerId == userId and eggId then
+				coins += bossCfg.winnerBonusCoins * mult
+				gems += bossCfg.winnerBonusGems
+				profile.eggs[eggId] = (profile.eggs[eggId] or 0) + 1
+				remotes.ToastNotify:FireClient(
+					plr,
+					`BOSS EGG WON! +{MathUtil.formatNumber(coins)} Coins, +{gems} Boss Gems & {eggId}!`,
+					{ 250, 204, 21 }
+				)
+			else
+				remotes.ToastNotify:FireClient(
+					plr,
+					`Boss Brawl Payout: +{MathUtil.formatNumber(coins)} Coins, +{exp} EXP, +{gems} Boss Gems!`,
+					{ 56, 189, 248 }
+				)
+			end
+			profile.coins += coins
+			profile.bossGems += gems
+			EconomyLogic.addExp(profile, exp)
+			DataService.syncToClient(plr)
 		end
 	end
 end
 
--- Action dispatch ------------------------------------------------------------------------
-
-local function enterRoom(rt: Runtime, ids: { number })
-	for i, userId in ids do
-		teleport(userId, rt.roomSpawns[(i - 1) % #rt.roomSpawns + 1])
-		watchDeath(rt, userId)
-		local player = Players:GetPlayerByUserId(userId)
-		if player and player.Character then
-			rt.admitted[userId] = player.Character
+local function handleArenaEvents(events: { ArenaCycleLogic.ArenaEvent })
+	local remotes = Remotes.ensureServer()
+	for _, ev in ipairs(events) do
+		local biomeId = ev.biomeId
+		local ref = arenaRefs[biomeId]
+		if ev.kind == "OverchargedGlobalAlert" then
+			remotes.ToastNotify:FireAllClients(
+				"⚡ 5-MINUTE OVERCHARGED BOSS EVENT! Overcharged Bosses spawned in ALL 3 Biomes!",
+				{ 255, 72, 196 }
+			)
+		elseif ev.kind == "PhaseChanged" then
+			local phase = ev.payload.phase
+			if phase == "Boss_Phase" and ref then
+				local playersList: { number } = ev.payload.players or {}
+				for i, uid in ipairs(playersList) do
+					local plr = Players:GetPlayerByUserId(uid)
+					if plr then
+						playerArenaBiome[uid] = biomeId
+						plr:SetAttribute("Zone", "LockedBossPvP")
+						plr:SetAttribute("ActiveBiome", biomeId)
+						fullHealPlayer(plr)
+						local pad = ref.optInSpawns[((i - 1) % math.max(1, #ref.optInSpawns)) + 1]
+						if pad then
+							PlotService.teleportCharacter(plr, pad.CFrame)
+						end
+					end
+				end
+				if spawnBossCallback then
+					spawnBossCallback(
+						biomeId,
+						ref.bossSpawn,
+						ev.payload.bossMaxHP,
+						ev.payload.isOvercharged == true
+					)
+				end
+			elseif phase == "PvE_Open" then
+				setEggVisual(biomeId, nil, false)
+				if clearBossCallback then
+					clearBossCallback(biomeId)
+				end
+				local returnList: { number } = ev.payload.returnPlayers or {}
+				for _, uid in ipairs(returnList) do
+					playerArenaBiome[uid] = nil
+					local plr = Players:GetPlayerByUserId(uid)
+					if plr then
+						PlotService.teleportToBiomePvE(plr, biomeId)
+					end
+				end
+			end
+		elseif ev.kind == "BossDefeated" then
+			local biome = BiomeConfigs.BIOMES[biomeId]
+			local isOver = ev.payload.isOvercharged == true
+			local eggId = if isOver then biome.overchargedEggId else biome.standardEggId
+			if clearBossCallback then
+				clearBossCallback(biomeId)
+			end
+			setEggVisual(biomeId, eggId, isOver)
+			for _, uid in ipairs(ev.payload.survivors or {}) do
+				local plr = Players:GetPlayerByUserId(uid)
+				if plr then
+					fullHealPlayer(plr)
+					remotes.ToastNotify:FireClient(
+						plr,
+						"BOSS DEFEATED! Full Healed! 3s before Uncapped PvP Egg Scramble!",
+						{ 250, 204, 21 }
+					)
+				end
+			end
+		elseif ev.kind == "EggClaimed" then
+			awardParticipation(
+				biomeId,
+				ev.payload.participants or {},
+				ev.payload.winnerId,
+				ev.payload.eggId
+			)
+			if telemetryCallback then
+				telemetryCallback(
+					"EggClaimed",
+					{ biomeId = biomeId, isOvercharged = ev.payload.isOvercharged }
+				)
+			end
+		elseif ev.kind == "PlayerEliminated" then
+			local uid = ev.payload.userId
+			playerArenaBiome[uid] = nil
+			local plr = Players:GetPlayerByUserId(uid)
+			if plr then
+				awardParticipation(biomeId, { uid }, nil, nil)
+				PlotService.teleportToBiomePvE(plr, biomeId)
+			end
+		elseif ev.kind == "ClaimCanceled" then
+			local plr = Players:GetPlayerByUserId(ev.payload.userId)
+			if plr then
+				remotes.ToastNotify:FireClient(
+					plr,
+					`Egg Claim interrupted ({ev.payload.reason})!`,
+					{ 239, 68, 68 }
+				)
+			end
 		end
 	end
 end
 
-local function leaveRoom(rt: Runtime, ids: { number })
-	for _, userId in ids do
-		unwatchDeath(rt, userId)
-		rt.admitted[userId] = nil
-		local _, humanoid = rootOf(userId)
-		if humanoid and humanoid.Health > 0 then
-			teleport(userId, rt.pveReturn)
+local function updateWorldBoards(now: number)
+	local overLeft = math.max(0, overchargedClock.nextEventAt - now)
+	local clockText = `OVERCHARGED EVENT\n{MathUtil.formatClock(overLeft)}`
+	for _, board in ipairs(CollectionService:GetTagged("OverchargedClockBoard")) do
+		local lbl = board:FindFirstChildWhichIsA("TextLabel", true)
+		if lbl then
+			lbl.Text = clockText
+		end
+	end
+
+	-- Count PvE players per biome & update PortalInfoBoard
+	local pveCounts: { [string]: number } = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local b = tostring(plr:GetAttribute("ActiveBiome") or "")
+		if b ~= "" then
+			pveCounts[b] = (pveCounts[b] or 0) + 1
+		end
+	end
+	for _, board in ipairs(CollectionService:GetTagged("PortalInfoBoard")) do
+		local model = board.Parent
+		local biomeId = if model then tostring(model:GetAttribute("BiomeId") or "") else ""
+		local st = biomeStates[biomeId]
+		local lbl = board:FindFirstChildWhichIsA("TextLabel", true)
+		if st and lbl then
+			local left = math.max(0, st.phaseEndsAt - now)
+			lbl.Text =
+				`{st.phase} ({MathUtil.formatClock(left)}) • Players: {pveCounts[biomeId] or 0}`
 		end
 	end
 end
 
-local function healAll(ids: { number })
-	for _, userId in ids do
-		local _, humanoid = rootOf(userId)
-		if humanoid and humanoid.Health > 0 then
-			humanoid.Health = humanoid.MaxHealth
-		end
+local function broadcastArenaStates(now: number)
+	local remotes = Remotes.ensureServer()
+	local summary: { [string]: any } = {}
+	for _, biomeId in ipairs(BiomeConfigs.ORDERED_MVP_BIOMES) do
+		local st = biomeStates[biomeId]
+		local qCount, qMaxPower = ArenaCycleLogic.getQueueSummary(st)
+		summary[biomeId] = {
+			phase = st.phase,
+			timeRemaining = math.max(0, st.phaseEndsAt - now),
+			isOvercharged = st.isOvercharged,
+			queueCount = qCount,
+			queueMaxPower = qMaxPower,
+			bossHP = st.bossHP,
+			bossMaxHP = st.bossMaxHP,
+			pvpGraceRemaining = math.max(0, st.pvpStartedAt - now),
+			claimerId = st.claim.claimerId,
+			claimProgress = st.claim.progress,
+			suddenDeathRadius = st.suddenDeathRadius,
+		}
 	end
+	remotes.ArenaStateSync:FireAllClients({
+		overchargedRemaining = math.max(0, overchargedClock.nextEventAt - now),
+		biomes = summary,
+	})
 end
 
-local function handleRoomAction(rt: Runtime, a: ArenaAction): boolean
-	local ids = a.playerIds or {}
-	if a.kind == "TeleportToBossRoom" then
-		enterRoom(rt, ids)
-	elseif a.kind == "TeleportToPvELayer" then
-		leaveRoom(rt, ids)
-	elseif a.kind == "FullHealPlayers" then
-		healAll(ids)
-	elseif a.kind == "SpawnEgg" then
-		spawnEgg(rt)
-	elseif a.kind == "DespawnEgg" then
-		despawnEgg(rt)
-	elseif a.kind == "StormTick" then
-		applyStorm(rt, a)
-	else
+function ArenaCycleService.setBossHooks(
+	onSpawn: (string, BasePart, number, boolean) -> (),
+	onClear: (string) -> ()
+)
+	spawnBossCallback = onSpawn
+	clearBossCallback = onClear
+end
+
+function ArenaCycleService.setTelemetryHook(cb: (string, { [string]: any }) -> ())
+	telemetryCallback = cb
+end
+
+function ArenaCycleService.getBiomeState(biomeId: string): ArenaCycleLogic.BiomeArenaState?
+	return biomeStates[biomeId]
+end
+
+function ArenaCycleService.getPlayerArenaBiome(userId: number): string?
+	return playerArenaBiome[userId]
+end
+
+function ArenaCycleService.canDealPvPDamage(attacker: Player, victim: Player): boolean
+	local b1 = playerArenaBiome[attacker.UserId]
+	local b2 = playerArenaBiome[victim.UserId]
+	if not b1 or b1 ~= b2 then
 		return false
 	end
-	return true
-end
-
--- External hooks are deferred: they run after this whole action list (egg removal,
--- teleports) is applied, and a hook that errors or yields can never stall that cleanup.
-local function handleRewardAction(rt: Runtime, a: ArenaAction)
-	if a.kind == "SpawnBoss" and callbacks.onSpawnBoss then
-		local hp, oc = a.bossMaxHp or 0, a.isOvercharged == true
-		task.defer(callbacks.onSpawnBoss, rt.biomeId, hp, oc, rt.bossSpawn)
-	elseif a.kind == "DespawnBoss" and callbacks.onDespawnBoss then
-		task.defer(callbacks.onDespawnBoss, rt.biomeId)
-	elseif a.kind == "EggClaimed" and a.playerId then
-		broadcastClaim(rt, a, "Completed")
-		if callbacks.onAwardEgg then
-			local eggType = a.eggType or "StandardBossEgg"
-			task.defer(callbacks.onAwardEgg, a.playerId, rt.biomeId, eggType)
-		end
-	elseif a.kind == "AwardConsolation" and callbacks.onAwardConsolation then
-		task.defer(callbacks.onAwardConsolation, a.playerIds or {}, rt.biomeId)
-	elseif a.kind == "ClaimStarted" then
-		broadcastClaim(rt, a, "Claiming")
-	elseif a.kind == "ClaimCancelled" then
-		broadcastClaim(rt, a, "Interrupted")
-	end
-end
-
-dispatch = function(rt: Runtime, actions: { ArenaAction })
-	for _, a in actions do
-		if not handleRoomAction(rt, a) then
-			handleRewardAction(rt, a)
-		end
-		if a.kind == "PhaseChanged" then
-			broadcastState(rt, a.timestamp)
-			if a.phase == "OptIn_Window" then
-				broadcastOptIn(rt, a.timestamp)
-			end
-		elseif a.kind == "OptInUpdated" then
-			broadcastOptIn(rt, a.timestamp)
-		end
-	end
-end
-
--- Heartbeat ------------------------------------------------------------------------------
-
-local function checkClaimRadius(rt: Runtime, now: number)
-	local claim = rt.fsm.activeClaim
-	if not claim then
-		return
-	end
-	local root = rootOf(claim.playerId)
-	local dist = if root then (root.Position - rt.eggPosition).Magnitude else math.huge
-	if dist > rt.fsm.config.eggClaimRadiusStuds then
-		dispatch(rt, ArenaStateMachine.leaveRadius(rt.fsm, claim.playerId, now).actions)
-	end
-end
-
--- The biome whose PvEGround disc this position stands over (Hub and other biomes: nil).
-local function biomeAt(position: Vector3): Runtime?
-	for _, rt in runtimes do
-		if flatDistance(position, rt.pveCenter) <= rt.pveRadius then
-			return rt
-		end
-	end
-	return nil
-end
-
-local function isAliveAt(userId: number): (BasePart?, Humanoid?)
-	local root, humanoid = rootOf(userId)
-	if root and humanoid and humanoid.Health > 0 then
-		return root, humanoid
-	end
-	return nil, nil
-end
-
--- Alive, still the character that was admitted, and over the arena floor's height band.
-local function isFighterInRoom(rt: Runtime, userId: number): boolean
-	local root = isAliveAt(userId)
-	return root ~= nil
-		and root.Parent == rt.admitted[userId]
-		and flatDistance(root.Position, rt.roomCenter) <= rt.roomRadius
-		and math.abs(root.Position.Y - rt.roomCenter.Y) <= ROOM_HEIGHT_STUDS
-end
-
-local function dropFighter(rt: Runtime, userId: number, now: number)
-	unwatchDeath(rt, userId)
-	rt.admitted[userId] = nil
-	-- A player who already left the server is a disconnect (no consolation), not a death.
-	local result = if Players:GetPlayerByUserId(userId)
-		then ArenaStateMachine.eliminate(rt.fsm, userId, now)
-		else ArenaStateMachine.disconnect(rt.fsm, userId, now)
-	dispatch(rt, result.actions)
-end
-
--- Roster must match reality every frame: the FSM only knows what we tell it, so dead,
--- respawned, departed or out-of-biome players are removed before it can lock or award.
-local function reconcile(rt: Runtime, now: number)
-	for userId in table.clone(rt.fsm.optedIn) do
-		local root = isAliveAt(userId)
-		if not root or biomeAt(root.Position) ~= rt then
-			dispatch(rt, ArenaStateMachine.disconnect(rt.fsm, userId, now).actions)
-		end
-	end
-	for userId in table.clone(rt.fsm.alivePlayers) do
-		if not isFighterInRoom(rt, userId) then
-			dropFighter(rt, userId, now)
-		end
-	end
-	checkClaimRadius(rt, now)
-end
-
-local function onHeartbeat()
-	local now = os.clock()
-	local overcharge = now >= nextOverchargedAt
-	if overcharge then
-		nextOverchargedAt = now + ArenaStateMachine.CONSTANTS.OVERCHARGED_INTERVAL_SECONDS
-	end
-	local broadcast = now >= nextBroadcastAt
-	if broadcast then
-		nextBroadcastAt = now + BROADCAST_INTERVAL
-	end
-	for _, rt in runtimes do
-		if overcharge then
-			dispatch(rt, ArenaStateMachine.triggerOvercharged(rt.fsm, now).actions)
-		end
-		reconcile(rt, now)
-		dispatch(rt, ArenaStateMachine.tick(rt.fsm, now).actions)
-		if broadcast then
-			broadcastState(rt, now)
-		end
-	end
-end
-
--- Remote intents -------------------------------------------------------------------------
-
-local function allowIntent(player: Player, remote: string): boolean
-	local key = `{player.UserId}:{remote}`
-	local now = os.clock()
-	if now - (lastIntent[key] or -math.huge) < REMOTE_MIN_INTERVAL then
+	local st = biomeStates[b1]
+	if not st then
 		return false
 	end
-	lastIntent[key] = now
-	return true
+	return ArenaCycleLogic.canDealPvPDamage(st, attacker.UserId, victim.UserId, os.clock())
 end
 
-local function isBusyElsewhere(userId: number, except: Runtime): boolean
-	for _, rt in runtimes do
-		if rt ~= except and (rt.fsm.optedIn[userId] or rt.fsm.alivePlayers[userId]) then
-			return true
-		end
+function ArenaCycleService.damageBoss(biomeId: string, attacker: Player, damage: number): boolean
+	local st = biomeStates[biomeId]
+	if not st then
+		return false
 	end
-	return false
+	local ok, events = ArenaCycleLogic.applyBossDamage(st, attacker.UserId, damage, os.clock())
+	if #events > 0 then
+		handleArenaEvents(events)
+	end
+	return ok
 end
 
--- Intent schema shared with ClientNet's mock (PR #21): OptIn(true|false|{accepted: boolean}).
--- The biome is never taken from the client; it is wherever the player's character stands.
-local function onOptIn(player: Player, payload: unknown)
-	if not allowIntent(player, "OptIn") or not callbacks.onSpawnBoss then
-		return -- no boss provider wired: never lock players into an empty room
-	end
-	local accepted = if type(payload) == "table" then (payload :: any).accepted else payload
-	if type(accepted) ~= "boolean" then
-		return -- malformed intent: ignore rather than guess
-	end
-	local root = isAliveAt(player.UserId)
-	local rt = root and biomeAt(root.Position)
-	if not rt or isBusyElsewhere(player.UserId, rt) then
+function ArenaCycleService.onPlayerDamagedInPvP(victim: Player, attacker: Player?, lethal: boolean)
+	local biomeId = playerArenaBiome[victim.UserId]
+	if not biomeId then
 		return
 	end
-	local now = os.clock()
-	local result = if accepted
-		then ArenaStateMachine.optIn(rt.fsm, player.UserId, now)
-		else ArenaStateMachine.optOut(rt.fsm, player.UserId, now)
-	dispatch(rt, result.actions)
-end
-
--- ClaimEgg("Start"|"Cancel"|{action: "Start"|"Cancel"}). Releases skip the rate limit so a
--- quick start->release can never leave a claim armed.
-local function onClaimEgg(player: Player, payload: unknown)
-	local action = if type(payload) == "table" then (payload :: any).action else payload
-	if action == "Cancel" then
-		requestClaim(player, false)
-	elseif action == "Start" and allowIntent(player, "ClaimEgg") then
-		requestClaim(player, true)
+	local st = biomeStates[biomeId]
+	if not st then
+		return
 	end
-end
-
-local function onPlayerRemoving(player: Player)
-	local now = os.clock()
-	for _, rt in runtimes do
-		unwatchDeath(rt, player.UserId)
-		dispatch(rt, ArenaStateMachine.disconnect(rt.fsm, player.UserId, now).actions)
-	end
-	for key in lastIntent do
-		if key:sub(1, #tostring(player.UserId) + 1) == `{player.UserId}:` then
-			lastIntent[key] = nil
+	local intEv = ArenaCycleLogic.onPlayerDamagedInPvP(st, victim.UserId)
+	handleArenaEvents(intEv)
+	if lethal then
+		if attacker then
+			local bossCfg = BiomeConfigs.getBossForBiome(biomeId)
+			local attackerProfile = DataService.getProfile(attacker)
+			if bossCfg and attackerProfile then
+				attackerProfile.bossGems += bossCfg.pvpKillGems
+				DataService.syncToClient(attacker)
+				Remotes.ensureServer().ToastNotify
+					:FireClient(
+						attacker,
+						`PvP KO! +{bossCfg.pvpKillGems} Boss Gems!`,
+						{ 250, 204, 21 }
+					)
+			end
 		end
+		local remEv =
+			ArenaCycleLogic.removePlayerFromArena(st, victim.UserId, os.clock(), "Eliminated")
+		handleArenaEvents(remEv)
 	end
 end
 
--- Public API -----------------------------------------------------------------------------
+function ArenaCycleService.forceOverchargedNow()
+	overchargedClock.nextEventAt = os.clock()
+end
 
-function ArenaCycleService.init(mapRoot: Instance, folder: Folder, cbs: Callbacks?)
-	callbacks = cbs or {}
-	remotesFolder = folder
-	local biomes = mapRoot:FindFirstChild("Biomes")
-	assert(biomes, "[ArenaCycleService] map root has no Biomes folder")
+function ArenaCycleService.init()
 	local now = os.clock()
-	for _, biomeFolder in biomes:GetChildren() do
-		local rt = buildRuntime(biomeFolder, now)
-		if rt then
-			runtimes[rt.biomeId] = rt
-		end
+	overchargedClock = ArenaCycleLogic.createOverchargedClock(now)
+	for _, biomeId in ipairs(BiomeConfigs.ORDERED_MVP_BIOMES) do
+		biomeStates[biomeId] = ArenaCycleLogic.createBiomeState(biomeId, now)
 	end
-	nextOverchargedAt = now + ArenaStateMachine.CONSTANTS.OVERCHARGED_INTERVAL_SECONDS
+	discoverArenas()
 end
 
 function ArenaCycleService.start()
-	assert(remotesFolder, "call init first")
-	Remotes.getEvent(remotesFolder, Remotes.Names.OptIn).OnServerEvent:Connect(onOptIn)
-	Remotes.getEvent(remotesFolder, Remotes.Names.ClaimEgg).OnServerEvent:Connect(onClaimEgg)
-	Players.PlayerRemoving:Connect(onPlayerRemoving)
-	heartbeatConn = RunService.Heartbeat:Connect(onHeartbeat)
-end
+	local remotes = Remotes.ensureServer()
 
-function ArenaCycleService.stop()
-	if heartbeatConn then
-		heartbeatConn:Disconnect()
-		heartbeatConn = nil
-	end
-end
-
--- CombatService (#5) must gate every player-vs-player hit through this.
-function ArenaCycleService.canDealPvPDamage(attacker: Player, victim: Player): boolean
-	local now = os.clock()
-	for _, rt in runtimes do
-		if
-			ArenaStateMachine.canDealPvPDamage(rt.fsm, attacker.UserId, victim.UserId, now)
-			and isFighterInRoom(rt, attacker.UserId)
-			and isFighterInRoom(rt, victim.UserId)
-		then
-			return true
+	remotes.OptInBoss.OnServerEvent:Connect(function(player: Player, biomeId: any, wantsIn: any)
+		if type(biomeId) ~= "string" or type(wantsIn) ~= "boolean" then
+			return
 		end
-	end
-	return false
-end
-
--- CombatService reports applied PvP damage so an active claim is cancelled.
-function ArenaCycleService.notifyPvPDamage(victim: Player, amount: number, attacker: Player?)
-	local now = os.clock()
-	for _, rt in runtimes do
-		if rt.fsm.alivePlayers[victim.UserId] then
-			local attackerId = if attacker then attacker.UserId else nil
-			dispatch(
-				rt,
-				ArenaStateMachine.damage(rt.fsm, victim.UserId, amount, now, attackerId).actions
+		local st = biomeStates[biomeId]
+		if not st then
+			return
+		end
+		-- Allow opting in from that biome's PvE layer (or Hub for convenience during Overcharged)
+		local power = tonumber(player:GetAttribute("PowerRating")) or 10
+		if ArenaCycleLogic.setOptIn(st, player.UserId, wantsIn, power) and telemetryCallback then
+			telemetryCallback(
+				"BossOptIn",
+				{ biomeId = biomeId, optedIn = wantsIn, userId = player.UserId }
 			)
 		end
-	end
-end
+	end)
 
--- BossAIService (#5) calls this when the biome boss dies.
-function ArenaCycleService.notifyBossDefeated(biomeId: string)
-	local rt = runtimes[biomeId]
-	if rt then
-		dispatch(rt, ArenaStateMachine.bossDefeated(rt.fsm, os.clock()).actions)
-	end
-end
-
--- Living fighters currently inside a biome's locked room (BossAIService targets).
-function ArenaCycleService.getFighterIds(biomeId: string): { number }
-	local rt = runtimes[biomeId]
-	local ids = {}
-	if not rt then
-		return ids
-	end
-	for userId in rt.fsm.alivePlayers do
-		if isFighterInRoom(rt, userId) then
-			table.insert(ids, userId)
+	remotes.ClaimEggAction.OnServerEvent:Connect(function(player: Player, action: any)
+		if type(action) ~= "string" then
+			return
 		end
-	end
-	return ids
-end
-
--- The biome whose locked room this player is fighting in, if any.
-function ArenaCycleService.getFighterBiome(player: Player): string?
-	for biomeId, rt in runtimes do
-		if rt.fsm.alivePlayers[player.UserId] and isFighterInRoom(rt, player.UserId) then
-			return biomeId
+		local biomeId = playerArenaBiome[player.UserId]
+		local st = if biomeId then biomeStates[biomeId] else nil
+		local ref = if biomeId then arenaRefs[biomeId] else nil
+		if not st or not ref then
+			return
 		end
-	end
-	return nil
-end
-
-function ArenaCycleService.isInLockedRoom(player: Player): boolean
-	for _, rt in runtimes do
-		if rt.fsm.alivePlayers[player.UserId] then
-			return true
+		if action == "Begin" then
+			local char = player.Character
+			local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+			if hrp and hrp:IsA("BasePart") then
+				local dist = (hrp.Position - ref.eggPedestal.Position).Magnitude
+				ArenaCycleLogic.beginEggClaim(st, player.UserId, dist, os.clock())
+			end
+		elseif action == "Cancel" then
+			local ev = ArenaCycleLogic.cancelEggClaim(st, player.UserId, "Released")
+			handleArenaEvents(ev)
 		end
-	end
-	return false
-end
+	end)
 
-function ArenaCycleService.getSnapshot(biomeId: string): ArenaStateMachine.ArenaSnapshot?
-	local rt = runtimes[biomeId]
-	return if rt then ArenaStateMachine.getSnapshot(rt.fsm, os.clock()) else nil
-end
+	Players.PlayerRemoving:Connect(function(player: Player)
+		local now = os.clock()
+		for _, st in pairs(biomeStates) do
+			local ev = ArenaCycleLogic.removePlayerFromArena(st, player.UserId, now, "Disconnected")
+			if #ev > 0 then
+				handleArenaEvents(ev)
+			end
+		end
+		playerArenaBiome[player.UserId] = nil
+	end)
 
--- Studio/test hook: jump a biome straight to its opt-in window.
-function ArenaCycleService.debugOpenOptIn(biomeId: string)
-	local rt = runtimes[biomeId]
-	if rt and rt.fsm.phase == "PvE_Open" then
-		rt.fsm.phaseEndTime = os.clock()
-	end
+	-- 4 Hz authoritative arena loop
+	task.spawn(function()
+		while true do
+			task.wait(0.25)
+			local now = os.clock()
+			local ocEvents =
+				ArenaCycleLogic.stepOverchargedClock(overchargedClock, biomeStates, now)
+			if #ocEvents > 0 then
+				handleArenaEvents(ocEvents)
+			end
+			for _, biomeId in ipairs(BiomeConfigs.ORDERED_MVP_BIOMES) do
+				local st = biomeStates[biomeId]
+				local ref = arenaRefs[biomeId]
+				local claimDist: number? = nil
+				if st.claim.claimerId and ref then
+					local claimer = Players:GetPlayerByUserId(st.claim.claimerId)
+					local hrp = if claimer and claimer.Character
+						then claimer.Character:FindFirstChild("HumanoidRootPart")
+						else nil
+					claimDist = if hrp and hrp:IsA("BasePart")
+						then (hrp.Position - ref.eggPedestal.Position).Magnitude
+						else 999
+				end
+				local ev = ArenaCycleLogic.stepBiome(st, now, claimDist)
+				if #ev > 0 then
+					handleArenaEvents(ev)
+				end
+				-- Sudden Death Storm Ring visual & tick damage
+				if st.phase == "PvP_EggScramble" and ref and ref.suddenDeathRing then
+					local r = st.suddenDeathRadius
+					ref.suddenDeathRing.Size = Vector3.new(0.4, r * 2, r * 2)
+					if r < BiomeConfigs.SUDDEN_DEATH_START_RADIUS - 0.5 then
+						for uid in pairs(st.activePlayers) do
+							local plr = Players:GetPlayerByUserId(uid)
+							local char = if plr then plr.Character else nil
+							local hrp = if char
+								then char:FindFirstChild("HumanoidRootPart")
+								else nil
+							local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+							if plr and hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
+								local d = MathUtil.distance2D(
+									hrp.Position.X,
+									hrp.Position.Z,
+									ref.eggPedestal.Position.X,
+									ref.eggPedestal.Position.Z
+								)
+								if d > r then
+									local tickDmg = hum.MaxHealth
+										* BiomeConfigs.SUDDEN_DEATH_DPS_FRACTION
+										* 0.25
+									hum.Health = math.max(0, hum.Health - tickDmg)
+									ArenaCycleService.onPlayerDamagedInPvP(
+										plr,
+										nil,
+										hum.Health <= 0
+									)
+								end
+							end
+						end
+					end
+				end
+			end
+			updateWorldBoards(now)
+			broadcastArenaStates(now)
+		end
+	end)
 end
 
 return ArenaCycleService

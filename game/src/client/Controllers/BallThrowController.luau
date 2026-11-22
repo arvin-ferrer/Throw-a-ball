@@ -1,731 +1,786 @@
 --!strict
 --[[
 	BallThrowController.luau
-	Client combat & movement controller (GDD §5):
-	  - Stepping onto own TrainingPad anchors smoothly into stationary shooting stance;
-	    jumping or moving off cancels immediately.
-	  - Outside TrainingPad: 18 walk / 24 sprint + 0.35s Dash (2.5s cooldown) with coyote/buffer.
-	  - Client-side predicted arc & visual ball + hit-marker while sending ONLY aim origin/direction.
-	  - Mobile touch controls (Throw/Hold-to-Aim + Dash) + soft magnetic aim assist (mild in PvP).
+	Client movement, 100% FREE AFK Auto-Training Range, Toggleable Guaranteed-Hit Auto-Aim,
+	and real 60 FPS ballistic/homing ball physics with hand launch & post-impact bounce rebound!
 ]]
 
-export type Vec3Like = {
-	X: number,
-	Y: number,
-	Z: number,
-}
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-export type ThrowPayload = {
-	origin: Vec3Like,
-	direction: Vec3Like,
-	onTrainingPad: boolean,
-}
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
+local CombatLogic = require(Shared.Utils.CombatLogic)
+local MathUtil = require(Shared.Utils.MathUtil)
+local ProceduralModels = require(Shared.Utils.ProceduralModels)
+local AudioCatalog = require(Shared.Utils.AudioCatalog)
+local Remotes = require(Shared.Net.Remotes)
 
-export type ThrowResult = {
-	fired: boolean,
-	payload: ThrowPayload?,
-	assistedTargetId: string?,
-}
+local HudGui = require(script.Parent.Parent.UI.HudGui)
+local AnimationController = require(script.Parent.AnimationController)
 
-export type StateConfig = {
-	net: any,
-	projectileArc: any?,
-	throwCooldown: number?,
-}
-
-export type CombatState = {
-	isOnTrainingPad: (self: CombatState) -> boolean,
-	getActivePadId: (self: CombatState) -> string?,
-	enterTrainingPad: (self: CombatState, padId: string) -> boolean,
-	cancelTrainingPad: (self: CombatState, reason: string?) -> boolean,
-	handleMoveIntent: (self: CombatState, moveMagnitude: number) -> boolean,
-	setSprinting: (self: CombatState, sprinting: boolean) -> (),
-	getTargetWalkSpeed: (self: CombatState) -> number,
-	requestDash: (self: CombatState) -> boolean,
-	isDashing: (self: CombatState) -> boolean,
-	getDashCooldownRemaining: (self: CombatState) -> number,
-	setArenaPhase: (self: CombatState, phase: string) -> (),
-	getAimAssistMode: (self: CombatState) -> string,
-	performThrow: (
-		self: CombatState,
-		origin: Vec3Like,
-		rawDirection: Vec3Like,
-		candidates: { any },
-		useAimAssist: boolean
-	) -> ThrowResult,
-	step: (self: CombatState, dt: number, isGrounded: boolean) -> (),
-}
-
-type InternalState = CombatState & {
-	_net: any,
-	_projectileArc: any?,
-	_isOnPad: boolean,
-	_activePadId: string?,
-	_padEntryGrace: number,
-	_padReentryLockout: number,
-	_sprinting: boolean,
-	_dashActiveRemaining: number,
-	_dashCooldownRemaining: number,
-	_coyoteRemaining: number,
-	_dashBufferRemaining: number,
-	_throwCooldownDuration: number,
-	_throwCooldownRemaining: number,
-	_arenaPhase: string,
-}
-
-type ActiveBall = {
-	part: BasePart,
-	origin: Vec3Like,
-	direction: Vec3Like,
-	elapsed: number,
-	maxDuration: number,
-	lastPos: Vector3,
-}
+local BallThrowController = {}
 
 local WALK_SPEED = 18
 local SPRINT_SPEED = 24
-local DASH_DURATION = 0.35
+local DASH_PEAK_SPEED = 88
+local DASH_END_SPEED = 30
+local DASH_DURATION = 0.26
 local DASH_COOLDOWN = 2.5
-local DASH_SPEED = 56
-local COYOTE_WINDOW = 0.14
-local DASH_BUFFER_WINDOW = 0.15
-local PAD_ENTRY_SETTLE = 0.15
-local PAD_REENTRY_LOCKOUT = 0.45
-local DEFAULT_THROW_COOLDOWN = 0.35
-local PREVIEW_DOT_COUNT = 14
 
-local BallThrowController = {
-	Name = "BallThrowController",
-	Priority = 50,
-	Constants = table.freeze({
-		WALK_SPEED = WALK_SPEED,
-		SPRINT_SPEED = SPRINT_SPEED,
-		DASH_DURATION = DASH_DURATION,
-		DASH_COOLDOWN = DASH_COOLDOWN,
-		DASH_SPEED = DASH_SPEED,
-		COYOTE_WINDOW = COYOTE_WINDOW,
-		DASH_BUFFER_WINDOW = DASH_BUFFER_WINDOW,
-	}),
-}
+local localPlayer = Players.LocalPlayer
+local isSprinting = false
+local isOnTrainingPad = false
+local padLocked = false
+local lastDashAt = 0
+local lastThrowAt = 0
+local isHoldingFire = false
+local afkTargetCycle = 0
+local autoAimEnabled = UserInputService.PreferredInput == Enum.PreferredInput.Touch
+local currentLockedPart: BasePart? = nil
+local lockReticleGui: BillboardGui? = nil
 
-local function normalizeFallback(v: Vec3Like): Vec3Like
-	local mag = math.sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z)
-	if mag < 1e-6 then
-		return { X = 0, Y = 0, Z = -1 }
+local function getRootAndHum(): (BasePart?, Humanoid?)
+	local char = localPlayer.Character
+	if not char then
+		return nil, nil
 	end
-	return { X = v.X / mag, Y = v.Y / mag, Z = v.Z / mag }
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	return if hrp and hrp:IsA("BasePart") then hrp else nil, hum
 end
 
-local function canActivateDash(self: InternalState): boolean
-	if self._dashActiveRemaining > 0 or self._dashCooldownRemaining > 0 then
-		return false
+local function getThrowHandOrigin(player: Player?, fallbackPos: Vector3): Vector3
+	local char = if player then player.Character else nil
+	if not char then
+		return fallbackPos
 	end
-	return self._coyoteRemaining > 0
-end
-
-local function startDashNow(self: InternalState)
-	if self._isOnPad then
-		self:cancelTrainingPad("Dash")
+	local hand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
+	if hand and hand:IsA("BasePart") then
+		return hand.Position + Vector3.new(0, 0.35, 0)
 	end
-	self._dashActiveRemaining = DASH_DURATION
-	self._dashCooldownRemaining = DASH_COOLDOWN
-	self._dashBufferRemaining = 0
+	return fallbackPos
 end
 
-local StateMethods = {} :: InternalState
-local StateMeta = { __index = StateMethods }
-
-function StateMethods.isOnTrainingPad(self: InternalState): boolean
-	return self._isOnPad
-end
-
-function StateMethods.getActivePadId(self: InternalState): string?
-	return self._activePadId
-end
-
-function StateMethods.enterTrainingPad(self: InternalState, padId: string): boolean
-	if self._isOnPad or self._padReentryLockout > 0 or self._dashActiveRemaining > 0 then
-		return false
+local function findMyFiringPad(): BasePart?
+	local myPlotId = tonumber(localPlayer:GetAttribute("PlotId"))
+	if not myPlotId then
+		return nil
 	end
-	self._isOnPad = true
-	self._activePadId = padId
-	self._padEntryGrace = PAD_ENTRY_SETTLE
-	self._sprinting = false
-	return true
-end
-
-function StateMethods.cancelTrainingPad(self: InternalState, _reason: string?): boolean
-	if not self._isOnPad then
-		return false
-	end
-	self._isOnPad = false
-	self._activePadId = nil
-	self._padEntryGrace = 0
-	self._padReentryLockout = PAD_REENTRY_LOCKOUT
-	return true
-end
-
-function StateMethods.handleMoveIntent(self: InternalState, moveMagnitude: number): boolean
-	if not self._isOnPad or self._padEntryGrace > 0 then
-		return false
-	end
-	if moveMagnitude > 0.25 then
-		return self:cancelTrainingPad("Move")
-	end
-	return false
-end
-
-function StateMethods.setSprinting(self: InternalState, sprinting: boolean)
-	self._sprinting = sprinting == true
-end
-
-function StateMethods.getTargetWalkSpeed(self: InternalState): number
-	if self._isOnPad then
-		return 0
-	end
-	return if self._sprinting then SPRINT_SPEED else WALK_SPEED
-end
-
-function StateMethods.requestDash(self: InternalState): boolean
-	if canActivateDash(self) then
-		startDashNow(self)
-		return true
-	end
-	self._dashBufferRemaining = DASH_BUFFER_WINDOW
-	return false
-end
-
-function StateMethods.isDashing(self: InternalState): boolean
-	return self._dashActiveRemaining > 0
-end
-
-function StateMethods.getDashCooldownRemaining(self: InternalState): number
-	return self._dashCooldownRemaining
-end
-
-function StateMethods.setArenaPhase(self: InternalState, phase: string)
-	self._arenaPhase = phase
-end
-
-function StateMethods.getAimAssistMode(self: InternalState): string
-	if self._isOnPad then
-		return "Training"
-	end
-	if self._arenaPhase == "PvP_EggScramble" then
-		return "PvP"
-	end
-	return "PvE"
-end
-
-function StateMethods.performThrow(
-	self: InternalState,
-	origin: Vec3Like,
-	rawDirection: Vec3Like,
-	candidates: { any },
-	useAimAssist: boolean
-): ThrowResult
-	if self._throwCooldownRemaining > 0 then
-		return { fired = false, payload = nil, assistedTargetId = nil }
-	end
-	local finalDir = normalizeFallback(rawDirection)
-	local assistedId: string? = nil
-	if useAimAssist and self._projectileArc and #candidates > 0 then
-		local assistedDir, matched = self._projectileArc.applyAimAssist(
-			origin,
-			finalDir,
-			candidates,
-			self:getAimAssistMode()
-		)
-		finalDir = assistedDir
-		assistedId = if matched then matched.id else nil
-	end
-	local payload: ThrowPayload = {
-		origin = { X = origin.X, Y = origin.Y, Z = origin.Z },
-		direction = { X = finalDir.X, Y = finalDir.Y, Z = finalDir.Z },
-		onTrainingPad = self._isOnPad,
-	}
-	self._throwCooldownRemaining = self._throwCooldownDuration
-	if self._net then
-		self._net:fireServer("ThrowBall", payload)
-	end
-	return { fired = true, payload = payload, assistedTargetId = assistedId }
-end
-
-function StateMethods.step(self: InternalState, dt: number, isGrounded: boolean)
-	if dt <= 0 then
-		return
-	end
-	self._padEntryGrace = math.max(0, self._padEntryGrace - dt)
-	self._padReentryLockout = math.max(0, self._padReentryLockout - dt)
-	self._dashActiveRemaining = math.max(0, self._dashActiveRemaining - dt)
-	self._dashCooldownRemaining = math.max(0, self._dashCooldownRemaining - dt)
-	self._throwCooldownRemaining = math.max(0, self._throwCooldownRemaining - dt)
-	self._coyoteRemaining = if isGrounded
-		then COYOTE_WINDOW
-		else math.max(0, self._coyoteRemaining - dt)
-
-	if self._dashBufferRemaining > 0 then
-		self._dashBufferRemaining = math.max(0, self._dashBufferRemaining - dt)
-		if canActivateDash(self) then
-			startDashNow(self)
-		end
-	end
-end
-
-function BallThrowController.createState(config: StateConfig): CombatState
-	local instance: InternalState = setmetatable({
-		_net = config.net,
-		_projectileArc = config.projectileArc,
-		_isOnPad = false,
-		_activePadId = nil,
-		_padEntryGrace = 0,
-		_padReentryLockout = 0,
-		_sprinting = false,
-		_dashActiveRemaining = 0,
-		_dashCooldownRemaining = 0,
-		_coyoteRemaining = COYOTE_WINDOW,
-		_dashBufferRemaining = 0,
-		_throwCooldownDuration = config.throwCooldown or DEFAULT_THROW_COOLDOWN,
-		_throwCooldownRemaining = 0,
-		_arenaPhase = "PvE_Open",
-	}, StateMeta) :: any
-	return instance
-end
-
--- === Roblox Client Runtime Integration (lazy-bound in Start) ===
-
-local activeState: CombatState? = nil
-local activeProjectileArc: any = nil
-local runtimeConns: { any } = {}
-local activeBalls: { ActiveBall } = {}
-local previewDots: { BasePart } = {}
-local previewFolder: Folder? = nil
-local touchUIHandle: any = nil
-local anchoredPadPart: BasePart? = nil
-local isAiming = false
-local dashDirection: Vector3? = nil
-
-local function toVec3(v: Vector3): Vec3Like
-	return { X = v.X, Y = v.Y, Z = v.Z }
-end
-
-local function isOwnedTrainingPad(pad: BasePart, localUserId: number): boolean
-	local ownerAttr = pad:GetAttribute("OwnerUserId")
-	if ownerAttr == nil and pad.Parent then
-		ownerAttr = pad.Parent:GetAttribute("OwnerUserId")
-	end
-	if type(ownerAttr) == "number" and ownerAttr ~= 0 then
-		return ownerAttr == localUserId
-	end
-	return true
-end
-
-local function findStandingTrainingPad(root: BasePart, localUserId: number): BasePart?
-	local CollectionService = game:GetService("CollectionService")
-	for _, tagged in ipairs(CollectionService:GetTagged("TrainingPad")) do
-		if tagged:IsA("BasePart") and isOwnedTrainingPad(tagged, localUserId) then
-			local rel = tagged.CFrame:PointToObjectSpace(root.Position)
-			local halfX = tagged.Size.X * 0.5 + 1.2
-			local halfZ = tagged.Size.Z * 0.5 + 1.2
-			if
-				math.abs(rel.X) <= halfX
-				and math.abs(rel.Z) <= halfZ
-				and rel.Y >= 0
-				and rel.Y <= 7
-			then
-				return tagged
-			end
+	for _, pad in ipairs(CollectionService:GetTagged("TrainingFiringPad")) do
+		if pad:IsA("BasePart") and tonumber(pad:GetAttribute("PlotId")) == myPlotId then
+			return pad
 		end
 	end
 	return nil
 end
 
-local function collectAimCandidates(localPlayer: Player, mode: string): { any }
-	local CollectionService = game:GetService("CollectionService")
-	local Players = game:GetService("Players")
-	local candidates: { any } = {}
-	if mode == "PvP" then
-		for _, other in ipairs(Players:GetPlayers()) do
-			if other ~= localPlayer and other.Character then
-				local hrp = other.Character:FindFirstChild("HumanoidRootPart")
-				if hrp and hrp:IsA("BasePart") then
+local function pickAfkTrainingTarget(pad: BasePart, hasTurboPass: boolean): BasePart?
+	local tr = pad.Parent
+	if not tr then
+		return nil
+	end
+	local gold = tr:FindFirstChild("Target_MovingGold")
+	if gold and gold:IsA("BasePart") then
+		if hasTurboPass then
+			return gold
+		end
+		local localOffset = pad.CFrame:PointToObjectSpace(gold.Position)
+		if math.abs(localOffset.X) <= 7.5 then
+			return gold
+		end
+	end
+
+	local statics: { BasePart } = {}
+	for _, child in ipairs(tr:GetChildren()) do
+		if child:IsA("BasePart") and child:GetAttribute("TargetKind") == "Static" then
+			table.insert(statics, child)
+		end
+	end
+	if #statics == 0 then
+		return if gold and gold:IsA("BasePart") then gold else nil
+	end
+	table.sort(statics, function(a, b)
+		return a.Name < b.Name
+	end)
+	afkTargetCycle = (afkTargetCycle % #statics) + 1
+	return statics[afkTargetCycle]
+end
+
+local function ensureReticleGui(): BillboardGui
+	if lockReticleGui and lockReticleGui.Parent then
+		return lockReticleGui
+	end
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "AutoAimReticle"
+	bb.Size = UDim2.fromOffset(92, 92)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 200
+
+	local lbl = Instance.new("TextLabel")
+	lbl.Name = "Mark"
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.FredokaOne
+	lbl.TextScaled = true
+	lbl.TextColor3 = Color3.fromRGB(52, 255, 168)
+	lbl.TextStrokeTransparency = 0.15
+	lbl.Text = "◎"
+	lbl.AutoLocalize = false
+	lbl.Parent = bb
+
+	local tag = Instance.new("TextLabel")
+	tag.Name = "Sub"
+	tag.BackgroundTransparency = 1
+	tag.Position = UDim2.fromScale(0, 0.72)
+	tag.Size = UDim2.fromScale(1, 0.28)
+	tag.Font = Enum.Font.GothamBold
+	tag.TextScaled = true
+	tag.TextColor3 = Color3.fromRGB(250, 204, 21)
+	tag.TextStrokeTransparency = 0.2
+	tag.Text = "LOCKED"
+	tag.AutoLocalize = false
+	tag.Parent = bb
+
+	lockReticleGui = bb
+	return bb
+end
+
+local function updateLockReticle(targetPart: BasePart?)
+	currentLockedPart = targetPart
+	if not autoAimEnabled or not targetPart or not targetPart.Parent then
+		if lockReticleGui then
+			lockReticleGui.Adornee = nil
+			lockReticleGui.Parent = nil
+		end
+		return
+	end
+	local bb = ensureReticleGui()
+	bb.Adornee = targetPart
+	bb.Parent = targetPart
+end
+
+local function collectBiomeCandidates(
+	zone: string,
+	activeBiome: string,
+	candidates: { CombatLogic.AutoAimCandidate },
+	partById: { [string]: BasePart }
+)
+	local map = workspace:FindFirstChild("BallBrawl_Map_v2")
+	if map then
+		local idx = 0
+		for _, desc in ipairs(map:GetDescendants()) do
+			if desc:IsA("Model") and desc.PrimaryPart then
+				local kind = desc:GetAttribute("EntityKind")
+				local biome = tostring(desc:GetAttribute("BiomeId") or "")
+				if
+					(kind == "PvEMob" or kind == "BiomeBoss")
+					and (activeBiome == "" or biome == activeBiome)
+				then
+					idx += 1
+					local id = `ent_{idx}`
+					local pp = desc.PrimaryPart
+					partById[id] = pp
 					table.insert(candidates, {
-						id = tostring(other.UserId),
-						position = toVec3(hrp.Position),
-						isPvP = true,
+						id = id,
+						kind = if kind == "BiomeBoss" then "Boss" else "Mob",
+						x = pp.Position.X,
+						y = pp.Position.Y,
+						z = pp.Position.Z,
 					})
 				end
 			end
 		end
-		return candidates
 	end
-	for _, tagName in ipairs({ "TrainingTarget", "BiomeBoss", "BiomeMob" }) do
-		for _, inst in ipairs(CollectionService:GetTagged(tagName)) do
-			local part: BasePart? = if inst:IsA("BasePart")
-				then inst
-				elseif inst:IsA("Model") then inst.PrimaryPart
-				else nil
-			if part then
-				table.insert(candidates, {
-					id = inst.Name,
-					position = toVec3(part.Position),
-					isPvP = false,
-					priority = if tagName == "BiomeBoss" then 2 else 1,
-				})
+	if zone == "LockedBossPvP" then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if
+				plr ~= localPlayer
+				and plr:GetAttribute("Zone") == "LockedBossPvP"
+				and plr.Character
+			then
+				local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+				local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+				if hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
+					local id = `plr_{plr.UserId}`
+					partById[id] = hrp
+					table.insert(candidates, {
+						id = id,
+						kind = "PvP",
+						x = hrp.Position.X,
+						y = hrp.Position.Y,
+						z = hrp.Position.Z,
+					})
+				end
 			end
 		end
 	end
-	return candidates
 end
 
-local function ensurePreviewPool(): Folder
-	if previewFolder and previewFolder.Parent then
-		return previewFolder
-	end
-	local Workspace = game:GetService("Workspace")
-	local folder = Instance.new("Folder")
-	folder.Name = "BallBrawl_ClientPreview"
-	folder.Parent = Workspace
-	previewFolder = folder
-	table.clear(previewDots)
-	for i = 1, PREVIEW_DOT_COUNT do
-		local dot = Instance.new("Part")
-		dot.Name = `ArcDot_{i}`
-		dot.Shape = Enum.PartType.Ball
-		dot.Size = Vector3.new(0.45, 0.45, 0.45)
-		dot.Material = Enum.Material.Neon
-		dot.Color = Color3.fromRGB(255, 224, 110)
-		dot.Anchored = true
-		dot.CanCollide = false
-		dot.CanQuery = false
-		dot.CanTouch = false
-		dot.Transparency = 1
-		dot.Parent = folder
-		table.insert(previewDots, dot)
-	end
-	return folder
-end
+local function findAutoAimTarget(origin: Vector3): BasePart?
+	local zone = tostring(localPlayer:GetAttribute("Zone") or "Hub")
+	local activeBiome = tostring(localPlayer:GetAttribute("ActiveBiome") or "")
+	local candidates: { CombatLogic.AutoAimCandidate } = {}
+	local partById: { [string]: BasePart } = {}
 
-local function updatePreviewDots(visible: boolean, origin: Vec3Like?, dir: Vec3Like?)
-	if not visible or not origin or not dir or not activeProjectileArc then
-		for _, dot in ipairs(previewDots) do
-			dot.Transparency = 1
-		end
-		return
-	end
-	ensurePreviewPool()
-	local points = activeProjectileArc.buildTrajectoryPoints(origin, dir, {
-		maxDuration = 0.7,
-		stepSeconds = 0.05,
-	})
-	for i, dot in ipairs(previewDots) do
-		local pt = points[i + 1]
-		if pt then
-			dot.Position = Vector3.new(pt.X, pt.Y, pt.Z)
-			dot.Transparency = 0.25 + (i / PREVIEW_DOT_COUNT) * 0.55
-		else
-			dot.Transparency = 1
-		end
-	end
-end
-
-local function spawnVisualBall(origin: Vec3Like, direction: Vec3Like)
-	local folder = ensurePreviewPool()
-	local ball = Instance.new("Part")
-	ball.Name = "PredictedBall"
-	ball.Shape = Enum.PartType.Ball
-	ball.Size = Vector3.new(1.1, 1.1, 1.1)
-	ball.Material = Enum.Material.Neon
-	ball.Color = Color3.fromRGB(255, 138, 42)
-	ball.Anchored = true
-	ball.CanCollide = false
-	ball.CanQuery = false
-	ball.CanTouch = false
-	local startVec = Vector3.new(origin.X, origin.Y, origin.Z)
-	ball.Position = startVec
-	ball.Parent = folder
-	table.insert(activeBalls, {
-		part = ball,
-		origin = origin,
-		direction = direction,
-		elapsed = 0,
-		maxDuration = 1.6,
-		lastPos = startVec,
-	})
-end
-
-local function stepVisualBalls(dt: number, ignoreCharacter: Model?)
-	if not activeProjectileArc or #activeBalls == 0 then
-		return
-	end
-	local Workspace = game:GetService("Workspace")
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	local excludes: { Instance } = {}
-	if ignoreCharacter then
-		table.insert(excludes, ignoreCharacter)
-	end
-	if previewFolder then
-		table.insert(excludes, previewFolder)
-	end
-	rayParams.FilterDescendantsInstances = excludes
-
-	for i = #activeBalls, 1, -1 do
-		local ball = activeBalls[i]
-		ball.elapsed += dt
-		local nextPt = activeProjectileArc.samplePosition(ball.origin, ball.direction, ball.elapsed)
-		local nextVec = Vector3.new(nextPt.X, nextPt.Y, nextPt.Z)
-		local hit = Workspace:Raycast(ball.lastPos, nextVec - ball.lastPos, rayParams)
-		if hit or ball.elapsed >= ball.maxDuration then
-			if hit and touchUIHandle then
-				local model = hit.Instance:FindFirstAncestorOfClass("Model")
-				local isCombatHit = model ~= nil and model:FindFirstChildOfClass("Humanoid") ~= nil
-				touchUIHandle.flashHitMarker(isCombatHit)
+	if zone == "Hub" then
+		local pad = findMyFiringPad()
+		local tr = if pad then pad.Parent else nil
+		if tr then
+			for _, child in ipairs(tr:GetChildren()) do
+				if child:IsA("BasePart") then
+					local tk = child:GetAttribute("TargetKind")
+					if tk == "Static" or tk == "MovingGold" then
+						partById[child.Name] = child
+						table.insert(candidates, {
+							id = child.Name,
+							kind = if tk == "MovingGold" then "GoldTarget" else "Target",
+							x = child.Position.X,
+							y = child.Position.Y,
+							z = child.Position.Z,
+						})
+					end
+				end
 			end
-			ball.part:Destroy()
-			table.remove(activeBalls, i)
-		else
-			ball.part.Position = nextVec
-			ball.lastPos = nextVec
 		end
+	else
+		collectBiomeCandidates(zone, activeBiome, candidates, partById)
 	end
+
+	local chosen = CombatLogic.selectAutoAimTarget(origin.X, origin.Y, origin.Z, candidates)
+	return if chosen then partById[chosen.id] else nil
 end
 
-local function computeAimRay(root: BasePart): (Vec3Like, Vec3Like)
-	local Workspace = game:GetService("Workspace")
-	local UserInputService = game:GetService("UserInputService")
-	local camera = Workspace.CurrentCamera
-	local origin = root.Position + Vector3.new(0, 1.5, 0)
-	if not camera then
-		return toVec3(origin), toVec3(root.CFrame.LookVector)
-	end
-	local aimDir = camera.CFrame.LookVector
-	if not UserInputService.TouchEnabled then
+local function computeManualAim(origin: Vector3, cam: Camera): Vector3
+	local baseDir = cam.CFrame.LookVector
+	if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
 		local mouseLoc = UserInputService:GetMouseLocation()
-		local ray = camera:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
+		local ray = cam:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
 		local targetPoint = ray.Origin + ray.Direction * 120
-		aimDir = (targetPoint - origin).Unit
+		baseDir = (targetPoint - origin).Unit
 	end
-	return toVec3(origin), toVec3(aimDir)
+	return baseDir
 end
 
-local function executeThrow(localPlayer: Player)
-	local state = activeState
-	local character = localPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not state or not root or not root:IsA("BasePart") then
+local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
+	local hrp = getRootAndHum()
+	local cam = workspace.CurrentCamera
+	if not hrp or not cam then
 		return
 	end
-	local UserInputService = game:GetService("UserInputService")
-	local origin, rawDir = computeAimRay(root)
-	local useAssist = UserInputService.TouchEnabled or state:isOnTrainingPad()
-	local candidates = if useAssist
-		then collectAimCandidates(localPlayer, state:getAimAssistMode())
-		else {}
-	local result = state:performThrow(origin, rawDir, candidates, useAssist)
-	if result.fired and result.payload then
-		spawnVisualBall(result.payload.origin, result.payload.direction)
+	local now = os.clock()
+	local speedStat = tonumber(localPlayer:GetAttribute("ThrowSpeed")) or 1.0
+	local turboBonus = if padLocked
+			and localPlayer:GetAttribute("Pass_AutoFireRange") == true
+		then 0.25
+		else 0
+	local cd = MathUtil.computeThrowCooldown(speedStat, turboBonus)
+	if now - lastThrowAt < cd * 0.94 then
+		return
 	end
-end
+	lastThrowAt = now
 
-local function triggerDash(localPlayer: Player)
-	local state = activeState
-	local character = localPlayer.Character
-	local hum = if character then character:FindFirstChildOfClass("Humanoid") else nil
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not state or not hum or not root or not root:IsA("BasePart") then
-		return
+	local origin = hrp.Position + Vector3.new(0, 1.4, 0)
+	local useHoming = isAfkShot or autoAimEnabled
+	local lockedPart: BasePart? = overrideTarget
+	if not lockedPart and useHoming then
+		lockedPart = findAutoAimTarget(origin)
+		updateLockReticle(lockedPart)
 	end
-	local moveDir = hum.MoveDirection
-	if moveDir.Magnitude > 0.1 then
-		dashDirection = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
-	else
-		local look = root.CFrame.LookVector
-		dashDirection = Vector3.new(look.X, 0, look.Z).Unit
-	end
-	if state:requestDash() then
-		anchoredPadPart = nil
-	end
-end
 
-local function applyMovementPhysics(state: CombatState, hum: Humanoid, root: BasePart, dt: number)
-	hum.WalkSpeed = state:getTargetWalkSpeed()
-	if state:isOnTrainingPad() and anchoredPadPart then
-		local targetCF = anchoredPadPart.CFrame * CFrame.new(0, 3, 0)
-		root.CFrame = root.CFrame:Lerp(targetCF, math.clamp(dt * 14, 0, 1))
-		root.AssemblyLinearVelocity = Vector3.zero
-	elseif state:isDashing() and dashDirection then
-		local vel = root.AssemblyLinearVelocity
-		root.AssemblyLinearVelocity =
-			Vector3.new(dashDirection.X * DASH_SPEED, vel.Y, dashDirection.Z * DASH_SPEED)
-	end
-end
-
-local function updateCharacterStep(localPlayer: Player, dt: number)
-	local state = activeState
-	local character = localPlayer.Character
-	if not state or not character then
-		return
-	end
-	local hum = character:FindFirstChildOfClass("Humanoid")
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if not hum or not root or not root:IsA("BasePart") then
-		return
-	end
-	state:step(dt, hum.FloorMaterial ~= Enum.Material.Air)
-	if hum.Jump and state:isOnTrainingPad() then
-		state:cancelTrainingPad("Jump")
-		anchoredPadPart = nil
-	end
-	if state:handleMoveIntent(hum.MoveDirection.Magnitude) then
-		anchoredPadPart = nil
-	end
-	if not state:isOnTrainingPad() then
-		local pad = findStandingTrainingPad(root, localPlayer.UserId)
-		if pad and state:enterTrainingPad(pad:GetFullName()) then
-			anchoredPadPart = pad
+	local aimDir: Vector3
+	if lockedPart and lockedPart.Parent then
+		local delta = lockedPart.Position - origin
+		aimDir = if delta.Magnitude > 0.1 then delta.Unit else hrp.CFrame.LookVector
+		if not isAfkShot then
+			local lookFlat =
+				Vector3.new(lockedPart.Position.X, hrp.Position.Y, lockedPart.Position.Z)
+			if (lookFlat - hrp.Position).Magnitude > 0.5 then
+				hrp.CFrame = hrp.CFrame:Lerp(CFrame.lookAt(hrp.Position, lookFlat), 0.72)
+			end
 		end
-	end
-	applyMovementPhysics(state, hum, root, dt)
-	if touchUIHandle then
-		touchUIHandle.setDashCooldown(state:getDashCooldownRemaining(), DASH_COOLDOWN)
-		touchUIHandle.setTrainingMode(state:isOnTrainingPad())
-	end
-	if isAiming or state:isOnTrainingPad() then
-		local origin, rawDir = computeAimRay(root)
-		updatePreviewDots(true, origin, rawDir)
 	else
-		updatePreviewDots(false, nil, nil)
+		aimDir = computeManualAim(origin, cam)
 	end
-	stepVisualBalls(dt, character)
+
+	AnimationController.playThrowAnim(localPlayer)
+	Remotes.waitClient().ThrowBall:FireServer(aimDir, useHoming, lockedPart)
+	AudioCatalog.play("Throw", 1.0 + math.random() * 0.14, if isAfkShot then 0.12 else 0.28)
 end
 
-function BallThrowController.GetState(): CombatState?
-	return activeState
+function BallThrowController.fireThrow()
+	executeThrow(nil, false)
 end
 
-function BallThrowController:Init(ctx: any)
-	activeProjectileArc = ctx.projectileArc
-	if not activeProjectileArc then
-		local ReplicatedStorage = game:GetService("ReplicatedStorage")
-		local shared = ReplicatedStorage:FindFirstChild("Shared")
-		local utils = if shared then shared:FindFirstChild("Utils") else nil
-		local arcMod = if utils then utils:FindFirstChild("ProjectileArc") else nil
-		if arcMod and arcMod:IsA("ModuleScript") then
-			activeProjectileArc = require(arcMod)
+function BallThrowController.setHoldingFire(holding: boolean)
+	isHoldingFire = holding
+	if holding then
+		BallThrowController.fireThrow()
+	end
+end
+
+function BallThrowController.setAutoAimEnabled(enabled: boolean)
+	autoAimEnabled = enabled
+	localPlayer:SetAttribute("AutoAimEnabled", enabled)
+	HudGui.setAutoAimEnabled(enabled)
+	if not enabled then
+		updateLockReticle(nil)
+	end
+end
+
+function BallThrowController.toggleAutoAim()
+	BallThrowController.setAutoAimEnabled(not autoAimEnabled)
+end
+
+function BallThrowController.isAutoAimEnabled(): boolean
+	return autoAimEnabled
+end
+
+function BallThrowController.triggerDash()
+	local now = os.clock()
+	if now - lastDashAt < DASH_COOLDOWN or padLocked then
+		return
+	end
+	local hrp, hum = getRootAndHum()
+	if not hrp or not hum or hum.Health <= 0 then
+		return
+	end
+	lastDashAt = now
+
+	-- 8-way directional Valorant Jett Tailwind burst (follows WASD / thumbstick or facing)
+	local rawMove = hum.MoveDirection
+	local flatDir = Vector3.new(rawMove.X, 0, rawMove.Z)
+	local moveDir = if flatDir.Magnitude > 0.1
+		then flatDir.Unit
+		else Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z).Unit
+	if moveDir.Magnitude < 0.05 then
+		moveDir = Vector3.zAxis
+	end
+
+	Remotes.waitClient().DashRequest:FireServer(moveDir)
+	AnimationController.playJettDash(localPlayer, moveDir, DASH_DURATION)
+	AudioCatalog.playJettDash()
+
+	local att = Instance.new("Attachment")
+	att.Parent = hrp
+	local lv = Instance.new("LinearVelocity")
+	lv.Attachment0 = att
+	lv.MaxForce = hrp.AssemblyMass * workspace.Gravity * 32
+	lv.VectorVelocity = Vector3.new(moveDir.X * DASH_PEAK_SPEED, 1.2, moveDir.Z * DASH_PEAK_SPEED)
+	lv.Parent = hrp
+
+	-- Snappy explosive start + crisp tapered wind-stop (no floaty overshoot)
+	local startAt = os.clock()
+	local conn: RBXScriptConnection? = nil
+	conn = RunService.Heartbeat:Connect(function()
+		local alpha = (os.clock() - startAt) / DASH_DURATION
+		if alpha >= 1 or not lv.Parent or not hrp.Parent then
+			if conn then
+				conn:Disconnect()
+				conn = nil
+			end
+			if lv.Parent then
+				lv:Destroy()
+			end
+			if att.Parent then
+				att:Destroy()
+			end
+			return
 		end
-	end
-	activeState = BallThrowController.createState({
-		net = ctx.net,
-		projectileArc = activeProjectileArc,
-	})
+		local ease = 1 - (alpha * alpha)
+		local spd = DASH_END_SPEED + (DASH_PEAK_SPEED - DASH_END_SPEED) * ease
+		lv.VectorVelocity = Vector3.new(moveDir.X * spd, 0.8, moveDir.Z * spd)
+	end)
 end
 
-local function mountTouchHUD(localPlayer: Player)
-	local uiFolder = if script.Parent and script.Parent.Parent
-		then script.Parent.Parent:FindFirstChild("UI")
-		else nil
-	local touchMod = if uiFolder then uiFolder:FindFirstChild("BallThrowTouchUI") else nil
-	local playerGui = localPlayer:WaitForChild("PlayerGui", 5)
-	if touchMod and touchMod:IsA("ModuleScript") and playerGui and playerGui:IsA("PlayerGui") then
-		local touchUI = require(touchMod)
-		touchUIHandle = touchUI.mount(playerGui, {
-			onAimBegan = function()
-				isAiming = true
-			end,
-			onThrowReleased = function()
-				isAiming = false
-				executeThrow(localPlayer)
-			end,
-			onDashPressed = function()
-				triggerDash(localPlayer)
-			end,
+local function spawnDamagePopup(pos: Vector3, text: string, color: Color3)
+	local anchor = Instance.new("Part")
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.CFrame = CFrame.new(pos + Vector3.new(0, 2, 0))
+	anchor.Parent = workspace
+
+	local bb = Instance.new("BillboardGui")
+	bb.Adornee = anchor
+	bb.Size = UDim2.fromOffset(128, 40)
+	bb.AlwaysOnTop = true
+	bb.Parent = anchor
+
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.FredokaOne
+	lbl.TextScaled = true
+	lbl.TextColor3 = color
+	lbl.TextStrokeTransparency = 0.2
+	lbl.Text = text
+	lbl.Parent = bb
+
+	TweenService
+		:Create(anchor, TweenInfo.new(0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			CFrame = anchor.CFrame + Vector3.new(0, 4.2, 0),
 		})
+		:Play()
+	task.delay(0.7, function()
+		anchor:Destroy()
+	end)
+end
+
+local function triggerImpactFeedback(
+	impactPos: Vector3,
+	hitKind: string,
+	isCrit: boolean,
+	damage: number,
+	hitInst: Instance?
+)
+	if hitKind == "GoldTarget" then
+		local col = Color3.fromRGB(250, 204, 21)
+		AudioCatalog.play("GoldCombo", 1.25, 0.45)
+		spawnDamagePopup(impactPos, "2x GOLD +SPD!", col)
+		AnimationController.playImpactEffect(impactPos, hitKind, true, col, hitInst)
+	elseif hitKind == "Target" then
+		local col = Color3.fromRGB(74, 222, 128)
+		AudioCatalog.play("TargetHit", 1.05, 0.28)
+		spawnDamagePopup(impactPos, "+DMG!", col)
+		AnimationController.playImpactEffect(impactPos, hitKind, false, col, hitInst)
+	elseif hitKind == "Mob" or hitKind == "Boss" or hitKind == "PvP" then
+		local col = if isCrit then Color3.fromRGB(250, 204, 21) else Color3.fromRGB(255, 110, 90)
+		AudioCatalog.play("BossHit", if isCrit then 1.35 else 1.0, 0.45)
+		local dmgTxt = MathUtil.formatNumber(damage)
+		spawnDamagePopup(impactPos, if isCrit then `CRIT {dmgTxt}!` else `-{dmgTxt}`, col)
+		AnimationController.playImpactEffect(impactPos, hitKind, isCrit, col, hitInst)
+	elseif hitKind == "Surface" then
+		AnimationController.playImpactEffect(
+			impactPos,
+			"Surface",
+			false,
+			Color3.fromRGB(200, 220, 255),
+			nil
+		)
 	end
 end
 
-local function bindInputListeners(localPlayer: Player, state: CombatState)
-	local UserInputService = game:GetService("UserInputService")
-	table.insert(
-		runtimeConns,
-		UserInputService.JumpRequest:Connect(function()
-			if state:cancelTrainingPad("JumpRequest") then
-				anchoredPadPart = nil
+local function runPostImpactBounce(
+	ball: Model,
+	impactPos: Vector3,
+	incomingVel: Vector3,
+	normal: Vector3
+)
+	local n = if normal.Magnitude > 0.1 then normal.Unit else Vector3.yAxis
+	local reflected = incomingVel - 2 * incomingVel:Dot(n) * n
+	local bounceVel = reflected * 0.32
+		+ Vector3.new(
+			(math.random() - 0.5) * 14,
+			math.max(12, math.abs(reflected.Y) * 0.4),
+			(math.random() - 0.5) * 14
+		)
+	local pos = impactPos
+	local startAt = os.clock()
+	local bounceDur = 0.42
+	local floorY = math.max(1.2, impactPos.Y - 4.5)
+	local spinAngle = 0
+	local conn: RBXScriptConnection? = nil
+
+	conn = RunService.RenderStepped:Connect(function(dt: number)
+		local elapsed = os.clock() - startAt
+		if elapsed >= bounceDur or not ball.Parent then
+			if conn then
+				conn:Disconnect()
+				conn = nil
 			end
-		end)
-	)
-	table.insert(
-		runtimeConns,
-		UserInputService.InputBegan:Connect(function(input: InputObject, gp: boolean)
-			if gp then
-				return
+			if ball.Parent then
+				ball:Destroy()
 			end
-			if input.KeyCode == Enum.KeyCode.LeftShift then
-				state:setSprinting(true)
-			elseif input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.LeftControl then
-				triggerDash(localPlayer)
-			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-				isAiming = true
-			elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-				executeThrow(localPlayer)
-			end
-		end)
-	)
-	table.insert(
-		runtimeConns,
-		UserInputService.InputEnded:Connect(function(input: InputObject)
-			if input.KeyCode == Enum.KeyCode.LeftShift then
-				state:setSprinting(false)
-			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-				isAiming = false
-			end
-		end)
-	)
+			return
+		end
+		local stepDt = math.min(dt, 0.05)
+		bounceVel += Vector3.new(0, -68 * stepDt, 0)
+		pos += bounceVel * stepDt
+		if pos.Y < floorY then
+			pos = Vector3.new(pos.X, floorY, pos.Z)
+			bounceVel =
+				Vector3.new(bounceVel.X * 0.72, math.abs(bounceVel.Y) * 0.48, bounceVel.Z * 0.72)
+		end
+		spinAngle += stepDt * 14
+		local fade = math.clamp(1 - (elapsed / bounceDur), 0.18, 1)
+		ball:PivotTo(CFrame.new(pos) * CFrame.Angles(spinAngle, spinAngle * 0.5, 0))
+		if ball.PrimaryPart then
+			ball.PrimaryPart.Transparency = math.clamp(1 - fade, 0, 0.92)
+		end
+	end)
 end
 
-function BallThrowController:Start(ctx: any)
-	local Players = game:GetService("Players")
-	local RunService = game:GetService("RunService")
-	local localPlayer = Players.LocalPlayer
-	if not localPlayer or not activeState then
+local function onProjectileBroadcast(data: any)
+	if
+		type(data) ~= "table"
+		or typeof(data.origin) ~= "Vector3"
+		or typeof(data.endPos) ~= "Vector3"
+	then
 		return
 	end
-	local state = activeState
-	mountTouchHUD(localPlayer)
-	table.insert(
-		runtimeConns,
-		ctx.net:onClientEvent("ArenaStateChanged", function(payload: any)
-			if type(payload) == "table" and type(payload.phase) == "string" then
-				state:setArenaPhase(payload.phase)
+	local shooterId = tonumber(data.shooterId)
+	local shooterPlr = if shooterId then Players:GetPlayerByUserId(shooterId) else nil
+	if shooterPlr and shooterPlr ~= localPlayer then
+		AnimationController.playThrowAnim(shooterPlr)
+	end
+
+	local skinCol: Color3? = nil
+	if type(data.ballSkin) == "string" then
+		local spec = MonetizationConfigs.COSMETICS[data.ballSkin]
+		if spec then
+			skinCol = Color3.fromRGB(spec.color[1], spec.color[2], spec.color[3])
+		end
+	end
+	local ball =
+		ProceduralModels.createBallVisual(tostring(data.ballTierId or "RubberBall"), skinCol)
+	local startPos = getThrowHandOrigin(shooterPlr, data.origin)
+	local serverOrigin: Vector3 = data.origin
+	local staticEnd: Vector3 = data.endPos
+	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
+	local homingPart = if data.isHoming == true
+			and hitInst
+			and hitInst:IsA("BasePart")
+		then hitInst
+		else nil
+	local dur = math.clamp(tonumber(data.travelSec) or 0.25, 0.08, 1.65)
+	local launchVel: Vector3 = if typeof(data.launchVel) == "Vector3"
+		then data.launchVel
+		else (staticEnd - serverOrigin).Unit * (tonumber(data.speed) or 115)
+	local normal: Vector3 = if typeof(data.normal) == "Vector3" then data.normal else Vector3.yAxis
+	local hitKind = tostring(data.hitKind or "Miss")
+	local isCrit = data.isCrit == true
+	local damage = tonumber(data.damage) or 1
+
+	ball:PivotTo(CFrame.new(startPos, staticEnd))
+	ball.Parent = workspace
+
+	local startTime = os.clock()
+	local prevPos = startPos
+	local lastVel = launchVel
+	local arcBoost = math.clamp((staticEnd - startPos).Magnitude * 0.08, 0.8, 5.5)
+	local conn: RBXScriptConnection? = nil
+
+	conn = RunService.RenderStepped:Connect(function(dt: number)
+		local elapsed = os.clock() - startTime
+		local alpha = math.clamp(elapsed / dur, 0, 1)
+		local nextPos: Vector3
+		if homingPart and homingPart.Parent then
+			-- Real-time homing curve right into the moving target's live center!
+			local liveDest = homingPart.Position
+			local linear = startPos:Lerp(liveDest, alpha)
+			nextPos = linear + Vector3.new(0, 4 * alpha * (1 - alpha) * arcBoost, 0)
+		else
+			-- True ballistic gravity arc blended smoothly from hand launch to server curve
+			local sx, sy, sz = CombatLogic.sampleBallisticPosition(
+				serverOrigin.X,
+				serverOrigin.Y,
+				serverOrigin.Z,
+				launchVel.X,
+				launchVel.Y,
+				launchVel.Z,
+				elapsed,
+				CombatLogic.BALL_GRAVITY
+			)
+			local handBlend = math.clamp(1 - alpha * 4, 0, 1)
+			nextPos = Vector3.new(sx, sy, sz) + (startPos - serverOrigin) * handBlend
+		end
+
+		local stepVel = (nextPos - prevPos) / math.max(0.008, dt)
+		if stepVel.Magnitude > 1 then
+			lastVel = stepVel
+		end
+		prevPos = nextPos
+
+		if ball.Parent then
+			local rollSpin = elapsed * 20
+			local lookPos = nextPos
+				+ (if lastVel.Magnitude > 0.5 then lastVel.Unit else Vector3.zAxis)
+			ball:PivotTo(CFrame.lookAt(nextPos, lookPos) * CFrame.Angles(-rollSpin, 0, 0))
+		end
+
+		if alpha >= 1 then
+			if conn then
+				conn:Disconnect()
+				conn = nil
 			end
-		end)
-	)
-	bindInputListeners(localPlayer, state)
-	table.insert(
-		runtimeConns,
-		RunService.Heartbeat:Connect(function(dt: number)
-			updateCharacterStep(localPlayer, dt)
-		end)
-	)
+			local impactPos = if homingPart and homingPart.Parent
+				then homingPart.Position
+				else staticEnd
+			triggerImpactFeedback(impactPos, hitKind, isCrit, damage, hitInst)
+			if hitKind ~= "Miss" and ball.Parent then
+				runPostImpactBounce(ball, impactPos, lastVel, normal)
+			elseif ball.Parent then
+				ball:Destroy()
+			end
+		end
+	end)
 end
 
-function BallThrowController:Destroy()
-	for _, conn in ipairs(runtimeConns) do
-		pcall(function()
-			conn:Disconnect()
-		end)
+local function onBossTelegraph(data: any)
+	if type(data) ~= "table" or typeof(data.impactPos) ~= "Vector3" then
+		return
 	end
-	table.clear(runtimeConns)
-	if touchUIHandle then
-		touchUIHandle.destroy()
-		touchUIHandle = nil
+	local radius = tonumber(data.radius) or 16
+	local dur = tonumber(data.telegraphSec) or 1.0
+	local colArr = data.color or { 239, 68, 68 }
+	local kind = tostring(data.kind or "Shockwave")
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	local vfxFolder = if assets then assets:FindFirstChild("VFX") else nil
+	local prefab = if vfxFolder then vfxFolder:FindFirstChild("Telegraph_" .. kind) else nil
+	local ring: Part
+	if prefab and prefab:IsA("Part") then
+		ring = prefab:Clone()
+	else
+		ring = Instance.new("Part")
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.CanQuery = false
+		ring.Material = Enum.Material.Neon
 	end
-	if previewFolder then
-		previewFolder:Destroy()
-		previewFolder = nil
-	end
-	table.clear(previewDots)
-	table.clear(activeBalls)
+	ring.Name = "BossTelegraphRing"
+	ring.Color = Color3.fromRGB(colArr[1] or 239, colArr[2] or 68, colArr[3] or 68)
+	ring.Transparency = 0.55
+	ring.Size = Vector3.new(0.4, 2, 2)
+	ring.CFrame = CFrame.new(
+		data.impactPos.X,
+		math.max(0.5, data.impactPos.Y - 2),
+		data.impactPos.Z
+	) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Parent = workspace
+
+	AudioCatalog.play("BossWarning", 0.9, 0.45)
+	TweenService
+		:Create(ring, TweenInfo.new(dur, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(0.4, radius * 2, radius * 2),
+			Transparency = 0.18,
+		})
+		:Play()
+	task.delay(dur + 0.15, function()
+		ring:Destroy()
+	end)
+end
+
+function BallThrowController.start()
+	BallThrowController.setAutoAimEnabled(autoAimEnabled)
+	local remotes = Remotes.waitClient()
+	remotes.ProjectileBroadcast.OnClientEvent:Connect(onProjectileBroadcast)
+	remotes.BossTelegraph.OnClientEvent:Connect(onBossTelegraph)
+	remotes.DashRequest.OnClientEvent:Connect(function(userId: any, dir: any)
+		if tonumber(userId) == localPlayer.UserId or typeof(dir) ~= "Vector3" then
+			return
+		end
+		local other = Players:GetPlayerByUserId(tonumber(userId) or 0)
+		if other then
+			AnimationController.playJettDash(other, dir, DASH_DURATION)
+			local hrp = if other.Character
+				then other.Character:FindFirstChild("HumanoidRootPart")
+				else nil
+			if hrp and hrp:IsA("BasePart") then
+				AudioCatalog.playJettDash(hrp)
+			end
+		end
+	end)
+
+	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+		if gameProcessed then
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.ButtonL3 then
+			isSprinting = true
+		elseif input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.ButtonB then
+			BallThrowController.triggerDash()
+		elseif input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonY then
+			BallThrowController.toggleAutoAim()
+		elseif
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.KeyCode == Enum.KeyCode.ButtonR2
+		then
+			isHoldingFire = true
+			BallThrowController.fireThrow()
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input: InputObject)
+		if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.ButtonL3 then
+			isSprinting = false
+		elseif
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.KeyCode == Enum.KeyCode.ButtonR2
+		then
+			isHoldingFire = false
+		end
+	end)
+
+	RunService.Heartbeat:Connect(function(dt: number)
+		local now = os.clock()
+		HudGui.setDashCooldown(math.max(0, DASH_COOLDOWN - (now - lastDashAt)))
+
+		local hrp, hum = getRootAndHum()
+		if not hrp or not hum or hum.Health <= 0 then
+			return
+		end
+
+		local pad = findMyFiringPad()
+		local nearPad = pad ~= nil and (hrp.Position - pad.Position).Magnitude <= 6.8
+		if nearPad ~= isOnTrainingPad then
+			isOnTrainingPad = nearPad
+			padLocked = nearPad
+			remotes.SetTrainingStance:FireServer(padLocked)
+			HudGui.setAfkTrainingActive(padLocked)
+			AnimationController.setTrainingStance(padLocked)
+		end
+		if padLocked and hum.Jump then
+			padLocked = false
+			remotes.SetTrainingStance:FireServer(false)
+			HudGui.setAfkTrainingActive(false)
+			AnimationController.setTrainingStance(false)
+		end
+
+		local stunUntil = tonumber(localPlayer:GetAttribute("MiniStunUntil")) or 0
+		local slowUntil = tonumber(localPlayer:GetAttribute("FrostSlowUntil")) or 0
+		if now < stunUntil then
+			hum.WalkSpeed = 0
+		else
+			local base = if isSprinting then SPRINT_SPEED else WALK_SPEED
+			if now < slowUntil then
+				base *= 0.80
+			end
+			hum.WalkSpeed = base
+		end
+
+		if autoAimEnabled and not padLocked then
+			local lockedPart = findAutoAimTarget(hrp.Position + Vector3.new(0, 1.4, 0))
+			if lockedPart ~= currentLockedPart then
+				updateLockReticle(lockedPart)
+			end
+		elseif currentLockedPart ~= nil then
+			updateLockReticle(nil)
+		end
+
+		if padLocked and pad then
+			local hasTurbo = localPlayer:GetAttribute("Pass_AutoFireRange") == true
+			local target = pickAfkTrainingTarget(pad, hasTurbo)
+			if target then
+				if hum.MoveDirection.Magnitude < 0.05 then
+					local lookAt = Vector3.new(target.Position.X, hrp.Position.Y, target.Position.Z)
+					local desiredCF = CFrame.lookAt(hrp.Position, lookAt)
+					local turnAlpha = 1 - math.exp(-10 * math.min(dt, 0.1))
+					hrp.CFrame = hrp.CFrame:Lerp(desiredCF, turnAlpha)
+				end
+				executeThrow(target, true)
+			end
+		elseif isHoldingFire then
+			BallThrowController.fireThrow()
+		end
+	end)
 end
 
 return BallThrowController

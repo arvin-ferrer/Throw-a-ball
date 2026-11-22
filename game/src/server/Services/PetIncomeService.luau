@@ -1,254 +1,304 @@
 --!strict
 --[[
-	PetIncomeService (Issue #10): Cash Pads and pet actions on the server.
-	- On profile load: offline income (PetIncome.accrueOffline, consumes the logout marker).
-	- Every second: online accrual into each player's pads; HUD gets CashPadUpdated.
-	- CollectPad: sweep one pad and grant the Coins in the same non-yielding step (one profile,
-	  one save), only when the player stands at their own pedestal.
-	- PetAction (RemoteFunction): place/remove/fuse/level/reroll/hatch through PetFusion with
-	  player-scoped request ids; all rolls are generated here, never by the client.
+	PetIncomeService.luau
+	Server-authoritative Cash Pad accrual (1 Hz), walk-over & Magnet sweep validation,
+	3.0-second Pedestal Hatch reveals, Pet Lv 1-25, 3-to-1 Star Fusion, Gem Trait Rerolls,
+	and Unified Active Combat Followers (1-3 slots without pausing pedestal Coin income).
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local ActivePerks = require(Shared.Utils.ActivePerks)
-local EconomyLedger = require(Shared.Utils.EconomyLedger)
-local PetFusion = require(Shared.Utils.PetFusion)
-local PetIncome = require(Shared.Utils.PetIncome)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local PetConfigs = require(Shared.Configs.PetConfigs)
+local EggConfigs = require(Shared.Configs.EggConfigs)
+local MathUtil = require(Shared.Utils.MathUtil)
 local Remotes = require(Shared.Net.Remotes)
+
 local DataService = require(script.Parent.DataService)
 local PlotService = require(script.Parent.PlotService)
 
-type Ledger = EconomyLedger.PlayerData
-
-local TICK_SECONDS = 1
-local COLLECT_RANGE_STUDS = 14 -- stand at your pedestal to collect (Magnet Pass later: #15)
-local HATCH_SECONDS = 3 -- GDD: 3s hatch reveal
-
 local PetIncomeService = {}
 
-local remotes: Folder? = nil
-local rng = Random.new()
-local hatching: { [Player]: boolean } = {}
+local activeHatchLock: { [number]: boolean } = {}
+local telemetryHook: ((string, { [string]: any }) -> ())? = nil
 
-local function fire(player: Player, name: string, payload: any)
-	local remote = remotes and remotes:FindFirstChild(name)
-	if remote and remote:IsA("RemoteEvent") then
-		remote:FireClient(player, payload)
+local function canReachPad(player: Player, pedestalIndex: number): boolean
+	if DataService.hasPass(player, "Pass_MagnetCollect") then
+		return true
 	end
-end
-
-local function padSnapshot(data: Ledger)
-	local pads = {}
-	for slot = 1, data.pedestalsUnlocked do
-		local pad = data.pedestalsById[tostring(slot)]
-		table.insert(pads, {
-			pedestalId = slot,
-			petId = pad and pad.petId,
-			coinsPerSec = PetIncome.getPadRate(data, slot),
-			storedCoins = if pad then math.floor(pad.storedCoins) else 0,
-		})
-	end
-	return pads
-end
-
--- Mirror pad state onto the player's plot pedestals (attributes the map already defines).
-local function syncPedestals(player: Player, data: Ledger)
-	for slot = 1, 12 do
-		local model = PlotService.getPedestal(player, slot)
-		if model then
-			local pad = data.pedestalsById[tostring(slot)]
-			model:SetAttribute("Locked", slot > data.pedestalsUnlocked)
-			model:SetAttribute(
-				"PetId",
-				if pad and pad.petId
-					then data.petsById[pad.petId] and data.petsById[pad.petId].petId or ""
-					else ""
-			)
-			model:SetAttribute("StoredCoins", if pad then math.floor(pad.storedCoins) else 0)
-			model:SetAttribute("EggId", if pad and pad.eggId then pad.eggId else "")
-		end
-	end
-end
-
--- Followers' species for every client to render (FollowerRigController, #11).
-local function followerSpecies(data: Ledger): string
-	local names = {}
-	for _, petId in data.activePetIds do
-		local pet = data.petsById[petId]
-		if pet then
-			table.insert(names, pet.petId)
-		end
-	end
-	return table.concat(names, ",")
-end
-
-local function broadcast(player: Player, data: Ledger)
-	syncPedestals(player, data)
-	player:SetAttribute("Followers", followerSpecies(data))
-	fire(player, Remotes.Names.CashPadUpdated, { pads = padSnapshot(data) })
-end
-
--- Collect ---------------------------------------------------------------------------------------
-
-local function onCollectPad(player: Player, slot: unknown)
-	local data = DataService.get(player)
-	local pedestal = if type(slot) == "number" then PlotService.getPedestal(player, slot) else nil
-	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not (data and pedestal and root and root:IsA("BasePart")) then
-		return
-	end
-	if (root.Position - pedestal:GetPivot().Position).Magnitude > COLLECT_RANGE_STUDS then
-		return -- server-observed proximity, never the client's word
-	end
-	local coins = PetIncome.sweepPad(data, slot :: number)
-	if coins > 0 then
-		-- Same frame, same profile: the pad debit and the wallet credit save together.
-		local id = `collect:{player.UserId}:{os.clock()}:{slot}`
-		local result = EconomyLedger.grantCoins(data, id, coins)
-		if not result.ok then
-			data.pedestalsById[tostring(slot)].storedCoins += coins -- give it back (overflow)
-		end
-		player:SetAttribute("Coins", data.coins)
-	end
-	broadcast(player, data)
-end
-
--- Pet actions ----------------------------------------------------------------------------------------
-
-local function hatch(player: Player, data: Ledger, id: string, slot: number, eggId: string): any
-	if hatching[player] then
-		return { ok = false, reason = "HatchInProgress" }
-	end
-	hatching[player] = true
-	task.wait(HATCH_SECONDS) -- reveal time; re-read the profile afterwards (player may have left)
-	hatching[player] = nil
-	local live = DataService.get(player)
-	if live ~= data then
-		return { ok = false, reason = "ProfileNotLoaded" }
-	end
-	local rolls = { pet = rng:NextNumber(), mutation = rng:NextNumber() }
-	local result = PetFusion.hatchEgg(data, id, slot, eggId, rolls)
-	if result.ok then
-		local pad = data.pedestalsById[tostring(slot)]
-		local pet = pad and pad.petId and data.petsById[pad.petId]
-		fire(player, Remotes.Names.HatchReveal, { slot = slot, pet = pet })
-	end
-	return result
-end
-
--- Followers (GDD §8.3): 1 slot, 2 at Level 10, 3 at Level 25. No currency moves here.
-local function setFollower(data: Ledger, petId: any, equip: boolean): any
-	local index = table.find(data.activePetIds, petId)
-	if not data.petsById[petId] then
-		return { ok = false, reason = "UnknownPet" }
-	elseif not equip then
-		if index then
-			table.remove(data.activePetIds, index)
-		end
-		return { ok = true }
-	elseif index then
-		return { ok = true, replayed = true }
-	elseif #data.activePetIds >= ActivePerks.slotsForLevel(data.level) then
-		return { ok = false, reason = "NoFreeFollowerSlot" }
-	end
-	table.insert(data.activePetIds, petId)
-	return { ok = true }
-end
-
-local function runAction(player: Player, data: Ledger, kind: string, id: string, args: { any }): any
-	if kind == "Equip" or kind == "Unequip" then
-		return setFollower(data, args[1], kind == "Equip")
-	end
-	if kind == "Place" then
-		return PetFusion.placePet(data, id, args[1], args[2])
-	elseif kind == "Remove" then
-		return PetFusion.removePet(data, id, args[1])
-	elseif kind == "Fuse" then
-		return PetFusion.fusePets(data, id, args[1], args[2], args[3])
-	elseif kind == "LevelUp" then
-		return PetFusion.levelUpPet(data, id, args[1])
-	elseif kind == "RerollTrait" then
-		return PetFusion.rerollTrait(data, id, args[1], rng:NextNumber())
-	elseif kind == "Hatch" then
-		return hatch(player, data, id, args[1], args[2])
-	end
-	return { ok = false, reason = "UnknownAction" }
-end
-
-local function validArgs(args: unknown): boolean
-	if type(args) ~= "table" or #(args :: any) > 3 then
+	local plot = PlotService.getPlotForPlayer(player)
+	local char = player.Character
+	local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+	if not plot or not hrp or not hrp:IsA("BasePart") then
 		return false
 	end
-	for _, value in args :: any do
-		local t = type(value)
-		if not ((t == "string" and #value <= 64) or (t == "number" and value == value)) then
-			return false
+	local ped = plot.pedestals[pedestalIndex]
+	local pad = if ped then ped:FindFirstChild("CashPad") else nil
+	if not pad or not pad:IsA("BasePart") then
+		return false
+	end
+	return (hrp.Position - pad.Position).Magnitude <= 14
+end
+
+function PetIncomeService.collectPad(player: Player, pedestalIndex: number)
+	local profile = DataService.getProfile(player)
+	if not profile or not MathUtil.isPositiveFinite(pedestalIndex) then
+		return
+	end
+	local idx = math.floor(pedestalIndex)
+	if idx < 1 or idx > 14 or not canReachPad(player, idx) then
+		return
+	end
+	local gained = EconomyLogic.collectCashPad(profile, idx)
+	if gained <= 0 then
+		return
+	end
+	local plot = PlotService.getPlotForPlayer(player)
+	if plot and plot.pedestals[idx] then
+		local pad = plot.pedestals[idx]:FindFirstChild("CashPad")
+		if pad and pad:IsA("BasePart") then
+			pad:SetAttribute("StoredCoins", 0)
+			pad.Color = Color3.fromRGB(56, 72, 92)
+			pad.Material = Enum.Material.SmoothPlastic
 		end
 	end
-	return true
-end
-
-local function onPetAction(player: Player, kind: unknown, requestId: unknown, args: unknown): any
-	local data = DataService.get(player)
-	if
-		not data
-		or type(kind) ~= "string"
-		or type(requestId) ~= "string"
-		or #requestId == 0
-		or #requestId > 64
-		or not validArgs(args)
-	then
-		return { ok = false, reason = "InvalidRequest" }
-	end
-	local result = runAction(player, data, kind, `pet:{player.UserId}:{requestId}`, args :: { any })
-	player:SetAttribute("Coins", data.coins)
-	player:SetAttribute("BossGems", data.bossGems)
-	broadcast(player, data)
-	return { ok = result.ok, reason = result.reason, replayed = result.replayed }
-end
-
--- Lifecycle ----------------------------------------------------------------------------------------
-
--- EconomyService.onLoaded hook: credit the offline interval once, then show the pads.
-function PetIncomeService.onProfileLoaded(player: Player, data: Ledger)
-	local earned = PetIncome.accrueOffline(data, os.time())
-	if earned > 0 then
-		player:SetAttribute("OfflineCoinsEarned", math.floor(earned))
-	end
-	broadcast(player, data)
-end
-
-local function onTick()
-	for _, player in Players:GetPlayers() do
-		local data = DataService.get(player)
-		if data then
-			PetIncome.accrue(data, TICK_SECONDS)
-			broadcast(player, data)
-		end
+	DataService.syncToClient(player)
+	if telemetryHook then
+		telemetryHook(
+			"CashPadSweep",
+			{ userId = player.UserId, pedestalIndex = idx, coins = gained }
+		)
 	end
 end
 
-function PetIncomeService.start(folder: Folder)
-	remotes = folder
-	Remotes.getEvent(folder, Remotes.Names.CollectPad).OnServerEvent:Connect(onCollectPad)
-	local action = folder:FindFirstChild(Remotes.Names.PetAction)
-	if action and action:IsA("RemoteFunction") then
-		action.OnServerInvoke = onPetAction
+function PetIncomeService.collectAllPadsMagnet(player: Player)
+	if not DataService.hasPass(player, "Pass_MagnetCollect") then
+		return
 	end
-	local acc = 0
-	RunService.Heartbeat:Connect(function(dt)
-		acc += dt
-		if acc >= TICK_SECONDS then
-			acc -= TICK_SECONDS
-			onTick()
+	local profile = DataService.getProfile(player)
+	if not profile then
+		return
+	end
+	local total = 0
+	for idx = 1, 14 do
+		total += EconomyLogic.collectCashPad(profile, idx)
+	end
+	if total > 0 then
+		PlotService.refreshPlotVisuals(player, profile)
+		DataService.syncToClient(player)
+	end
+end
+
+function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pedestalIndex: number)
+	if activeHatchLock[player.UserId] then
+		return
+	end
+	local profile = DataService.getProfile(player)
+	local plot = PlotService.getPlotForPlayer(player)
+	if not profile or not plot then
+		return
+	end
+	local hasVip = DataService.hasPass(player, "Pass_ExtraPedestals")
+	local res = EconomyLogic.hatchEggOnPedestal(
+		profile,
+		eggId,
+		pedestalIndex,
+		hasVip,
+		math.random(),
+		math.random()
+	)
+	local remotes = Remotes.ensureServer()
+	if not res.ok or not res.data then
+		remotes.ToastNotify:FireClient(
+			player,
+			`Cannot hatch: {res.reason or "Error"}`,
+			{ 239, 68, 68 }
+		)
+		return
+	end
+	activeHatchLock[player.UserId] = true
+	local newPet = res.data.pet :: EconomyLogic.OwnedPet
+	local spec = PetConfigs.getSpecies(newPet.speciesId)
+	local ped = plot.pedestals[pedestalIndex]
+	local anchor = if ped then ped:FindFirstChild("PetAnchor") else nil
+	local pos = if anchor and anchor:IsA("BasePart")
+		then anchor.Position
+		else plot.plotSpawn.Position
+
+	-- Broadcast 3.0-second wobble + Hub-wide rarity light beam to all players
+	remotes.HatchReveal:FireAllClients({
+		ownerUserId = player.UserId,
+		ownerName = player.DisplayName,
+		eggId = eggId,
+		speciesId = newPet.speciesId,
+		displayName = if spec then spec.displayName else newPet.speciesId,
+		rarity = if spec then spec.rarity else "Common",
+		mutationKey = newPet.mutationKey,
+		position = pos,
+		duration = 3.0,
+	})
+
+	task.delay(3.0, function()
+		activeHatchLock[player.UserId] = nil
+		if player.Parent then
+			PlotService.refreshPlotVisuals(player, profile)
+			DataService.syncToClient(player)
+			remotes.ToastNotify:FireClient(
+				player,
+				`HATCHED [{newPet.mutationKey}] {if spec then spec.displayName else newPet.speciesId}!`,
+				{ 74, 222, 128 }
+			)
 		end
 	end)
-	Players.PlayerRemoving:Connect(function(player)
-		hatching[player] = nil
+	if telemetryHook then
+		telemetryHook("EggHatched", {
+			userId = player.UserId,
+			eggId = eggId,
+			speciesId = newPet.speciesId,
+			mutationKey = newPet.mutationKey,
+		})
+	end
+end
+
+function PetIncomeService.pickDefaultEggForPlayer(profile: EconomyLogic.PlayerProfile): string?
+	if not profile.starterEggHatched and (profile.eggs.StarterEgg or 0) > 0 then
+		return "StarterEgg"
+	end
+	local priority = {
+		"MoltenCaldera_OverchargedEgg",
+		"FrostbiteCavern_OverchargedEgg",
+		"EmeraldMeadow_OverchargedEgg",
+		"MoltenCaldera_BossEgg",
+		"FrostbiteCavern_BossEgg",
+		"EmeraldMeadow_BossEgg",
+		"Seasonal_CyberEgg",
+		"Shop_PrismEgg",
+	}
+	for _, eggId in ipairs(priority) do
+		if (profile.eggs[eggId] or 0) > 0 and EggConfigs.getEgg(eggId) then
+			return eggId
+		end
+	end
+	return nil
+end
+
+local function handlePetAction(player: Player, action: any, payload: any)
+	if type(action) ~= "string" then
+		return
+	end
+	local profile = DataService.getProfile(player)
+	if not profile then
+		return
+	end
+	local res: EconomyLogic.TxResult = { ok = false, reason = "UnknownAction" }
+	if action == "LevelUp" and type(payload) == "string" then
+		res = EconomyLogic.levelUpPet(profile, payload)
+	elseif action == "Fuse" and type(payload) == "table" then
+		res = EconomyLogic.fusePets(profile, payload)
+	elseif action == "RerollTrait" and type(payload) == "string" then
+		res = EconomyLogic.rerollPetTrait(profile, payload, math.random())
+	elseif action == "ToggleActive" and type(payload) == "string" then
+		res = EconomyLogic.toggleActiveFollower(profile, payload)
+	elseif action == "PlacePet" and type(payload) == "table" and type(payload.uid) == "string" then
+		local pedIdx = if payload.pedestalIndex ~= nil then tonumber(payload.pedestalIndex) else nil
+		res = EconomyLogic.placeOrMovePet(
+			profile,
+			payload.uid,
+			pedIdx,
+			DataService.hasPass(player, "Pass_ExtraPedestals")
+		)
+	elseif action == "SellPet" and type(payload) == "string" then
+		res = EconomyLogic.sellPet(profile, payload)
+	end
+
+	local remotes = Remotes.ensureServer()
+	if res.ok then
+		PlotService.refreshPlotVisuals(player, profile)
+		DataService.syncToClient(player)
+		if action == "Fuse" then
+			remotes.ToastNotify:FireClient(
+				player,
+				"STAR FUSION SUCCESS! Pet promoted!",
+				{ 250, 204, 21 }
+			)
+		elseif action == "RerollTrait" and res.data then
+			remotes.ToastNotify:FireClient(
+				player,
+				`Rolled Trait: {res.data.traitId}!`,
+				{ 192, 132, 252 }
+			)
+		end
+	else
+		remotes.ToastNotify:FireClient(
+			player,
+			`Action failed: {res.reason or "Invalid"}`,
+			{ 239, 68, 68 }
+		)
+	end
+end
+
+function PetIncomeService.setTelemetryHook(cb: (string, { [string]: any }) -> ())
+	telemetryHook = cb
+end
+
+function PetIncomeService.init() end
+
+function PetIncomeService.start()
+	local remotes = Remotes.ensureServer()
+
+	remotes.CollectCashPad.OnServerEvent:Connect(function(player: Player, pedestalIndex: any)
+		if pedestalIndex == "AllMagnet" then
+			PetIncomeService.collectAllPadsMagnet(player)
+		elseif type(pedestalIndex) == "number" then
+			PetIncomeService.collectPad(player, pedestalIndex)
+		end
+	end)
+
+	remotes.HatchEgg.OnServerEvent:Connect(function(player: Player, eggId: any, pedestalIndex: any)
+		if type(eggId) ~= "string" or type(pedestalIndex) ~= "number" then
+			return
+		end
+		PetIncomeService.hatchEggOnPedestal(player, eggId, math.floor(pedestalIndex))
+	end)
+
+	remotes.PetAction.OnServerEvent:Connect(handlePetAction)
+
+	Players.PlayerRemoving:Connect(function(player: Player)
+		activeHatchLock[player.UserId] = nil
+	end)
+
+	-- 1 Hz Server-Authoritative Pedestal Cash Pad Accrual
+	task.spawn(function()
+		while true do
+			task.wait(1.0)
+			for _, player in ipairs(Players:GetPlayers()) do
+				local profile = DataService.getProfile(player)
+				local plot = PlotService.getPlotForPlayer(player)
+				if profile and plot then
+					local added = EconomyLogic.accruePedestalCoins(
+						profile,
+						1.0,
+						false,
+						DataService.hasPass(player, "Pass_DoubleCoinsExp")
+					)
+					if added > 0 then
+						for idx, pedModel in pairs(plot.pedestals) do
+							local pad = pedModel:FindFirstChild("CashPad")
+							if pad and pad:IsA("BasePart") then
+								local stored = math.floor(profile.padStoredCoins[idx] or 0)
+								if stored > 0 then
+									pad:SetAttribute("StoredCoins", stored)
+									pad.Color = Color3.fromRGB(74, 222, 128)
+									pad.Material = Enum.Material.Neon
+								end
+							end
+						end
+					end
+				end
+			end
+		end
 	end)
 end
 

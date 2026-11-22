@@ -1,383 +1,478 @@
 --!strict
 --[[
-	BossAIService (Issue #5): thin wrapper that runs one BossAIStateMachine per biome boss
-	room and renders its actions (telegraphs, shockwave ring, rolling boulders).
-	ArenaCycleService decides WHEN a boss exists; this decides how it fights.
+	BossAIService.luau
+	Server-authoritative AI for all 3 Biome Bosses (Mossback Golem, Glacier Yeti, Obsidian Wyrm)
+	with telegraphed AoE/Cone/Projectile/Ring/Geyser attacks AND all 24 Open PvE Layer Mob Spawns.
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local BossAIStateMachine = require(Shared.Utils.BossAIStateMachine)
-local CombatConfigs = require(Shared.Configs.CombatConfigs)
-local CombatMath = require(Shared.Utils.CombatMath)
+local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local ProceduralModels = require(Shared.Utils.ProceduralModels)
+local Remotes = require(Shared.Net.Remotes)
 
-type Vec3 = CombatMath.Vec3
-type BossAction = BossAIStateMachine.BossAction
+local DataService = require(script.Parent.DataService)
+local ArenaCycleService = require(script.Parent.ArenaCycleService)
 
-type Hooks = {
-	getFighterIds: (biomeId: string) -> { number },
-	onDefeated: (biomeId: string) -> (),
-}
-
-type ActiveBoss = {
+export type ActiveMob = {
+	id: string,
+	mobType: string,
 	biomeId: string,
-	fsm: BossAIStateMachine.State,
-	model: Model,
-	arena: Instance,
-	floorY: number,
-	obstacles: { CombatMath.AABB },
-	boulders: { [number]: BasePart },
-	ring: BasePart?,
-	lane: BasePart?,
+	spawnPart: BasePart,
+	model: Model?,
+	hp: number,
+	maxHP: number,
+	alive: boolean,
+	respawnAt: number,
+	lastAttackAt: number,
+	slowUntil: number,
+	stunUntil: number,
 }
 
-local ROOT_HEIGHT = 3 -- boss logic runs at character-root height above the floor
-local BOSS_CONFIG_BY_BIOME: { [string]: any } = {
-	EmeraldMeadow = CombatConfigs.Bosses.MossbackGolem,
-	FrostbiteCavern = CombatConfigs.Bosses.GlacierYeti,
-	MoltenCaldera = CombatConfigs.Bosses.ObsidianWyrm,
-}
-local BOSS_ID_BY_BIOME = {
-	EmeraldMeadow = "MossbackGolem",
-	FrostbiteCavern = "GlacierYeti",
-	MoltenCaldera = "ObsidianWyrm",
-}
--- Placeholder body/accent colours until the #17 meshes are uploaded.
-local BOSS_COLORS = {
-	MossbackGolem = { Color3.fromRGB(86, 110, 70), Color3.fromRGB(70, 170, 70) },
-	GlacierYeti = { Color3.fromRGB(200, 225, 240), Color3.fromRGB(120, 200, 255) },
-	ObsidianWyrm = { Color3.fromRGB(40, 32, 38), Color3.fromRGB(255, 110, 30) },
+export type ActiveBoss = {
+	biomeId: string,
+	bossId: string,
+	model: Model,
+	spawnCF: CFrame,
+	isOvercharged: boolean,
+	nextAttackAt: number,
+	attackIndex: number,
+	slowUntil: number,
+	stunUntil: number,
 }
 
 local BossAIService = {}
 
-local bosses: { [string]: ActiveBoss } = {}
-local hooks: Hooks? = nil
-local mapRoot: Instance? = nil
+local mobs: { ActiveMob } = {}
+local mobByModel: { [Model]: ActiveMob } = {}
+local activeBosses: { [string]: ActiveBoss } = {}
+local bossByModel: { [Model]: ActiveBoss } = {}
 
-local function toVec3(v: Vector3): Vec3
-	return { X = v.X, Y = v.Y, Z = v.Z }
+local function updateHealthBar(model: Model, hp: number, maxHP: number)
+	local root = model.PrimaryPart
+	local bb = if root then root:FindFirstChild("HealthBillboard") else nil
+	local bg = if bb then bb:FindFirstChild("BarBg") else nil
+	local fill = if bg then bg:FindFirstChild("Fill") else nil
+	if fill and fill:IsA("Frame") then
+		local frac = math.clamp(hp / math.max(1, maxHP), 0, 1)
+		fill.Size = UDim2.fromScale(frac, 1)
+	end
 end
 
-local function toVector3(v: Vec3): Vector3
-	return Vector3.new(v.X, v.Y, v.Z)
+local function spawnMobInstance(mob: ActiveMob)
+	if mob.model then
+		mobByModel[mob.model] = nil
+		mob.model:Destroy()
+		mob.model = nil
+	end
+	local cfg = BiomeConfigs.MOBS[mob.mobType]
+	if not cfg then
+		return
+	end
+	local model = ProceduralModels.createMobModel(mob.mobType)
+	model:SetAttribute("EntityKind", "PvEMob")
+	model:SetAttribute("BiomeId", mob.biomeId)
+	model:SetAttribute("MobType", mob.mobType)
+	model:PivotTo(mob.spawnPart.CFrame * CFrame.new(0, 3.2, 0))
+	model.Parent = mob.spawnPart.Parent
+	mob.model = model
+	mob.hp = cfg.maxHP
+	mob.maxHP = cfg.maxHP
+	mob.alive = true
+	mobByModel[model] = mob
+	updateHealthBar(model, mob.hp, mob.maxHP)
 end
 
--- Rendering helpers ------------------------------------------------------------------------
-
-local function makePart(name: string, size: Vector3, color: Color3, parent: Instance): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Size = size
-	part.Color = color
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false -- never block projectile raycasts
-	part.CanTouch = false
-	part.Parent = parent
-	return part
-end
-
--- Real art (from #8) wins when it exists in ServerStorage.BossModels; otherwise a readable
--- placeholder so the fight is playable today.
-local function buildModel(bossId: string, parent: Instance): Model
-	local folder = ServerStorage:FindFirstChild("BossModels")
-	local template = folder and folder:FindFirstChild(bossId)
-	if template and template:IsA("Model") then
-		local model = template:Clone()
-		for _, part in model:GetDescendants() do
-			if part:IsA("BasePart") then
-				part.CanQuery = false -- hits come from the boss sphere, not its mesh
-				part.Anchored = true
+local function discoverMobSpawns()
+	local idx = 0
+	for _, pad in ipairs(CollectionService:GetTagged("MobSpawnZone")) do
+		if pad:IsA("BasePart") then
+			local biomeId = tostring(pad:GetAttribute("BiomeId") or "")
+			local mobType = tostring(pad:GetAttribute("MobType") or "")
+			local cfg = BiomeConfigs.MOBS[mobType]
+			if cfg and BiomeConfigs.getBiome(biomeId) then
+				idx += 1
+				local mob: ActiveMob = {
+					id = `mob_{idx}`,
+					mobType = mobType,
+					biomeId = biomeId,
+					spawnPart = pad,
+					model = nil,
+					hp = cfg.maxHP,
+					maxHP = cfg.maxHP,
+					alive = false,
+					respawnAt = 0,
+					lastAttackAt = 0,
+					slowUntil = 0,
+					stunUntil = 0,
+				}
+				table.insert(mobs, mob)
+				spawnMobInstance(mob)
 			end
 		end
-		model.Parent = parent
-		return model
 	end
-	local model = Instance.new("Model")
-	model.Name = bossId
-	local colors = BOSS_COLORS[bossId] or BOSS_COLORS.MossbackGolem
-	local body = makePart("Body", Vector3.new(9, 11, 9), colors[1], model)
-	body.Material = Enum.Material.Slate
-	local moss = makePart("Moss", Vector3.new(9.6, 2.5, 9.6), colors[2], model)
-	moss.Material = Enum.Material.Grass
-	moss.CFrame = body.CFrame * CFrame.new(0, 5, 0)
-	model.PrimaryPart = body
-	model.Parent = parent
-	return model
 end
 
-local function placeModel(boss: ActiveBoss)
-	local pos = boss.fsm.position
-	local center = Vector3.new(pos.X, boss.floorY + boss.model:GetExtentsSize().Y / 2, pos.Z)
-	boss.model:PivotTo(CFrame.new(center))
-end
-
-local function aabbOf(part: BasePart): CombatMath.AABB
-	local half = part.Size / 2
-	return { min = toVec3(part.Position - half), max = toVec3(part.Position + half) }
-end
-
-local function collectObstacles(arena: Instance): { CombatMath.AABB }
-	local boxes = {}
-	for _, child in arena:GetDescendants() do
-		local isCover = child.Name:match("^CoverPillar_") or child.Name:match("^ArenaWall_")
-		if isCover and child:IsA("BasePart") then
-			table.insert(boxes, aabbOf(child))
+local function findNearestTarget(
+	pos: Vector3,
+	maxRange: number,
+	requiredZone: string,
+	biomeId: string
+): (Player?, BasePart?)
+	local bestPlr: Player? = nil
+	local bestHrp: BasePart? = nil
+	local bestDist = maxRange
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if
+			plr:GetAttribute("Zone") == requiredZone
+			and plr:GetAttribute("ActiveBiome") == biomeId
+		then
+			local char = plr.Character
+			local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+			local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+			if hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
+				local d = (hrp.Position - pos).Magnitude
+				if d < bestDist then
+					bestDist = d
+					bestPlr = plr
+					bestHrp = hrp
+				end
+			end
 		end
 	end
-	return boxes
+	return bestPlr, bestHrp
 end
 
--- Action rendering --------------------------------------------------------------------------
-
-local function damagePlayer(userId: number, amount: number, push: Vector3?)
-	local player = Players:GetPlayerByUserId(userId)
-	local character = player and player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if humanoid and humanoid.Health > 0 then
-		humanoid:TakeDamage(amount)
-		if push and root and root:IsA("BasePart") then
-			root.AssemblyLinearVelocity = push + Vector3.new(0, 18, 0)
-		end
-	end
-end
-
-local function clearTelegraphs(boss: ActiveBoss)
-	if boss.ring then
-		boss.ring:Destroy()
-		boss.ring = nil
-	end
-	if boss.lane then
-		boss.lane:Destroy()
-		boss.lane = nil
-	end
-end
-
-local function showSlam(boss: ActiveBoss, a: BossAction)
-	clearTelegraphs(boss)
-	local radius = a.radius or 0
-	local ring = makePart(
-		"SlamTelegraph",
-		Vector3.new(0.4, radius * 2, radius * 2),
-		Color3.fromRGB(255, 70, 40),
-		boss.arena
-	)
-	ring.Shape = Enum.PartType.Cylinder
-	ring.Transparency = 0.6
-	ring.CFrame = CFrame.new(boss.fsm.position.X, boss.floorY + 0.3, boss.fsm.position.Z)
-		* CFrame.Angles(0, 0, math.rad(90))
-	boss.ring = ring
-end
-
-local function updateRing(boss: ActiveBoss, radius: number)
-	local ring = boss.ring
-	if ring then
-		ring.Material = Enum.Material.Neon
-		ring.Transparency = 0.35
-		ring.Size = Vector3.new(0.6, math.max(0.1, radius * 2), math.max(0.1, radius * 2))
-	end
-end
-
-local function showLane(boss: ActiveBoss, a: BossAction)
-	clearTelegraphs(boss)
-	local dir = toVector3(a.direction or { X = 0, Y = 0, Z = 1 })
-	local length = boss.fsm.config.boulder.maxDistance
-	local origin = Vector3.new(boss.fsm.position.X, boss.floorY + 0.25, boss.fsm.position.Z)
-	local lane = makePart(
-		"BoulderLane",
-		Vector3.new(boss.fsm.config.boulder.radius * 2, 0.3, length),
-		Color3.fromRGB(255, 140, 40),
-		boss.arena
-	)
-	lane.Material = Enum.Material.Neon
-	lane.Transparency = 0.5
-	lane.CFrame = CFrame.lookAt(origin + dir * length / 2, origin + dir * length)
-	boss.lane = lane
-end
-
-local function renderBoulder(boss: ActiveBoss, a: BossAction)
-	local id = a.boulderId
-	if not id then
+local function executeBossAttack(boss: ActiveBoss, targetPos: Vector3)
+	local cfg = BiomeConfigs.BOSSES[boss.bossId]
+	if not cfg or #cfg.attacks == 0 then
 		return
 	end
-	if a.kind == "SpawnBoulder" then
-		clearTelegraphs(boss)
-		local d = boss.fsm.config.boulder.radius * 2
-		local ball =
-			makePart("Boulder", Vector3.new(d, d, d), Color3.fromRGB(110, 100, 85), boss.arena)
-		ball.Shape = Enum.PartType.Ball
-		ball.Material = Enum.Material.Slate
-		boss.boulders[id] = ball
-	end
-	local ball = boss.boulders[id]
-	if ball and a.position then
-		ball.Position = toVector3(a.position)
-			- Vector3.new(0, ROOT_HEIGHT - boss.fsm.config.boulder.radius, 0)
-	elseif ball and a.kind == "DespawnBoulder" then
-		ball:Destroy()
-		boss.boulders[id] = nil
-	end
-end
+	boss.attackIndex = (boss.attackIndex % #cfg.attacks) + 1
+	local atk = cfg.attacks[boss.attackIndex]
+	local remotes = Remotes.ensureServer()
+	local origin = if boss.model.PrimaryPart
+		then boss.model.PrimaryPart.Position
+		else boss.spawnCF.Position
+	local impactPos = if atk.kind == "Shockwave" or atk.kind == "Cone" then origin else targetPos
 
-local function handleAction(boss: ActiveBoss, a: BossAction)
-	local kind = a.kind
-	if kind == "MoveTo" then
-		placeModel(boss)
-	elseif kind == "TelegraphSlam" then
-		showSlam(boss, a)
-	elseif kind == "SlamShockwaveTick" then
-		updateRing(boss, a.radius or 0)
-	elseif kind == "SlamHit" and a.playerId then
-		damagePlayer(a.playerId, a.damage or 0, nil)
-	elseif kind == "TelegraphBoulder" then
-		showLane(boss, a)
-	elseif kind == "BoulderHit" and a.playerId then
-		local push = toVector3(a.direction or { X = 0, Y = 0, Z = 0 }) * (a.knockbackImpulse or 0)
-		damagePlayer(a.playerId, a.damage or 0, push)
-	elseif kind == "BossDamaged" then
-		boss.model:SetAttribute("Health", a.currentHp)
-	else
-		renderBoulder(boss, a)
-	end
-end
+	-- Broadcast telegraph indicator to clients
+	remotes.BossTelegraph:FireAllClients({
+		biomeId = boss.biomeId,
+		kind = atk.kind,
+		origin = origin,
+		impactPos = impactPos,
+		radius = atk.radius,
+		telegraphSec = atk.telegraphSec,
+		color = cfg.accentColor,
+	})
 
-local function teardown(boss: ActiveBoss)
-	clearTelegraphs(boss)
-	for _, ball in boss.boulders do
-		ball:Destroy()
-	end
-	boss.model:Destroy()
-	bosses[boss.biomeId] = nil
-end
-
-local function dispatch(boss: ActiveBoss, actions: { BossAction })
-	local defeated = false
-	for _, a in actions do
-		handleAction(boss, a)
-		defeated = defeated or a.kind == "BossDefeated"
-	end
-	local state = boss.fsm.state
-	if boss.ring and state ~= "Windup_Slam" and state ~= "Active_Slam" then
-		clearTelegraphs(boss) -- slam finished: remove the ring
-	end
-	if defeated and hooks then
-		teardown(boss)
-		hooks.onDefeated(boss.biomeId)
-	end
-end
-
--- Heartbeat ---------------------------------------------------------------------------------
-
-local function snapshotTargets(biomeId: string): { BossAIStateMachine.TargetSnapshot }
-	local targets = {}
-	local ids: { number } = if hooks then hooks.getFighterIds(biomeId) else {}
-	for _, userId in ids do
-		local player = Players:GetPlayerByUserId(userId)
-		local root = player
-			and player.Character
-			and player.Character:FindFirstChild("HumanoidRootPart")
-		if root and root:IsA("BasePart") then
-			table.insert(targets, { playerId = userId, position = toVec3(root.Position) })
+	task.delay(atk.telegraphSec, function()
+		if activeBosses[boss.biomeId] ~= boss then
+			return
 		end
-	end
-	return targets
-end
-
-local function onHeartbeat()
-	local now = os.clock()
-	for _, boss in table.clone(bosses) do
-		local result =
-			BossAIStateMachine.tick(boss.fsm, now, snapshotTargets(boss.biomeId), boss.obstacles)
-		if result.ok then
-			dispatch(boss, result.actions)
+		local st = ArenaCycleService.getBiomeState(boss.biomeId)
+		if not st or st.phase ~= "Boss_Phase" then
+			return
 		end
-	end
+		local dmgScale = if boss.isOvercharged then 1.25 else 1.0
+		for uid in pairs(st.activePlayers) do
+			local plr = Players:GetPlayerByUserId(uid)
+			local char = if plr then plr.Character else nil
+			local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+			local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+			if plr and hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
+				if (hrp.Position - impactPos).Magnitude <= atk.radius then
+					hum.Health = math.max(0, hum.Health - atk.damage * dmgScale)
+					if hum.Health <= 0 then
+						ArenaCycleService.onPlayerDamagedInPvP(plr, nil, true)
+					end
+				end
+			end
+		end
+	end)
 end
 
--- Public API ---------------------------------------------------------------------------------
-
-function BossAIService.init(map: Instance, serviceHooks: Hooks)
-	mapRoot = map
-	hooks = serviceHooks
-	RunService.Heartbeat:Connect(onHeartbeat)
-end
-
--- ArenaCycleService.onSpawnBoss
-function BossAIService.spawn(biomeId: string, maxHp: number, isOvercharged: boolean, spawn: CFrame)
-	local config = BOSS_CONFIG_BY_BIOME[biomeId] or CombatConfigs.Bosses.MossbackGolem
-	local biomes = mapRoot and mapRoot:FindFirstChild("Biomes")
-	local biome = biomes and biomes:FindFirstChild(biomeId)
-	local arena = biome and biome:FindFirstChild("BossPvPArena")
-	if not arena or bosses[biomeId] then
+function BossAIService.spawnBoss(
+	biomeId: string,
+	spawnPart: BasePart,
+	maxHP: number,
+	isOvercharged: boolean
+)
+	BossAIService.clearBoss(biomeId)
+	local bossCfg = BiomeConfigs.getBossForBiome(biomeId)
+	if not bossCfg then
 		return
 	end
-	local position = toVec3(spawn.Position + Vector3.new(0, ROOT_HEIGHT, 0))
+	local model = ProceduralModels.createBossModel(bossCfg.id, isOvercharged)
+	model:SetAttribute("EntityKind", "BiomeBoss")
+	model:SetAttribute("BiomeId", biomeId)
+	model:SetAttribute("BossId", bossCfg.id)
+	local spawnCF = spawnPart.CFrame * CFrame.new(0, 7, 0)
+	model:PivotTo(spawnCF)
+	model.Parent = spawnPart.Parent
+
 	local boss: ActiveBoss = {
 		biomeId = biomeId,
-		fsm = BossAIStateMachine.new(config, position, maxHp, isOvercharged, os.clock()),
-		model = buildModel(BOSS_ID_BY_BIOME[biomeId] or "MossbackGolem", arena),
-		arena = arena,
-		floorY = spawn.Position.Y,
-		obstacles = collectObstacles(arena),
-		boulders = {},
+		bossId = bossCfg.id,
+		model = model,
+		spawnCF = spawnCF,
+		isOvercharged = isOvercharged,
+		nextAttackAt = os.clock() + 2.2,
+		attackIndex = 0,
+		slowUntil = 0,
+		stunUntil = 0,
 	}
-	boss.model:SetAttribute("Health", maxHp)
-	boss.model:SetAttribute("MaxHealth", maxHp)
-	boss.model:SetAttribute("BiomeId", biomeId)
-	placeModel(boss)
-	bosses[biomeId] = boss
+	activeBosses[biomeId] = boss
+	bossByModel[model] = boss
+	updateHealthBar(model, maxHP, maxHP)
 end
 
--- ArenaCycleService.onDespawnBoss (timeout, everyone eliminated, or after defeat).
-function BossAIService.despawn(biomeId: string)
-	local boss = bosses[biomeId]
-	if boss then
-		teardown(boss)
+function BossAIService.clearBoss(biomeId: string)
+	local existing = activeBosses[biomeId]
+	if existing then
+		bossByModel[existing.model] = nil
+		existing.model:Destroy()
+		activeBosses[biomeId] = nil
 	end
 end
 
--- CombatService reports a validated ball hit on the boss.
-function BossAIService.applyDamage(biomeId: string, amount: number, attackerId: number?): boolean
-	local boss = bosses[biomeId]
-	if not boss then
+function BossAIService.getMobFromPart(part: BasePart): ActiveMob?
+	local cur: Instance? = part
+	while cur and cur ~= workspace do
+		if cur:IsA("Model") and mobByModel[cur] then
+			return mobByModel[cur]
+		end
+		cur = cur.Parent
+	end
+	return nil
+end
+
+function BossAIService.getBossFromPart(part: BasePart): ActiveBoss?
+	local cur: Instance? = part
+	while cur and cur ~= workspace do
+		if cur:IsA("Model") and bossByModel[cur] then
+			return bossByModel[cur]
+		end
+		cur = cur.Parent
+	end
+	return nil
+end
+
+function BossAIService.getActiveBoss(biomeId: string): ActiveBoss?
+	return activeBosses[biomeId]
+end
+
+function BossAIService.getNearbyMobs(
+	biomeId: string,
+	pos: Vector3,
+	radius: number,
+	exclude: ActiveMob?
+): { ActiveMob }
+	local out: { ActiveMob } = {}
+	for _, m in ipairs(mobs) do
+		if
+			m.alive
+			and m.biomeId == biomeId
+			and m ~= exclude
+			and m.model
+			and m.model.PrimaryPart
+		then
+			if (m.model.PrimaryPart.Position - pos).Magnitude <= radius then
+				table.insert(out, m)
+			end
+		end
+	end
+	return out
+end
+
+function BossAIService.damageMob(
+	mob: ActiveMob,
+	attacker: Player,
+	damage: number,
+	slowDur: number,
+	stunDur: number
+): boolean
+	if not mob.alive or not mob.model then
 		return false
 	end
-	local result = BossAIStateMachine.applyDamage(boss.fsm, amount, os.clock(), attackerId)
-	dispatch(boss, result.actions)
-	return result.ok
-end
-
--- Swept-sphere target for CombatService, or nil when this biome has no live boss.
-function BossAIService.getHitTarget(biomeId: string): CombatMath.SweepTarget?
-	local boss = bosses[biomeId]
-	if not boss then
-		return nil
+	local now = os.clock()
+	if slowDur > 0 then
+		mob.slowUntil = math.max(mob.slowUntil, now + slowDur)
 	end
-	return {
-		id = biomeId,
-		kind = "Boss",
-		position = boss.fsm.position,
-		radius = boss.fsm.config.hitRadius,
-	}
-end
-
-function BossAIService.getHealth(biomeId: string): (number?, number?)
-	local boss = bosses[biomeId]
-	if not boss then
-		return nil, nil
+	if stunDur > 0 then
+		mob.stunUntil = math.max(mob.stunUntil, now + stunDur)
 	end
-	return boss.fsm.currentHp, boss.fsm.maxHp
+	mob.hp = math.max(0, mob.hp - damage)
+	updateHealthBar(mob.model, mob.hp, mob.maxHP)
+	if mob.hp <= 0 then
+		local cfg = BiomeConfigs.MOBS[mob.mobType]
+		mob.alive = false
+		mob.respawnAt = now + (if cfg then cfg.respawnSec else 7)
+		mobByModel[mob.model] = nil
+		mob.model:Destroy()
+		mob.model = nil
+
+		local profile = DataService.getProfile(attacker)
+		if profile and cfg then
+			local mult = if DataService.hasPass(attacker, "Pass_DoubleCoinsExp") then 2 else 1
+			profile.coins += cfg.coinReward * mult
+			profile.ballDamage += cfg.ballDmgGain
+			local lvls = EconomyLogic.addExp(profile, cfg.expReward * mult)
+			if lvls > 0 then
+				Remotes.ensureServer().ToastNotify:FireClient(
+					attacker,
+					`LEVEL UP! Level {profile.level} (+{lvls * 25} Max HP)`,
+					{ 74, 222, 128 }
+				)
+			end
+			DataService.syncToClient(attacker)
+		end
+		return true
+	end
+	return false
 end
 
-function BossAIService.getModel(biomeId: string): Model?
-	local boss = bosses[biomeId]
-	return if boss then boss.model else nil
+function BossAIService.damageBoss(
+	boss: ActiveBoss,
+	attacker: Player,
+	damage: number,
+	slowDur: number,
+	stunDur: number
+): boolean
+	local now = os.clock()
+	if slowDur > 0 then
+		boss.slowUntil = math.max(boss.slowUntil, now + slowDur)
+	end
+	if stunDur > 0 then
+		boss.stunUntil = math.max(boss.stunUntil, now + stunDur)
+	end
+	local ok = ArenaCycleService.damageBoss(boss.biomeId, attacker, damage)
+	local st = ArenaCycleService.getBiomeState(boss.biomeId)
+	if ok and st and activeBosses[boss.biomeId] == boss then
+		updateHealthBar(boss.model, st.bossHP, st.bossMaxHP)
+	end
+	return ok
+end
+
+function BossAIService.init()
+	ArenaCycleService.setBossHooks(BossAIService.spawnBoss, BossAIService.clearBoss)
+	discoverMobSpawns()
+end
+
+local function smoothStepModel(model: Model, nextPos: Vector3, lookAtPos: Vector3, dt: number)
+	local curCF = model:GetPivot()
+	local targetCF = CFrame.lookAt(nextPos, Vector3.new(lookAtPos.X, nextPos.Y, lookAtPos.Z))
+	local turnAlpha = 1 - math.exp(-8 * dt)
+	local blendedRot = curCF.Rotation:Lerp(targetCF.Rotation, turnAlpha)
+	model:PivotTo(CFrame.new(nextPos) * blendedRot)
+end
+
+local function stepSingleMob(mob: ActiveMob, now: number, dt: number)
+	if not mob.alive then
+		if now >= mob.respawnAt then
+			spawnMobInstance(mob)
+		end
+		return
+	end
+	if not mob.model or not mob.model.PrimaryPart then
+		return
+	end
+	local cfg = BiomeConfigs.MOBS[mob.mobType]
+	local root = mob.model.PrimaryPart
+	if not cfg or now < mob.stunUntil then
+		mob.model:SetAttribute("IsMoving", false)
+		return
+	end
+	local speedMult = if now < mob.slowUntil then 0.7 else 1.0
+	local targetPlr, targetHrp = findNearestTarget(root.Position, 58, "BiomePvE", mob.biomeId)
+	if targetPlr and targetHrp then
+		local toTarget = Vector3.new(
+			targetHrp.Position.X - root.Position.X,
+			0,
+			targetHrp.Position.Z - root.Position.Z
+		)
+		local dist = toTarget.Magnitude
+		if dist > cfg.attackRange then
+			local step = math.min(dist - cfg.attackRange + 0.5, cfg.moveSpeed * speedMult * dt)
+			local nextPos = root.Position + toTarget.Unit * step
+			smoothStepModel(mob.model, nextPos, targetHrp.Position, dt)
+			mob.model:SetAttribute("IsMoving", true)
+		else
+			mob.model:SetAttribute("IsMoving", false)
+			if now >= mob.lastAttackAt + cfg.attackCooldown then
+				mob.lastAttackAt = now
+				local hum = if targetPlr.Character
+					then targetPlr.Character:FindFirstChildOfClass("Humanoid")
+					else nil
+				if hum and hum.Health > 0 then
+					hum.Health = math.max(0, hum.Health - cfg.attackDamage)
+				end
+			end
+		end
+	else
+		local home = mob.spawnPart.Position + Vector3.new(0, 3.2, 0)
+		local toHome = Vector3.new(home.X - root.Position.X, 0, home.Z - root.Position.Z)
+		if toHome.Magnitude > 2.5 then
+			local nextPos = root.Position
+				+ toHome.Unit * math.min(toHome.Magnitude, cfg.moveSpeed * 0.65 * dt)
+			smoothStepModel(mob.model, nextPos, home, dt)
+			mob.model:SetAttribute("IsMoving", true)
+		else
+			mob.model:SetAttribute("IsMoving", false)
+		end
+	end
+end
+
+local function stepSingleBoss(biomeId: string, boss: ActiveBoss, now: number, dt: number)
+	local cfg = BiomeConfigs.BOSSES[boss.bossId]
+	local root = boss.model.PrimaryPart
+	if not cfg or not root or now < boss.stunUntil then
+		boss.model:SetAttribute("IsMoving", false)
+		return
+	end
+	local speedMult = if now < boss.slowUntil then 0.75 else 1.0
+	local _, targetHrp = findNearestTarget(root.Position, 160, "LockedBossPvP", biomeId)
+	if not targetHrp then
+		boss.model:SetAttribute("IsMoving", false)
+		return
+	end
+	local toTarget = Vector3.new(
+		targetHrp.Position.X - root.Position.X,
+		0,
+		targetHrp.Position.Z - root.Position.Z
+	)
+	if toTarget.Magnitude > 14 then
+		local nextPos = root.Position + toTarget.Unit * (cfg.moveSpeed * speedMult * dt)
+		smoothStepModel(boss.model, nextPos, targetHrp.Position, dt)
+		boss.model:SetAttribute("IsMoving", true)
+	else
+		boss.model:SetAttribute("IsMoving", false)
+	end
+	if now >= boss.nextAttackAt then
+		local atk = cfg.attacks[(boss.attackIndex % #cfg.attacks) + 1]
+		local agg = if boss.isOvercharged then BiomeConfigs.OVERCHARGED_AGGRESSION_MULT else 1.0
+		boss.nextAttackAt = now + (atk.cooldownSec * agg)
+		executeBossAttack(boss, targetHrp.Position)
+	end
+end
+
+function BossAIService.start()
+	RunService.Heartbeat:Connect(function(rawDt: number)
+		local dt = math.min(rawDt, 0.08)
+		local now = os.clock()
+		for _, mob in ipairs(mobs) do
+			stepSingleMob(mob, now, dt)
+		end
+		for biomeId, boss in pairs(activeBosses) do
+			stepSingleBoss(biomeId, boss, now, dt)
+		end
+	end)
 end
 
 return BossAIService

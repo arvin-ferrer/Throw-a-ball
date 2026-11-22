@@ -1,175 +1,193 @@
 --!strict
 --[[
-	EconomyService (Issue #9): the ONLY way Coins, Boss Gems, tiers and eggs change. Every
-	change is an EconomyLedger transaction with a server-generated id, so it is atomic, can't
-	go negative, and a replayed request can't double-spend. Balances are mirrored to Player
-	attributes for the HUD (read-only display; the profile is the truth).
+	EconomyService.luau
+	Server-authoritative atomic progression transactions:
+	Training Target Tiers, Ball Shop Tiers, Pedestal Expansion (4->12), Offline Vault (50%->100%),
+	Active Equip Slots (1->3), Gem-Craftable Biome Eggs, Cosmetics, and Soft Ascension.
 ]]
 
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
-local EconomyLedger = require(Shared.Utils.EconomyLedger)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local Remotes = require(Shared.Net.Remotes)
+
 local DataService = require(script.Parent.DataService)
-
-type Ledger = EconomyLedger.PlayerData
-type Result = EconomyLedger.TransactionResult
-
-local MIRRORED: { [string]: string } = {
-	Coins = "coins",
-	BossGems = "bossGems",
-	BallTier = "ballTierId",
-	TargetTier = "targetTierId",
-	PedestalsUnlocked = "pedestalsUnlocked",
-	OfflineVaultTier = "offlineVaultTier",
-	AscensionRank = "ascensionRank",
-}
--- Training stats are earned by CombatService (attributes) and persisted from there.
-local TRAINING: { [string]: string } =
-	{ BallDamage = "ballDamage", ThrowSpeed = "throwSpeed", Level = "level", Exp = "exp" }
+local PlotService = require(script.Parent.PlotService)
+local PetIncomeService = require(script.Parent.PetIncomeService)
 
 local EconomyService = {}
 
-local function newId(prefix: string): string
-	return `{prefix}:{HttpService:GenerateGUID(false)}`
-end
+local telemetryHook: ((string, { [string]: any }) -> ())? = nil
 
-local function mirror(player: Player, data: Ledger)
-	for attribute, field in MIRRORED do
-		player:SetAttribute(attribute, (data :: any)[field])
+local function notifyResult(player: Player, ok: boolean, successMsg: string, failReason: string?)
+	local remotes = Remotes.ensureServer()
+	if ok then
+		remotes.ToastNotify:FireClient(player, successMsg, { 74, 222, 128 })
+	else
+		remotes.ToastNotify:FireClient(
+			player,
+			`Upgrade blocked: {failReason or "Unavailable"}`,
+			{ 239, 68, 68 }
+		)
 	end
 end
 
--- Run one ledger transaction for a loaded player and refresh the HUD mirror.
-local function transact(player: Player, run: (data: Ledger) -> Result): Result
-	local data = DataService.get(player)
-	if not data then
-		return { ok = false, reason = "ProfileNotLoaded" }
-	end
-	local result = run(data)
-	if result.ok then
-		mirror(player, data)
-	end
-	return result
-end
-
-local function onLoaded(player: Player, data: Ledger)
-	for attribute, field in TRAINING do
-		player:SetAttribute(attribute, (data :: any)[field])
-	end
-	mirror(player, data)
-	-- Persist training progress as CombatService raises it (finite, never lowered by clients).
-	for attribute, field in TRAINING do
-		player:GetAttributeChangedSignal(attribute):Connect(function()
-			local value = player:GetAttribute(attribute)
-			if type(value) == "number" and value == value and value >= 0 and value < math.huge then
-				(data :: any)[field] = value
-			end
-		end)
-	end
-end
-
--- Server-side grants -----------------------------------------------------------------------------
-
-function EconomyService.grantCoins(player: Player, amount: number, reason: string): Result
-	local coins = math.floor(amount)
-	if coins <= 0 then
-		return { ok = false, reason = "InvalidAmount" }
-	end
-	return transact(player, function(data)
-		return EconomyLedger.grantCoins(data, newId(reason), coins)
-	end)
-end
-
-function EconomyService.grantBossGems(player: Player, amount: number, reason: string): Result
-	return transact(player, function(data)
-		return EconomyLedger.grantBossGems(data, newId(reason), math.floor(amount))
-	end)
-end
-
--- ArenaCycleService.onAwardEgg: the egg plus bonus Gems.
-function EconomyService.awardArenaWin(userId: number, biomeId: string, eggType: string)
-	local player = Players:GetPlayerByUserId(userId)
-	if not player then
+local function handleBuyCosmetic(
+	player: Player,
+	profile: EconomyLogic.PlayerProfile,
+	cosmeticId: string
+)
+	local spec = MonetizationConfigs.COSMETICS[cosmeticId]
+	if not spec then
+		notifyResult(player, false, "", "UnknownCosmetic")
 		return
 	end
-	transact(player, function(data)
-		return EconomyLedger.grantEgg(data, newId("BossEgg"), eggType, biomeId)
-	end)
-	EconomyService.grantBossGems(player, BiomeConfigs.ArenaRewards.winnerBonusBossGems, "WinGems")
+	if profile.ownedCosmetics[cosmeticId] then
+		if spec.category == "BallSkin" then
+			profile.equippedBallSkin = cosmeticId
+			DataService.syncToClient(player)
+			notifyResult(player, true, `Equipped {spec.displayName}!`, nil)
+		end
+		return
+	end
+	if profile.bossGems < spec.costGems then
+		notifyResult(player, false, "", "InsufficientGems")
+		return
+	end
+	profile.bossGems -= spec.costGems
+	profile.ownedCosmetics[cosmeticId] = true
+	if spec.category == "BallSkin" then
+		profile.equippedBallSkin = cosmeticId
+	end
+	DataService.syncToClient(player)
+	notifyResult(player, true, `Unlocked {spec.displayName}!`, nil)
 end
 
--- Every participant earns Coins and a Gem (EXP is granted by CombatService's level curve).
-function EconomyService.awardConsolation(userIds: { number }, biomeId: string)
-	local biome = BiomeConfigs.get(biomeId)
-	local rewards = BiomeConfigs.ArenaRewards
-	for _, userId in userIds do
-		local player = Players:GetPlayerByUserId(userId)
-		if player and biome then
-			EconomyService.grantCoins(
+local function handleUpgradeAction(player: Player, action: any, arg: any)
+	if type(action) ~= "string" then
+		return
+	end
+	local profile = DataService.getProfile(player)
+	if not profile then
+		return
+	end
+
+	local res: EconomyLogic.TxResult = { ok = false, reason = "UnknownAction" }
+	local successMsg = "Upgraded!"
+
+	if action == "UpgradeTarget" then
+		res = EconomyLogic.buyNextTargetTier(profile)
+		successMsg =
+			`Training Targets upgraded to {if res.data then res.data.targetTierId else ""}!`
+	elseif action == "UpgradeBall" then
+		res = EconomyLogic.buyNextBallTier(profile)
+		successMsg = `Throwable Ball upgraded to {if res.data then res.data.ballTierId else ""}!`
+	elseif action == "UnlockPedestal" then
+		res = EconomyLogic.unlockNextPedestal(profile)
+		successMsg = `Pedestal #{if res.data then res.data.pedestalsUnlocked else 0} unlocked!`
+	elseif action == "UpgradeOfflineVault" then
+		res = EconomyLogic.upgradeOfflineVault(profile)
+		local pct = if res.data then math.floor((res.data.efficiency or 0.5) * 100) else 50
+		successMsg = `Offline Vault upgraded to {pct}% efficiency!`
+	elseif action == "UnlockActiveSlot" then
+		res = EconomyLogic.unlockNextActiveSlot(profile)
+		successMsg =
+			`Active Combat Slot #{if res.data then res.data.activeSlotsUnlocked else 1} unlocked!`
+	elseif action == "CraftBiomeEgg" and type(arg) == "string" then
+		res = EconomyLogic.craftStandardBiomeEgg(profile, arg)
+		successMsg = `Crafted {if res.data then res.data.eggId else "Biome Egg"}!`
+	elseif action == "SoftAscend" then
+		res = EconomyLogic.performSoftAscension(profile)
+		successMsg =
+			`ASCENSION RANK {if res.data then res.data.ascensionRank else 1}! +25% Coins & +5% Training!`
+		if res.ok and telemetryHook then
+			telemetryHook("SoftAscension", { userId = player.UserId, rank = profile.ascensionRank })
+		end
+	elseif action == "BuyCosmetic" and type(arg) == "string" then
+		handleBuyCosmetic(player, profile, arg)
+		return
+	end
+
+	if res.ok then
+		PlotService.refreshPlotVisuals(player, profile)
+		DataService.syncToClient(player)
+		notifyResult(player, true, successMsg, nil)
+	else
+		notifyResult(player, false, "", res.reason)
+	end
+end
+
+local function onPedestalPrompt(player: Player, pedestalIndex: number)
+	local profile = DataService.getProfile(player)
+	if not profile then
+		return
+	end
+	local hasVip = DataService.hasPass(player, "Pass_ExtraPedestals")
+	local isVipSlot = pedestalIndex == 13 or pedestalIndex == 14
+	local unlocked = (not isVipSlot and pedestalIndex <= profile.pedestalsUnlocked)
+		or (isVipSlot and hasVip)
+	if not unlocked then
+		if not isVipSlot and pedestalIndex == profile.pedestalsUnlocked + 1 then
+			handleUpgradeAction(player, "UnlockPedestal", nil)
+		else
+			Remotes.ensureServer().ToastNotify:FireClient(
 				player,
-				rewards.participantCoinsPerRecDamage * biome.recommendedDamage,
-				"ArenaCoins"
+				if isVipSlot
+					then "Requires +2 Pedestals VIP Game Pass!"
+					else "Unlock earlier pedestals first!",
+				{ 250, 204, 21 }
 			)
-			EconomyService.grantBossGems(player, rewards.participantBossGems, "ArenaGems")
+		end
+		return
+	end
+	-- Check if pedestal already has a pet
+	for _, pet in ipairs(profile.pets) do
+		if pet.pedestalIndex == pedestalIndex then
+			Remotes.ensureServer().ToastNotify:FireClient(
+				player,
+				"Open Pets Menu [P] to Level Up, Fuse, or Toggle Active Follower!",
+				{ 56, 189, 248 }
+			)
+			return
 		end
 	end
+	local eggId = PetIncomeService.pickDefaultEggForPlayer(profile)
+	if eggId then
+		PetIncomeService.hatchEggOnPedestal(player, eggId, pedestalIndex)
+	else
+		Remotes.ensureServer().ToastNotify:FireClient(
+			player,
+			"No Eggs in Backpack! Win a Biome Boss Egg or Craft one with Boss Gems!",
+			{ 250, 204, 21 }
+		)
+	end
 end
 
-function EconomyService.getAscensionMultipliers(player: Player): (number, number)
-	local data = DataService.get(player)
-	if not data then
-		return 1, 1
-	end
-	return EconomyLedger.getAscensionMultipliers(data)
+function EconomyService.setTelemetryHook(cb: (string, { [string]: any }) -> ())
+	telemetryHook = cb
 end
 
--- Shop remote (RemoteFunction ShopPurchase) ---------------------------------------------------------
--- The client sends (kind, argument, requestId). requestId makes a retried click idempotent:
--- the transaction id is scoped to this player, so one player can never replay another's.
-
-local SHOP: { [string]: (data: Ledger, id: string, arg: string) -> Result } = {
-	BallTier = EconomyLedger.purchaseBallTier,
-	TargetTier = EconomyLedger.purchaseTargetTier,
-	Pedestal = function(data, id, _arg)
-		return EconomyLedger.expandPedestals(data, id)
-	end,
-	OfflineVault = function(data, id, _arg)
-		return EconomyLedger.upgradeOfflineVault(data, id)
-	end,
-	GemEgg = EconomyLedger.craftGemEgg,
-	Ascend = function(data, id, _arg)
-		return EconomyLedger.softAscend(data, id)
-	end,
-}
-
-local function onShopPurchase(player: Player, kind: unknown, arg: unknown, requestId: unknown): any
-	local handler = if type(kind) == "string" then SHOP[kind] else nil
-	local validId = type(requestId) == "string" and #requestId > 0 and #requestId <= 64
-	if not handler or not validId or (arg ~= nil and (type(arg) ~= "string" or #arg > 64)) then
-		return { ok = false, reason = "InvalidRequest" }
-	end
-	local result = transact(player, function(data)
-		return handler(data, `shop:{player.UserId}:{requestId}`, (arg or "") :: string)
-	end)
-	return { ok = result.ok, reason = result.reason, replayed = result.replayed }
+function EconomyService.init()
+	PlotService.setCallbacks({
+		onHatch = onPedestalPrompt,
+		onCollectPad = function(player: Player, idx: number)
+			PetIncomeService.collectPad(player, idx)
+		end,
+		onUpgradeTarget = function(player: Player)
+			handleUpgradeAction(player, "UpgradeTarget", nil)
+		end,
+		onService = function(player: Player, serviceId: string)
+			Remotes.ensureServer().ToastNotify
+				:FireClient(player, `OPEN_MODAL:{serviceId}`, { 56, 189, 248 })
+		end,
+	})
 end
 
-function EconomyService.start(remotesFolder: Folder, afterLoad: ((Player, Ledger) -> ())?)
-	DataService.start(function(player, data)
-		onLoaded(player, data)
-		if afterLoad then
-			afterLoad(player, data) -- e.g. offline pad income (#10)
-		end
-	end)
-	local shop = remotesFolder:FindFirstChild(Remotes.Names.ShopPurchase)
-	if shop and shop:IsA("RemoteFunction") then
-		shop.OnServerInvoke = onShopPurchase
-	end
+function EconomyService.start()
+	local remotes = Remotes.ensureServer()
+	remotes.UpgradeAction.OnServerEvent:Connect(handleUpgradeAction)
 end
 
 return EconomyService

@@ -1,64 +1,117 @@
 --!strict
 --[[
-	Remote contract (Issue #1). Names match ClientNet.Remotes (PR #21) so the client wrapper
-	resolves them by FindFirstChild on the ReplicatedStorage.Remotes folder.
-	Server creates the folder once; clients WaitForChild it.
+	Remotes.luau
+	Typed RemoteEvent & RemoteFunction contract shared by Server Services and Client Controllers.
+	Remotes are created in code by the Server (never hand-placed in Explorer).
 ]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+export type RemoteBundle = {
+	Folder: Folder,
+	-- Client -> Server Gameplay & Combat
+	ThrowBall: RemoteEvent,
+	SetTrainingStance: RemoteEvent,
+	DashRequest: RemoteEvent,
+	OptInBoss: RemoteEvent,
+	ClaimEggAction: RemoteEvent,
+	TeleportZone: RemoteEvent,
+	-- Client -> Server Hub Economy & Pets
+	CollectCashPad: RemoteEvent,
+	HatchEgg: RemoteEvent,
+	PetAction: RemoteEvent,
+	UpgradeAction: RemoteEvent,
+	ShopRequest: RemoteEvent,
+	-- Server -> Client State & VFX Broadcasts
+	ProfileSync: RemoteEvent,
+	ArenaStateSync: RemoteEvent,
+	ProjectileBroadcast: RemoteEvent,
+	BossTelegraph: RemoteEvent,
+	HatchReveal: RemoteEvent,
+	ToastNotify: RemoteEvent,
+	-- Server -> Client Queries
+	GetInitialState: RemoteFunction,
+}
 
 local Remotes = {}
 
-Remotes.FOLDER_NAME = "Remotes"
+local FOLDER_NAME = "BallBrawlRemotes"
 
--- RemoteEvents unless listed in FUNCTIONS.
-Remotes.Names = table.freeze({
-	-- Client -> Server
-	ThrowBall = "ThrowBall",
-	OptIn = "OptIn",
-	ClaimEgg = "ClaimEgg",
-	CollectPad = "CollectPad",
-	UpgradePet = "UpgradePet",
-	Ascend = "Ascend",
-	GetPolicyState = "GetPolicyState",
-	ShopPurchase = "ShopPurchase",
-	PetAction = "PetAction",
-	-- Server -> Client
-	ArenaStateChanged = "ArenaStateChanged",
-	OptInPrompt = "OptInPrompt",
-	EggClaimUpdated = "EggClaimUpdated",
-	CashPadUpdated = "CashPadUpdated",
-	CurrencyUpdated = "CurrencyUpdated",
-	PolicyStateUpdated = "PolicyStateUpdated",
-	HatchReveal = "HatchReveal",
-	BallHit = "BallHit",
-})
+local EVENT_NAMES = {
+	"ThrowBall",
+	"SetTrainingStance",
+	"DashRequest",
+	"OptInBoss",
+	"ClaimEggAction",
+	"TeleportZone",
+	"CollectCashPad",
+	"HatchEgg",
+	"PetAction",
+	"UpgradeAction",
+	"ShopRequest",
+	"ProfileSync",
+	"ArenaStateSync",
+	"ProjectileBroadcast",
+	"BossTelegraph",
+	"HatchReveal",
+	"ToastNotify",
+}
 
-Remotes.FUNCTIONS = table.freeze({ GetPolicyState = true, ShopPurchase = true, PetAction = true })
+local cached: RemoteBundle? = nil
 
--- Server only: build (or reuse) the folder with one remote per name.
-function Remotes.setupServer(parent: Instance): Folder
-	local folder = parent:FindFirstChild(Remotes.FOLDER_NAME) :: Folder?
-	if not folder then
+function Remotes.ensureServer(): RemoteBundle
+	if cached then
+		return cached
+	end
+	local folder = ReplicatedStorage:FindFirstChild(FOLDER_NAME)
+	if not folder or not folder:IsA("Folder") then
 		local created = Instance.new("Folder")
-		created.Name = Remotes.FOLDER_NAME
-		created.Parent = parent
+		created.Name = FOLDER_NAME
+		created.Parent = ReplicatedStorage
 		folder = created
 	end
-	assert(folder, "Remotes folder could not be created")
-	for _, name: string in Remotes.Names :: { [string]: string } do
-		if not folder:FindFirstChild(name) then
-			local remote =
-				Instance.new(if Remotes.FUNCTIONS[name] then "RemoteFunction" else "RemoteEvent")
-			remote.Name = name
-			remote.Parent = folder
+	local map: { [string]: any } = { Folder = folder }
+	for _, name in ipairs(EVENT_NAMES) do
+		local existing = folder:FindFirstChild(name)
+		if existing and existing:IsA("RemoteEvent") then
+			map[name] = existing
+		else
+			local re = Instance.new("RemoteEvent")
+			re.Name = name
+			re.Parent = folder
+			map[name] = re
 		end
 	end
-	return folder
+	local fn = folder:FindFirstChild("GetInitialState")
+	if fn and fn:IsA("RemoteFunction") then
+		map.GetInitialState = fn
+	else
+		local rf = Instance.new("RemoteFunction")
+		rf.Name = "GetInitialState"
+		rf.Parent = folder
+		map.GetInitialState = rf
+	end
+	local bundle = map :: RemoteBundle
+	cached = bundle
+	return bundle
 end
 
-function Remotes.getEvent(folder: Instance, name: string): RemoteEvent
-	local remote = folder:FindFirstChild(name)
-	assert(remote and remote:IsA("RemoteEvent"), `RemoteEvent {name} missing`)
-	return remote
+function Remotes.waitClient(): RemoteBundle
+	if cached then
+		return cached
+	end
+	local folder = ReplicatedStorage:WaitForChild(FOLDER_NAME, 15)
+	if not folder or not folder:IsA("Folder") then
+		error("Timed out waiting for BallBrawlRemotes")
+	end
+	local map: { [string]: any } = { Folder = folder }
+	for _, name in ipairs(EVENT_NAMES) do
+		map[name] = folder:WaitForChild(name, 15)
+	end
+	map.GetInitialState = folder:WaitForChild("GetInitialState", 15)
+	local bundle = map :: RemoteBundle
+	cached = bundle
+	return bundle
 end
 
 return Remotes
