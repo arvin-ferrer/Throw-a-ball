@@ -69,12 +69,26 @@ local function syncPedestals(player: Player, data: Ledger)
 					else ""
 			)
 			model:SetAttribute("StoredCoins", if pad then math.floor(pad.storedCoins) else 0)
+			model:SetAttribute("EggId", if pad and pad.eggId then pad.eggId else "")
 		end
 	end
 end
 
+-- Followers' species for every client to render (FollowerRigController, #11).
+local function followerSpecies(data: Ledger): string
+	local names = {}
+	for _, petId in data.activePetIds do
+		local pet = data.petsById[petId]
+		if pet then
+			table.insert(names, pet.petId)
+		end
+	end
+	return table.concat(names, ",")
+end
+
 local function broadcast(player: Player, data: Ledger)
 	syncPedestals(player, data)
+	player:SetAttribute("Followers", followerSpecies(data))
 	fire(player, Remotes.Names.CashPadUpdated, { pads = padSnapshot(data) })
 end
 
