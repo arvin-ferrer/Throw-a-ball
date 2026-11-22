@@ -262,9 +262,8 @@ local function onOwnPad(attacker: Player, target: BasePart): boolean
 					maxY = TRAINING.PAD_MAX_Y,
 					ownerUserId = tonumber(plot:GetAttribute("OwnerUserId")) or 0,
 				}
-				-- shortcut: plots start unassigned (OwnerUserId=0) until PlotService (#10) assigns them.
 				if
-					CombatMath.isPointOnOwnedPad(toVec3(root.Position), attacker.UserId, box, true)
+					CombatMath.isPointOnOwnedPad(toVec3(root.Position), attacker.UserId, box, false)
 				then
 					return true
 				end

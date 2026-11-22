@@ -20,6 +20,7 @@ Remotes.Names = table.freeze({
 	Ascend = "Ascend",
 	GetPolicyState = "GetPolicyState",
 	ShopPurchase = "ShopPurchase",
+	PetAction = "PetAction",
 	-- Server -> Client
 	ArenaStateChanged = "ArenaStateChanged",
 	OptInPrompt = "OptInPrompt",
@@ -31,7 +32,7 @@ Remotes.Names = table.freeze({
 	BallHit = "BallHit",
 })
 
-Remotes.FUNCTIONS = table.freeze({ GetPolicyState = true, ShopPurchase = true })
+Remotes.FUNCTIONS = table.freeze({ GetPolicyState = true, ShopPurchase = true, PetAction = true })
 
 -- Server only: build (or reuse) the folder with one remote per name.
 function Remotes.setupServer(parent: Instance): Folder

@@ -15,6 +15,8 @@ local ArenaCycleService = require(Services.ArenaCycleService)
 local BossAIService = require(Services.BossAIService)
 local CombatService = require(Services.CombatService)
 local EconomyService = require(Services.EconomyService)
+local PetIncomeService = require(Services.PetIncomeService)
+local PlotService = require(Services.PlotService)
 local MobService = require(Services.MobService)
 local PortalService = require(Services.PortalService)
 
@@ -23,7 +25,8 @@ local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
 local MAP_NAME = "BallBrawl_Map_v2"
 
 local remotesFolder = Remotes.setupServer(ReplicatedStorage)
-EconomyService.start(remotesFolder) -- profiles load even without a map
+EconomyService.start(remotesFolder, PetIncomeService.onProfileLoaded) -- profiles load even without a map
+PetIncomeService.start(remotesFolder)
 
 -- Every arena participant: Coins + a Gem (EconomyService) and EXP (CombatService level curve).
 local function payParticipants(userIds: { number }, biomeId: string)
@@ -43,6 +46,7 @@ if map then
 		onDefeated = ArenaCycleService.notifyBossDefeated,
 	})
 	MobService.init(map)
+	PlotService.init(map)
 	PortalService.init(map)
 	CombatService.init(remotesFolder, {
 		canDealPvPDamage = ArenaCycleService.canDealPvPDamage,
