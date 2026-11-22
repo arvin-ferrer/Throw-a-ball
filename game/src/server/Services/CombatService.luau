@@ -29,7 +29,16 @@ export type Hooks = {
 	-- On a kill: the mob kind and its biome's PvE damage multiplier (GDD §6: 1.5x–6x).
 	damageMob: (mobId: string, amount: number, attacker: Player) -> (string?, number?),
 	grantCoins: (player: Player, amount: number, reason: string) -> (),
-	getTrainingMultiplier: (player: Player) -> number, -- Soft Ascension bonus
+	getTrainingMultiplier: (player: Player) -> number, -- Soft Ascension x Training Boost
+	rollPerks: (player: Player, baseDamage: number) -> any, -- ActivePerks.HitEffects
+	applyPerkEffects: (
+		attacker: Player,
+		primary: SweepTarget,
+		at: Vec3,
+		fx: any,
+		targets: { SweepTarget },
+		deal: (SweepTarget, number) -> ()
+	) -> (),
 }
 
 local THROW = CombatConfigs.Throw
@@ -286,17 +295,14 @@ local function hitTrainingTarget(attacker: Player, part: BasePart)
 	addStat(attacker, "ThrowSpeed", speedGain * multiplier)
 end
 
-local function applyHit(
+-- Damage one target; re-checks eligibility every time (perk burn ticks land later).
+local function damageTarget(
 	attacker: Player,
-	hit: CombatMath.SweepHit,
+	target: SweepTarget,
 	damage: number,
 	byId: { [string]: BasePart }
 )
 	local h = hooks :: Hooks
-	local target = hit.target
-	if not target then
-		return
-	end
 	if target.kind == "Player" then
 		local victim = Players:GetPlayerByUserId(tonumber(target.id) or 0)
 		local humanoid = victim
@@ -354,7 +360,24 @@ local function onThrowBall(player: Player, payload: unknown)
 		stat(player, "BallDamage", 0),
 		stat(player, "BallTier", "RubberBall")
 	)
-	applyHit(player, hit, damage, byId)
+	local target = hit.target
+	if target and target.kind == "Target" then
+		damageTarget(player, target, damage, byId) -- training targets: no combat perks
+	elseif target then
+		local h = hooks :: Hooks
+		local fx = h.rollPerks(player, damage)
+		damageTarget(player, target, fx.damage, byId)
+		h.applyPerkEffects(
+			player,
+			target,
+			hit.hitPosition or target.position,
+			fx,
+			targets,
+			function(t, amount)
+				damageTarget(player, t, amount, byId)
+			end
+		)
+	end
 	Remotes.getEvent(remotesFolder, Remotes.Names.BallHit):FireAllClients({
 		attackerUserId = player.UserId,
 		origin = valid.origin,

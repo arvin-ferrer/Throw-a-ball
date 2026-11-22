@@ -28,13 +28,14 @@ local speciesById: { [string]: PetSpecies } = {
 	ThornStag = species("Thorn Stag", 30, "CritSurge"),
 	GolemHeart = species("Golem Heart", 65, "ShockwaveSplash"),
 	SnowFox = species("Snow Fox", 75, "FrostSlow"),
-	ShardOwl = species("Shard Owl", 120, "ChainRicochet"),
+	ShardOwl = species("Shard Owl", 115, "ChainRicochet"),
 	PermafrostBear = species("Permafrost Bear", 190, "ShieldOnThrow"),
-	CryoTitan = species("Cryo Titan", 420, "FrostNova"),
+	CryoTitan = species("Cryo Titan", 420, "DeepFreeze"),
 	AshLizard = species("Ash Lizard", 450, "EmberBurn"),
-	CinderImp = species("Cinder Imp", 700, "CritSurge"),
-	MagmaHound = species("Magma Hound", 1_100, "HeavyKnockback"),
-	InfernoDrake = species("Inferno Drake", 2_400, "AoEFireball"),
+	-- GDD §9: Cinder Imps and Magma Hounds are Caldera MOBS; these are the Caldera pets.
+	PyroHawk = species("Pyro Hawk", 680, "SpeedBurn"),
+	LavaRhino = species("Lava Rhino", 1_100, "KnockbackBurn"),
+	InfernoDrake = species("Inferno Drake", 2_500, "AoEFireball"),
 }
 PetConfigs.Species = table.freeze(speciesById)
 PetConfigs.STARTER_PET_ID = "TrainingPup"
@@ -59,7 +60,7 @@ end
 local hatchPoolsByBiome: { [string]: HatchPools } = {
 	EmeraldMeadow = pools("PebbleCub", "DewSprite", "ThornStag", "GolemHeart"),
 	FrostbiteCavern = pools("SnowFox", "ShardOwl", "PermafrostBear", "CryoTitan"),
-	MoltenCaldera = pools("AshLizard", "CinderImp", "MagmaHound", "InfernoDrake"),
+	MoltenCaldera = pools("AshLizard", "PyroHawk", "LavaRhino", "InfernoDrake"),
 }
 PetConfigs.HatchPoolsByBiome = table.freeze(hatchPoolsByBiome)
 

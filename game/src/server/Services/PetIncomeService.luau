@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local ActivePerks = require(Shared.Utils.ActivePerks)
 local EconomyLedger = require(Shared.Utils.EconomyLedger)
 local PetFusion = require(Shared.Utils.PetFusion)
 local PetIncome = require(Shared.Utils.PetIncome)
@@ -125,7 +126,29 @@ local function hatch(player: Player, data: Ledger, id: string, slot: number, egg
 	return result
 end
 
+-- Followers (GDD §8.3): 1 slot, 2 at Level 10, 3 at Level 25. No currency moves here.
+local function setFollower(data: Ledger, petId: any, equip: boolean): any
+	local index = table.find(data.activePetIds, petId)
+	if not data.petsById[petId] then
+		return { ok = false, reason = "UnknownPet" }
+	elseif not equip then
+		if index then
+			table.remove(data.activePetIds, index)
+		end
+		return { ok = true }
+	elseif index then
+		return { ok = true, replayed = true }
+	elseif #data.activePetIds >= ActivePerks.slotsForLevel(data.level) then
+		return { ok = false, reason = "NoFreeFollowerSlot" }
+	end
+	table.insert(data.activePetIds, petId)
+	return { ok = true }
+end
+
 local function runAction(player: Player, data: Ledger, kind: string, id: string, args: { any }): any
+	if kind == "Equip" or kind == "Unequip" then
+		return setFollower(data, args[1], kind == "Equip")
+	end
 	if kind == "Place" then
 		return PetFusion.placePet(data, id, args[1], args[2])
 	elseif kind == "Remove" then
