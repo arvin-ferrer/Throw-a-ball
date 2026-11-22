@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs the same quality gate as CI on exactly what is being pushed (HEAD), in a throwaway
+# checkout, so uncommitted work in progress can't fail - or pass - the check.
+# Skip once with: git push --no-verify
+ROOT=$(git rev-parse --show-toplevel) || exit 1
+PY=$(command -v python3 || command -v python) || { echo "pre-push: python not found" >&2; exit 1; }
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/prepush.XXXXXX") || exit 1
+trap 'git -C "$ROOT" worktree remove --force "$TMP" >/dev/null 2>&1; rm -rf "$TMP"' EXIT
+git -C "$ROOT" worktree add --detach --quiet "$TMP" HEAD || exit 1
+cd "$TMP" && "$PY" scripts/check.py

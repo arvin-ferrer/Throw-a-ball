@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR / "scripts"))
 
+import agent_bridge
 import blender_run
 import check
 import dispatch_cli
@@ -19,6 +20,18 @@ import setup_team
 
 class TestCrossPlatformScripts(unittest.TestCase):
     """Verify OS-independent path resolution, skill syncing, and portable MCP config."""
+
+    def test_agent_bridge_finds_window_and_keeps_prompt_single_line(self) -> None:
+        wins = [{"tabs": [{"windows": [
+            {"id": 3, "foreground_processes": [{"cmdline": ["/usr/bin/fish"]}]},
+            {"id": 7, "foreground_processes": [{"cmdline": ["/home/u/.local/bin/codex"]}]},
+        ]}]}]
+        self.assertEqual(agent_bridge.find_window(wins, "codex"), 7)
+        with self.assertRaises(RuntimeError):
+            agent_bridge.find_window(wins, "agy")
+        prompt = agent_bridge.build_prompt("01-plan", "line one\nline two")
+        self.assertNotIn("\n", prompt)
+        self.assertIn(".agent_loop/01-plan.md", prompt)
 
     def test_mcp_json_has_no_machine_specific_paths(self) -> None:
         mcp_path = ROOT_DIR / ".mcp.json"

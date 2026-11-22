@@ -24,3 +24,6 @@ Thumbs.db
 *.blend2
 .tmp/
 *.rbxlx.lock
+
+# Live agent-loop handoff files (scripts/agent_bridge.py)
+.agent_loop/

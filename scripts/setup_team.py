@@ -145,6 +145,12 @@ def install_mcp_plugins() -> None:
         print("TIP (Linux/Vinegar): Copy MCPPlugin.rbxmx into Vinegar's Wine AppData/Local/Roblox/Plugins folder.")
 
 
+def install_git_hooks() -> None:
+    """Point git at the versioned .githooks/ folder so pre-push runs the quality gate."""
+    subprocess.run(["git", "config", "core.hooksPath", ".githooks"], cwd=str(ROOT_DIR), check=False)
+    print("Enabled git pre-push quality gate (.githooks/pre-push).")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Bootstrap Ball Brawl: Boss Eggs dev environment.")
     parser.add_argument("--skills-repo", type=Path, default=None, help="Path to local scenario-labs/skills clone.")
@@ -160,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("WARN: Could not locate or clone scenario-labs/skills; continuing with local project skills.")
 
+    install_git_hooks()
     if not args.skip_rokit:
         install_rokit_tools(GAME_DIR)
     if not args.skip_mcp:
