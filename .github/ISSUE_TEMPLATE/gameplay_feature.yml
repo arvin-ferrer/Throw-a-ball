@@ -1,0 +1,71 @@
+name: Gameplay / Luau Feature
+description: Implement a server service, client controller, UI screen, or shared config/module.
+title: "[Phase X][Role] Short feature title"
+labels: ["type:feature"]
+body:
+  - type: dropdown
+    id: role
+    attributes:
+      label: Primary Owner Role
+      description: Match strict folder ownership in docs/TEAM_WORKFLOW_3P.md to prevent merge conflicts.
+      options:
+        - "Dev A — Server Systems & Economy (role:server)"
+        - "Dev B — Client Combat, UI & Feel (role:client)"
+        - "Shared Contract — Dev A + Dev B (role:shared)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Milestone / Phase
+      options:
+        - "Phase 0: Foundation & Contracts"
+        - "Phase 1: Core Combat & 3-Phase Loop (Meadow)"
+        - "Phase 2: Dual Currency, Cash Pads & Pet Progression"
+        - "Phase 3: Biomes 2-3, Overcharged Event & Monetization"
+        - "Phase 4: Soft Launch Telemetry, Balancing & Polish"
+    validations:
+      required: true
+
+  - type: input
+    id: gdd_ref
+    attributes:
+      label: GDD Section Reference
+      placeholder: "e.g., GameIdea_Evolved_GDD.md §3.2 (Three-Phase Arena)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope & Owned Files
+      description: List the exact files/modules this issue creates or modifies and any blocked/blocking issues.
+      placeholder: |
+        - Owned files: `game/src/server/Services/...`, `game/tests/...spec.luau`
+        - Depends on: #1
+        - Unblocks: #5
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria & Lune Unit Tests
+      description: Concrete testable behaviors (Red Before Green — write/update `*.spec.luau` first).
+      placeholder: |
+        - [ ] Strict Luau (`--!strict`), functions <= 50 lines
+        - [ ] Unit test added in `game/tests/<Module>.spec.luau`
+        - [ ] `python scripts/check.py` passes 100%
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Non-Negotiable Architecture Invariants
+      options:
+        - label: Server-authoritative (never trusts client values for damage, Cash Pads, offline cap, or 5s Egg claims)
+        - label: PvP damage strictly gated to `Phase == "PvP_EggScramble"` inside locked Boss/PvP rooms
+        - label: "`PolicyService` compliance verified (if touching Paid Shop/Seasonal Eggs)"
+        - label: No hardcoded local user paths (`/home/...`, `C:\Users\...`)

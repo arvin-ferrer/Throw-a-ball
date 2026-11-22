@@ -1,0 +1,53 @@
+name: 3D Asset / Map / VFX Task
+description: Create or update a Roblox Studio map zone, Blender 3D Pet/Boss/Egg, VFX, or Audio asset.
+title: "[Phase X][3D/Map] Short asset or map title"
+labels: ["type:asset", "role:3d-map"]
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: Asset / Map Category
+      options:
+        - "Studio Map / Greybox / Environment"
+        - "Blender 3D Model (Pet / Boss / Egg / Ball)"
+        - "VFX / Lighting / Skybox"
+        - "UI Icons / Thumbnails / Audio"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Milestone / Phase
+      options:
+        - "Phase 0: Foundation & Contracts"
+        - "Phase 1: Core Combat & 3-Phase Loop (Meadow)"
+        - "Phase 2: Dual Currency, Cash Pads & Pet Progression"
+        - "Phase 3: Biomes 2-3, Overcharged Event & Monetization"
+        - "Phase 4: Soft Launch Telemetry, Balancing & Polish"
+    validations:
+      required: true
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: Workspace Hierarchy, CollectionService Tags & Naming Contract
+      description: Exact Studio folder paths, part names, or tags required by Server/Client scripts (see docs/TEAM_WORKFLOW_3P.md §2).
+      placeholder: |
+        - Workspace path: `Workspace.BallBrawl_Map_v2.Biomes.EmeraldMeadow.BossPvPArena`
+        - Required Tags: `BossSpawn`, `BossEggPedestal`, `SuddenDeathRing`, `ArenaPlayerSpawn`
+        - Export paths (if Blender): `game/assets/blender/...`, `game/assets/exports/...glb`, `game/assets/renders/...png`
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria & Visual QA
+      placeholder: |
+        - [ ] Greybox / collision tested with default Roblox R15 character (`18` walk / `24` sprint / `0.35s` dash)
+        - [ ] Mobile-friendly triangle budget & clean silhouette readability
+        - [ ] Blender script runs headlessly via `python scripts/blender_run.py <script.py>` (if procedural/cleanup)
+        - [ ] Preview PNG committed in `game/assets/renders/` and attached to PR
+    validations:
+      required: true
