@@ -17,21 +17,11 @@ local ClientNet = require(Utils:WaitForChild("ClientNet"))
 local ProjectileArc = require(Utils:WaitForChild("ProjectileArc"))
 local ClientLifecycle = require(script:WaitForChild("ClientLifecycle"))
 
+-- Live remotes are the RemoteEvent instances the server creates in ReplicatedStorage.Remotes
+-- (Shared.Net.Remotes.setupServer). ClientNet resolves them by name via FindFirstChild.
 local function tryLoadLiveRemotes(): any
-	local netFolder = Shared:FindFirstChild("Net")
-	if not netFolder then
-		return nil
-	end
-	local remotesModule = netFolder:FindFirstChild("Remotes")
-	if not remotesModule or not remotesModule:IsA("ModuleScript") then
-		return nil
-	end
-	local ok, loaded = pcall(require, remotesModule)
-	if not ok then
-		warn(`[BallBrawlClient] Failed to require Shared.Net.Remotes: {tostring(loaded)}`)
-		return nil
-	end
-	return loaded
+	local Remotes = require(Shared:WaitForChild("Net"):WaitForChild("Remotes"))
+	return ReplicatedStorage:WaitForChild(Remotes.FOLDER_NAME, 10)
 end
 
 local function configureClientNet(isStudio: boolean): ClientNet.ClientNetClient

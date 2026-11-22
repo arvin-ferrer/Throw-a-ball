@@ -22,6 +22,7 @@ export type Callbacks = {
 	onDespawnBoss: ((biomeId: string) -> ())?,
 	onAwardEgg: ((userId: number, biomeId: string, eggType: string) -> ())?,
 	onAwardConsolation: ((userIds: { number }, biomeId: string) -> ())?,
+	getBossHealth: ((biomeId: string) -> (number?, number?))?,
 }
 
 type Runtime = {
@@ -189,11 +190,17 @@ local function broadcastState(rt: Runtime, now: number)
 	rt.folder:SetAttribute("Phase", snap.phase)
 	rt.folder:SetAttribute("StormActive", snap.stormActive)
 	rt.folder:SetAttribute("StormRadius", snap.stormRadius)
+	local bossHp, bossMaxHp = nil, nil
+	if callbacks.getBossHealth then
+		bossHp, bossMaxHp = callbacks.getBossHealth(rt.biomeId)
+	end
 	fireAll(Remotes.Names.ArenaStateChanged, {
 		biomeId = rt.biomeId,
 		phase = snap.phase,
 		isOvercharged = snap.isOvercharged,
 		phaseSecondsRemaining = remaining,
+		bossHp = bossHp,
+		bossMaxHp = bossMaxHp,
 		suddenDeathActive = snap.stormActive,
 		pvePlayerCount = #Players:GetPlayers() - snap.aliveCount,
 	})
@@ -614,6 +621,31 @@ function ArenaCycleService.notifyBossDefeated(biomeId: string)
 	if rt then
 		dispatch(rt, ArenaStateMachine.bossDefeated(rt.fsm, os.clock()).actions)
 	end
+end
+
+-- Living fighters currently inside a biome's locked room (BossAIService targets).
+function ArenaCycleService.getFighterIds(biomeId: string): { number }
+	local rt = runtimes[biomeId]
+	local ids = {}
+	if not rt then
+		return ids
+	end
+	for userId in rt.fsm.alivePlayers do
+		if isFighterInRoom(rt, userId) then
+			table.insert(ids, userId)
+		end
+	end
+	return ids
+end
+
+-- The biome whose locked room this player is fighting in, if any.
+function ArenaCycleService.getFighterBiome(player: Player): string?
+	for biomeId, rt in runtimes do
+		if rt.fsm.alivePlayers[player.UserId] and isFighterInRoom(rt, player.UserId) then
+			return biomeId
+		end
+	end
+	return nil
 end
 
 function ArenaCycleService.isInLockedRoom(player: Player): boolean

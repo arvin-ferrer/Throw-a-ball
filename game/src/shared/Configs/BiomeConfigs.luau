@@ -9,19 +9,29 @@ export type BiomeConfig = {
 	bossId: string,
 	recommendedDamage: number,
 	baseBossHp: number,
+	pveDamageMultiplier: number, -- GDD §6: PvE mob kills grant 1.5x–6x Ball DMG by biome tier
+	mobKinds: { string },
 }
 
 local BiomeConfigs = {}
 
 BiomeConfigs.SOLO_FIGHT_SECONDS = 52
--- shortcut: assumes 1 accepted throw/s; re-derive when CombatService fixes the throw cooldown.
-BiomeConfigs.THROWS_PER_SECOND = 1
+-- 0.35s throw cooldown at ~70% boss uptime ~= 2 accepted throws/s (Gemini #5 plan §3.3).
+BiomeConfigs.THROWS_PER_SECOND = 2
 
-local function make(biomeId: string, bossId: string, recommendedDamage: number): BiomeConfig
+local function make(
+	biomeId: string,
+	bossId: string,
+	recommendedDamage: number,
+	pveDamageMultiplier: number,
+	mobKinds: { string }
+): BiomeConfig
 	return table.freeze({
 		biomeId = biomeId,
 		bossId = bossId,
 		recommendedDamage = recommendedDamage,
+		pveDamageMultiplier = pveDamageMultiplier,
+		mobKinds = table.freeze(mobKinds),
 		baseBossHp = recommendedDamage
 			* BiomeConfigs.THROWS_PER_SECOND
 			* BiomeConfigs.SOLO_FIGHT_SECONDS,
@@ -29,9 +39,10 @@ local function make(biomeId: string, bossId: string, recommendedDamage: number):
 end
 
 BiomeConfigs.Biomes = table.freeze({
-	EmeraldMeadow = make("EmeraldMeadow", "MossbackGolem", 15),
-	FrostbiteCavern = make("FrostbiteCavern", "GlacierYeti", 150),
-	MoltenCaldera = make("MoltenCaldera", "ObsidianWyrm", 1200),
+	EmeraldMeadow = make("EmeraldMeadow", "MossbackGolem", 15, 1.5, { "MossSlime", "BrambleBoar" }),
+	-- Biome 2-3 mobs arrive with #17.
+	FrostbiteCavern = make("FrostbiteCavern", "GlacierYeti", 150, 3.0, {}),
+	MoltenCaldera = make("MoltenCaldera", "ObsidianWyrm", 1200, 6.0, {}),
 })
 
 function BiomeConfigs.get(biomeId: string): BiomeConfig?
