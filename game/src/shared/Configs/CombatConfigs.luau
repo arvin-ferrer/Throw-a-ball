@@ -125,47 +125,72 @@ CombatConfigs.PlayerProgression = table.freeze({
 	EXP_GROWTH = 1.25,
 })
 
-CombatConfigs.Bosses = table.freeze({
-	MossbackGolem = table.freeze({
-		biomeId = "EmeraldMeadow",
-		baseHp = 1_560,
-		hpScalePerExtraPlayer = 0.35,
-		hitRadius = 5.0,
-		moveSpeed = 12.0,
-		meleeStopDistance = 10.0,
-		slam = table.freeze({
-			triggerRange = 22.0,
-			windupSeconds = 1.20,
-			activeSeconds = 0.75,
-			maxRadius = 26.0,
-			ringHalfWidth = 2.5,
-			hitHeight = 5.5,
-			damage = 28,
-			recoverySeconds = 0.80,
-			cooldownSeconds = 6.00,
-		}),
-		boulder = table.freeze({
-			minRange = 12.0,
-			maxRange = 75.0,
-			windupSeconds = 1.00,
-			radius = 3.2,
-			speed = 46.0,
-			maxDistance = 75.0,
-			maxLifetimeSeconds = 2.00,
-			damage = 22,
-			knockbackImpulse = 42.0,
-			recoverySeconds = 0.70,
-			cooldownSeconds = 4.50,
-		}),
-		overcharged = table.freeze({
-			hpMultiplier = 1.40,
-			speedMultiplier = 1.15,
-			windupMultiplier = 0.85,
-			recoveryMultiplier = 0.85,
-			cooldownMultiplier = 0.80,
-			damageMultiplier = 1.20,
-		}),
+local mossbackGolem = table.freeze({
+	biomeId = "EmeraldMeadow",
+	baseHp = 1_560,
+	hpScalePerExtraPlayer = 0.35,
+	hitRadius = 5.0,
+	moveSpeed = 12.0,
+	meleeStopDistance = 10.0,
+	slam = table.freeze({
+		triggerRange = 22.0,
+		windupSeconds = 1.20,
+		activeSeconds = 0.75,
+		maxRadius = 26.0,
+		ringHalfWidth = 2.5,
+		hitHeight = 5.5,
+		damage = 28,
+		recoverySeconds = 0.80,
+		cooldownSeconds = 6.00,
 	}),
+	boulder = table.freeze({
+		minRange = 12.0,
+		maxRange = 75.0,
+		windupSeconds = 1.00,
+		radius = 3.2,
+		speed = 46.0,
+		maxDistance = 75.0,
+		maxLifetimeSeconds = 2.00,
+		damage = 22,
+		knockbackImpulse = 42.0,
+		recoverySeconds = 0.70,
+		cooldownSeconds = 4.50,
+	}),
+	overcharged = table.freeze({
+		hpMultiplier = 1.40,
+		speedMultiplier = 1.15,
+		windupMultiplier = 0.85,
+		recoveryMultiplier = 0.85,
+		cooldownMultiplier = 0.80,
+		damageMultiplier = 1.20,
+	}),
+})
+
+-- Biome 2-3 bosses reuse the tested Mossback AI shape (#14). Provisional tuning, scaled for
+-- higher-level fighters: the breath attack is the locked-lane telegraph, icicle rings /
+-- floor geysers are the expanding-ring telegraph.
+local function bossFrom(
+	biomeId: string,
+	baseHp: number,
+	moveSpeed: number,
+	ringDamage: number,
+	laneDamage: number,
+	windup: number
+)
+	local slam = table.clone(mossbackGolem.slam)
+	slam.damage, slam.windupSeconds = ringDamage, windup
+	local boulder = table.clone(mossbackGolem.boulder)
+	boulder.damage, boulder.windupSeconds = laneDamage, windup * 0.85
+	local boss = table.clone(mossbackGolem)
+	boss.biomeId, boss.baseHp, boss.moveSpeed, boss.hitRadius = biomeId, baseHp, moveSpeed, 6.0
+	boss.slam, boss.boulder = table.freeze(slam), table.freeze(boulder)
+	return table.freeze(boss)
+end
+
+CombatConfigs.Bosses = table.freeze({
+	MossbackGolem = mossbackGolem,
+	GlacierYeti = bossFrom("FrostbiteCavern", 15_600, 13, 60, 48, 1.10),
+	ObsidianWyrm = bossFrom("MoltenCaldera", 124_800, 14, 130, 100, 1.00),
 })
 
 return CombatConfigs

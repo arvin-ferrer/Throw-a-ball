@@ -18,6 +18,7 @@ local EconomyService = require(Services.EconomyService)
 local PetIncomeService = require(Services.PetIncomeService)
 local PlotService = require(Services.PlotService)
 local MobService = require(Services.MobService)
+local PerkService = require(Services.PerkService)
 local PortalService = require(Services.PortalService)
 
 local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
@@ -65,8 +66,10 @@ if map then
 		end,
 		getTrainingMultiplier = function(player)
 			local _, training = EconomyService.getAscensionMultipliers(player)
-			return training
+			return training * PerkService.trainingMultiplier(player)
 		end,
+		rollPerks = PerkService.rollHit,
+		applyPerkEffects = PerkService.applySideEffects,
 	})
 	ArenaCycleService.init(map, remotesFolder, {
 		onSpawnBoss = BossAIService.spawn,

@@ -38,6 +38,19 @@ type ActiveBoss = {
 local ROOT_HEIGHT = 3 -- boss logic runs at character-root height above the floor
 local BOSS_CONFIG_BY_BIOME: { [string]: any } = {
 	EmeraldMeadow = CombatConfigs.Bosses.MossbackGolem,
+	FrostbiteCavern = CombatConfigs.Bosses.GlacierYeti,
+	MoltenCaldera = CombatConfigs.Bosses.ObsidianWyrm,
+}
+local BOSS_ID_BY_BIOME = {
+	EmeraldMeadow = "MossbackGolem",
+	FrostbiteCavern = "GlacierYeti",
+	MoltenCaldera = "ObsidianWyrm",
+}
+-- Placeholder body/accent colours until the #17 meshes are uploaded.
+local BOSS_COLORS = {
+	MossbackGolem = { Color3.fromRGB(86, 110, 70), Color3.fromRGB(70, 170, 70) },
+	GlacierYeti = { Color3.fromRGB(200, 225, 240), Color3.fromRGB(120, 200, 255) },
+	ObsidianWyrm = { Color3.fromRGB(40, 32, 38), Color3.fromRGB(255, 110, 30) },
 }
 
 local BossAIService = {}
@@ -87,9 +100,10 @@ local function buildModel(bossId: string, parent: Instance): Model
 	end
 	local model = Instance.new("Model")
 	model.Name = bossId
-	local body = makePart("Body", Vector3.new(9, 11, 9), Color3.fromRGB(86, 110, 70), model)
+	local colors = BOSS_COLORS[bossId] or BOSS_COLORS.MossbackGolem
+	local body = makePart("Body", Vector3.new(9, 11, 9), colors[1], model)
 	body.Material = Enum.Material.Slate
-	local moss = makePart("Moss", Vector3.new(9.6, 2.5, 9.6), Color3.fromRGB(70, 170, 70), model)
+	local moss = makePart("Moss", Vector3.new(9.6, 2.5, 9.6), colors[2], model)
 	moss.Material = Enum.Material.Grass
 	moss.CFrame = body.CFrame * CFrame.new(0, 5, 0)
 	model.PrimaryPart = body
@@ -307,7 +321,7 @@ function BossAIService.spawn(biomeId: string, maxHp: number, isOvercharged: bool
 	local boss: ActiveBoss = {
 		biomeId = biomeId,
 		fsm = BossAIStateMachine.new(config, position, maxHp, isOvercharged, os.clock()),
-		model = buildModel("MossbackGolem", arena),
+		model = buildModel(BOSS_ID_BY_BIOME[biomeId] or "MossbackGolem", arena),
 		arena = arena,
 		floorY = spawn.Position.Y,
 		obstacles = collectObstacles(arena),
