@@ -70,6 +70,11 @@ function DataService.get(player: Player): Ledger?
 	return if profile then profile.Data else nil
 end
 
+-- The ProfileStore profile itself (for Save / LastSavedData), or nil.
+function DataService.getProfile(player: Player): any
+	return session and session.Profiles[player]
+end
+
 function DataService.waitFor(player: Player): Ledger?
 	local profile = session and session:WaitForProfile(player, LOAD_TIMEOUT)
 	return if profile then profile.Data else nil

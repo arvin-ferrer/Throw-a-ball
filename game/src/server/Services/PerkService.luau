@@ -64,13 +64,16 @@ end
 -- Slow / stun a rival for a while; the latest expiry wins so overlapping effects don't
 -- restore speed early.
 local function slowPlayer(humanoid: Humanoid, fraction: number, seconds: number)
-	local base = humanoid:GetAttribute("BaseWalkSpeed") or humanoid.WalkSpeed
+	local base: number = tonumber(humanoid:GetAttribute("BaseWalkSpeed")) or humanoid.WalkSpeed
 	humanoid:SetAttribute("BaseWalkSpeed", base)
 	local untilTime = os.clock() + seconds
-	humanoid:SetAttribute("SlowUntil", math.max(humanoid:GetAttribute("SlowUntil") or 0, untilTime))
+	humanoid:SetAttribute(
+		"SlowUntil",
+		math.max(tonumber(humanoid:GetAttribute("SlowUntil")) or 0, untilTime)
+	)
 	humanoid.WalkSpeed = base * (1 - math.clamp(fraction, 0, 1))
 	task.delay(seconds, function()
-		if os.clock() + 0.01 >= (humanoid:GetAttribute("SlowUntil") or 0) then
+		if os.clock() + 0.01 >= (tonumber(humanoid:GetAttribute("SlowUntil")) or 0) then
 			humanoid.WalkSpeed = base
 		end
 	end)
@@ -104,11 +107,13 @@ local function leech(attacker: Player, amount: number)
 	if not humanoid or humanoid.Health <= 0 then
 		return
 	end
-	local now, window = os.clock(), leechWindow[attacker]
+	local now = os.clock()
+	local window = leechWindow[attacker]
 	if not window or now - window.start >= 1 then
 		window = { start = now, healed = 0 }
-		leechWindow[attacker] = window
 	end
+	assert(window, "leech window")
+	leechWindow[attacker] = window
 	local heal = math.min(amount, humanoid.MaxHealth * LEECH_CAP_FRACTION - window.healed)
 	if heal > 0 then
 		window.healed += heal
