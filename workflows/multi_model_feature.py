@@ -38,7 +38,7 @@ test_prompt = (
     f"for feature: {feature}. Plan: {plan['summary']}"
 )
 impl_prompt = (
-    f"Follow CLAUDE.md and AGENTS.md. Implement strict server-authoritative Luau modules "
+    f"Follow .claude/CLAUDE.md and AGENTS.md. Implement strict server-authoritative Luau modules "
     f"in {plan['luau_files']} for feature: {feature}. Plan: {plan['summary']}. "
     f"Run `python scripts/check.py` before finishing."
 )

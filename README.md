@@ -9,7 +9,7 @@ A cross-platform Roblox game repository pairing a **Training & Pet-Income Tycoon
 - **Canonical Game Design Document:** [docs/GameIdea_Evolved_GDD.md](docs/GameIdea_Evolved_GDD.md) | [PDF (9 pages)](docs/GameIdea_Evolved_GDD.pdf)
 - **Team Onboarding (Windows / macOS / Linux):** [docs/TEAM_SETUP.md](docs/TEAM_SETUP.md)
 - **Roblox Game Codebase Guide:** [game/README.md](game/README.md)
-- **Shared AI Agent Rules:** [AGENTS.md](AGENTS.md) · [GEMINI.md](GEMINI.md) · [CLAUDE.md](CLAUDE.md)
+- **Shared AI Agent Rules:** [AGENTS.md](AGENTS.md) (root) · [.agents/rules/gemini.md](.agents/rules/gemini.md) · [.claude/CLAUDE.md](.claude/CLAUDE.md)
 - **Market Research & Validation Vault:** [research/README.md](research/README.md) · [Visual Summary](research/reports/Research_Results_Visual_Summary.md)
 
 ---
@@ -36,9 +36,10 @@ python scripts/blender_run.py game/assets/blender/starter_egg_template.py
 
 ```text
 .
-├── AGENTS.md / CLAUDE.md / GEMINI.md   # Shared & specialist multi-model agent rules
+├── AGENTS.md                           # Shared multi-model agent rules (Codex / Antigravity / Claude)
 ├── .mcp.json                           # Portable MCP config (robloxstudio + blender)
-├── .agents/skills/                     # Custom project skill + local synced scenario-* skills
+├── .agents/{rules,skills}/             # Antigravity rules + custom & synced scenario-* skills
+├── .claude/CLAUDE.md                   # Claude Code rules (imports ../AGENTS.md)
 ├── .github/                            # CI quality gate workflow & PR checklist template
 ├── docs/                               # Canonical GDD (MD + PDF), TEAM_SETUP.md & archive/
 ├── game/                               # Roblox Rojo + Rokit project & Blender 3D assets
