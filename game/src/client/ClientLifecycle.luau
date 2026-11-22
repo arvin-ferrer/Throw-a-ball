@@ -9,6 +9,7 @@
 export type ClientContext = {
 	net: any,
 	economyConfigs: any,
+	projectileArc: any?,
 	isStudio: boolean,
 	getController: (name: string) -> ClientController?,
 	connectHeartbeat: ((callback: (dt: number) -> ()) -> any)?,
@@ -18,6 +19,7 @@ export type ClientContext = {
 export type BaseContextInput = {
 	net: any,
 	economyConfigs: any,
+	projectileArc: any?,
 	isStudio: boolean,
 	connectHeartbeat: ((callback: (dt: number) -> ()) -> any)?,
 	mountStudioPanel: ((harness: any) -> (() -> ())?)?,
@@ -162,6 +164,7 @@ function ClientLifecycle.bootstrap(
 	local ctx: ClientContext = {
 		net = baseCtx.net,
 		economyConfigs = baseCtx.economyConfigs,
+		projectileArc = baseCtx.projectileArc,
 		isStudio = baseCtx.isStudio,
 		getController = function(name: string): ClientController?
 			return byName[name]

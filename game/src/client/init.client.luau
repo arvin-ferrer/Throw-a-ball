@@ -12,7 +12,9 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyConfigs = require(Shared:WaitForChild("Configs"):WaitForChild("EconomyConfigs"))
-local ClientNet = require(Shared:WaitForChild("Utils"):WaitForChild("ClientNet"))
+local Utils = Shared:WaitForChild("Utils")
+local ClientNet = require(Utils:WaitForChild("ClientNet"))
+local ProjectileArc = require(Utils:WaitForChild("ProjectileArc"))
 local ClientLifecycle = require(script:WaitForChild("ClientLifecycle"))
 
 local function tryLoadLiveRemotes(): any
@@ -104,6 +106,7 @@ local controllers = discoverControllers()
 local result = ClientLifecycle.bootstrap(controllers, {
 	net = net,
 	economyConfigs = EconomyConfigs,
+	projectileArc = ProjectileArc,
 	isStudio = isStudio,
 	connectHeartbeat = if isStudio
 		then function(callback: (dt: number) -> ())
