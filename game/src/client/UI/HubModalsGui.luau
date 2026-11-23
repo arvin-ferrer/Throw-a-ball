@@ -140,13 +140,41 @@ local function renderPetsTab(profile: any)
 			false
 		)
 
+		local btnRow = Instance.new("Frame")
+		btnRow.Name = "ActionRow"
+		btnRow.BackgroundTransparency = 1
+		btnRow.Position = UDim2.fromOffset(10, 48)
+		btnRow.Size = UDim2.new(1, -20, 0, 32)
+		btnRow.Parent = card
+		local rl = Instance.new("UIListLayout")
+		rl.FillDirection = Enum.FillDirection.Horizontal
+		rl.Padding = UDim.new(0, 5)
+		rl.Parent = btnRow
+
+		local function addCardBtn(btnName: string, txt: string, col: Color3, cb: () -> ())
+			local b = Theme.makeButton(
+				btnRow,
+				btnName,
+				txt,
+				UDim2.fromScale(0.18, 1),
+				UDim2.fromOffset(0, 0),
+				col,
+				cb
+			)
+			b.TextScaled = true
+			local tc = Instance.new("UITextSizeConstraint")
+			tc.MaxTextSize = 12
+			tc.MinTextSize = 8
+			tc.Parent = b
+			local fx = Instance.new("UIFlexItem")
+			fx.FlexMode = Enum.UIFlexMode.Fill
+			fx.Parent = b
+		end
+
 		local eq = isEquipped(profile, pet.uid)
-		Theme.makeButton(
-			card,
+		addCardBtn(
 			"EqBtn",
 			if eq then "UNEQUIP" else "EQUIP",
-			UDim2.fromOffset(82, 30),
-			UDim2.fromOffset(10, 50),
 			if eq then Theme.Colors.CardAlt else Theme.Colors.Emerald,
 			function()
 				remotes.PetAction:FireServer("ToggleActive", pet.uid)
@@ -156,24 +184,18 @@ local function renderPetsTab(profile: any)
 		local lvlCost = if (pet.level or 1) < EconomyConfigs.MAX_PET_LEVEL
 			then EconomyConfigs.getPetLevelUpCost(pet.level or 1, baseRate)
 			else 0
-		Theme.makeButton(
-			card,
+		addCardBtn(
 			"LvlBtn",
 			if lvlCost > 0 then `LV+ ({MathUtil.formatNumber(lvlCost)})` else "MAX LV",
-			UDim2.fromOffset(104, 30),
-			UDim2.fromOffset(98, 50),
 			Theme.Colors.Coins,
 			function()
 				remotes.PetAction:FireServer("LevelUp", pet.uid)
 			end
 		)
 
-		Theme.makeButton(
-			card,
+		addCardBtn(
 			"TraitBtn",
 			`TRAIT ({EconomyConfigs.TRAIT_REROLL_GEM_COST}G)`,
-			UDim2.fromOffset(100, 30),
-			UDim2.fromOffset(208, 50),
 			Theme.Colors.Gems,
 			function()
 				remotes.PetAction:FireServer("RerollTrait", pet.uid)
@@ -181,12 +203,9 @@ local function renderPetsTab(profile: any)
 		)
 
 		local fuseGroup = findThreeMatchingUids(profile, pet.speciesId, pet.starTier or 1)
-		Theme.makeButton(
-			card,
+		addCardBtn(
 			"FuseBtn",
 			if fuseGroup then "FUSE 3->1★" else "NEED 3x",
-			UDim2.fromOffset(92, 30),
-			UDim2.fromOffset(314, 50),
 			if fuseGroup then Theme.Colors.Molten else Theme.Colors.CardAlt,
 			function()
 				if fuseGroup then
@@ -197,34 +216,18 @@ local function renderPetsTab(profile: any)
 
 		if pet.pedestalIndex == nil then
 			local openPed = findOpenPedestal(profile)
-			Theme.makeButton(
-				card,
-				"PlaceBtn",
-				"PLACE",
-				UDim2.fromOffset(70, 30),
-				UDim2.fromOffset(412, 50),
-				Theme.Colors.Frost,
-				function()
-					if openPed then
-						remotes.PetAction:FireServer(
-							"PlacePet",
-							{ uid = pet.uid, pedestalIndex = openPed }
-						)
-					end
+			addCardBtn("PlaceBtn", "PLACE", Theme.Colors.Frost, function()
+				if openPed then
+					remotes.PetAction:FireServer(
+						"PlacePet",
+						{ uid = pet.uid, pedestalIndex = openPed }
+					)
 				end
-			)
+			end)
 		else
-			Theme.makeButton(
-				card,
-				"SellBtn",
-				"SELL",
-				UDim2.fromOffset(70, 30),
-				UDim2.fromOffset(412, 50),
-				Theme.Colors.Danger,
-				function()
-					remotes.PetAction:FireServer("SellPet", pet.uid)
-				end
-			)
+			addCardBtn("SellBtn", "SELL", Theme.Colors.Danger, function()
+				remotes.PetAction:FireServer("SellPet", pet.uid)
+			end)
 		end
 	end
 end
@@ -480,23 +483,27 @@ end
 
 function HubModalsGui.mount()
 	local gui = Theme.createScreenGui("BallBrawl_HubModals", 20)
-	local panel = Theme.makeFrame(
+	local panel = Theme.makeGlossyPanel(
 		gui,
 		"MainPanel",
-		UDim2.fromOffset(520, 410),
-		UDim2.new(0.5, -260, 0.5, -205),
-		Theme.Colors.Panel,
-		14
+		UDim2.fromScale(0.92, 0.86),
+		UDim2.fromScale(0.5, 0.5),
+		16
 	)
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Visible = false
+	local scConstraint = Instance.new("UISizeConstraint")
+	scConstraint.MaxSize = Vector2.new(580, 440)
+	scConstraint.MinSize = Vector2.new(300, 250)
+	scConstraint.Parent = panel
 	rootFrame = panel
 
 	Theme.makeLabel(
 		panel,
 		"Title",
 		"HUB PROGRESSION & PETS",
-		UDim2.fromOffset(300, 32),
-		UDim2.fromOffset(14, 10),
+		UDim2.new(1, -68, 0, 34),
+		UDim2.fromOffset(16, 10),
 		18,
 		Theme.Colors.Coins,
 		true
@@ -505,39 +512,58 @@ function HubModalsGui.mount()
 		panel,
 		"CloseBtn",
 		"X",
-		UDim2.fromOffset(34, 34),
-		UDim2.new(1, -44, 0, 8),
+		UDim2.fromOffset(40, 40),
+		UDim2.new(1, -48, 0, 6),
 		Theme.Colors.Danger,
 		function()
 			panel.Visible = false
 		end
 	)
 
+	local tabRow = Instance.new("Frame")
+	tabRow.Name = "TabRow"
+	tabRow.BackgroundTransparency = 1
+	tabRow.Position = UDim2.fromOffset(14, 52)
+	tabRow.Size = UDim2.new(1, -28, 0, 34)
+	tabRow.Parent = panel
+	local tl = Instance.new("UIListLayout")
+	tl.FillDirection = Enum.FillDirection.Horizontal
+	tl.Padding = UDim.new(0, 8)
+	tl.Parent = tabRow
+
 	local tabs = {
-		{ id = "Pets", label = "PETS & FUSION", x = 14 },
-		{ id = "Eggs", label = "EGGS & CRAFT", x = 178 },
-		{ id = "Upgrades", label = "UPGRADES & ASCEND", x = 342 },
+		{ id = "Pets", label = "PETS & FUSION", color = Theme.Colors.Emerald },
+		{ id = "Eggs", label = "EGGS & CRAFT", color = Theme.Colors.Coins },
+		{ id = "Upgrades", label = "UPGRADES & ASCEND", color = Theme.Colors.Frost },
 	}
 	for _, t in ipairs(tabs) do
-		Theme.makeButton(
-			panel,
+		local tb = Theme.makeButton(
+			tabRow,
 			"Tab_" .. t.id,
 			t.label,
-			UDim2.fromOffset(156, 32),
-			UDim2.fromOffset(t.x, 48),
-			Theme.Colors.CardAlt,
+			UDim2.fromScale(0.32, 1),
+			UDim2.fromOffset(0, 0),
+			t.color,
 			function()
 				activeTab = t.id
 				rerender()
 			end
 		)
+		tb.TextScaled = true
+		local tc = Instance.new("UITextSizeConstraint")
+		tc.MaxTextSize = 13
+		tc.MinTextSize = 9
+		tc.Parent = tb
+		local fx = Instance.new("UIFlexItem")
+		fx.FlexMode = Enum.UIFlexMode.Fill
+		fx.Parent = tb
 	end
 
 	local sc = Instance.new("ScrollingFrame")
 	sc.Name = "Body"
 	sc.BackgroundTransparency = 1
-	sc.Position = UDim2.fromOffset(12, 88)
-	sc.Size = UDim2.new(1, -24, 1, -100)
+	sc.Position = UDim2.fromOffset(12, 94)
+	sc.Size = UDim2.new(1, -24, 1, -106)
 	sc.CanvasSize = UDim2.fromOffset(0, 0)
 	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	sc.ScrollBarThickness = 6
