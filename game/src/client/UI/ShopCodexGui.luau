@@ -291,23 +291,27 @@ end
 
 function ShopCodexGui.mount()
 	local gui = Theme.createScreenGui("BallBrawl_ShopCodex", 22)
-	local panel = Theme.makeFrame(
+	local panel = Theme.makeGlossyPanel(
 		gui,
 		"ShopPanel",
-		UDim2.fromOffset(520, 410),
-		UDim2.new(0.5, -260, 0.5, -205),
-		Theme.Colors.Panel,
-		14
+		UDim2.fromScale(0.92, 0.86),
+		UDim2.fromScale(0.5, 0.5),
+		16
 	)
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Visible = false
+	local scConstraint = Instance.new("UISizeConstraint")
+	scConstraint.MaxSize = Vector2.new(580, 440)
+	scConstraint.MinSize = Vector2.new(300, 250)
+	scConstraint.Parent = panel
 	rootFrame = panel
 
 	Theme.makeLabel(
 		panel,
 		"Title",
 		"SHOP & CREATURE CODEX",
-		UDim2.fromOffset(300, 32),
-		UDim2.fromOffset(14, 10),
+		UDim2.new(1, -68, 0, 34),
+		UDim2.fromOffset(16, 10),
 		18,
 		Theme.Colors.Coins,
 		true
@@ -316,44 +320,50 @@ function ShopCodexGui.mount()
 		panel,
 		"CloseBtn",
 		"X",
-		UDim2.fromOffset(34, 34),
-		UDim2.new(1, -44, 0, 8),
+		UDim2.fromOffset(40, 40),
+		UDim2.new(1, -48, 0, 6),
 		Theme.Colors.Danger,
 		function()
 			panel.Visible = false
 		end
 	)
 
-	Theme.makeButton(
-		panel,
-		"ShopTab",
-		"SHOP & PASSES",
-		UDim2.fromOffset(238, 32),
-		UDim2.fromOffset(14, 48),
-		Theme.Colors.Coins,
-		function()
-			activeTab = "Shop"
-			rerender()
-		end
-	)
-	Theme.makeButton(
-		panel,
-		"CodexTab",
-		"CREATURE CODEX",
-		UDim2.fromOffset(238, 32),
-		UDim2.fromOffset(266, 48),
-		Theme.Colors.Gems,
-		function()
-			activeTab = "Codex"
-			rerender()
-		end
-	)
+	local tabRow = Instance.new("Frame")
+	tabRow.Name = "TabRow"
+	tabRow.BackgroundTransparency = 1
+	tabRow.Position = UDim2.fromOffset(14, 52)
+	tabRow.Size = UDim2.new(1, -28, 0, 34)
+	tabRow.Parent = panel
+	local tl = Instance.new("UIListLayout")
+	tl.FillDirection = Enum.FillDirection.Horizontal
+	tl.Padding = UDim.new(0, 8)
+	tl.Parent = tabRow
+
+	local function addTab(name: string, label: string, color: Color3, tabId: string)
+		local tb = Theme.makeButton(
+			tabRow,
+			name,
+			label,
+			UDim2.fromScale(0.48, 1),
+			UDim2.fromOffset(0, 0),
+			color,
+			function()
+				activeTab = tabId
+				rerender()
+			end
+		)
+		local fx = Instance.new("UIFlexItem")
+		fx.FlexMode = Enum.UIFlexMode.Fill
+		fx.Parent = tb
+	end
+	addTab("ShopTab", "SHOP & PASSES", Theme.Colors.Coins, "Shop")
+	addTab("CodexTab", "CREATURE CODEX", Theme.Colors.Gems, "Codex")
 
 	local sc = Instance.new("ScrollingFrame")
 	sc.Name = "Body"
 	sc.BackgroundTransparency = 1
-	sc.Position = UDim2.fromOffset(12, 88)
-	sc.Size = UDim2.new(1, -24, 1, -100)
+	sc.Position = UDim2.fromOffset(12, 94)
+	sc.Size = UDim2.new(1, -24, 1, -106)
 	sc.CanvasSize = UDim2.fromOffset(0, 0)
 	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	sc.ScrollBarThickness = 6

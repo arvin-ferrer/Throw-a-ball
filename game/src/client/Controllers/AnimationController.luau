@@ -48,10 +48,20 @@ type RigMotorEntry = {
 	model: Model?,
 }
 
+type MobAnimPulse = {
+	lastAttackSeq: number,
+	attackStart: number,
+	lastHitSeq: number,
+	hitStart: number,
+	phase: number,
+}
+
 local localPlayer = Players.LocalPlayer
 local activeThrows: { [Player]: ThrowState } = {}
 local activeDashes: { [Player]: DashState } = {}
 local rigMotors: { [Motor6D]: RigMotorEntry } = {}
+local mobPulses: { [Model]: MobAnimPulse } = {}
+local bioGlowLights: { [PointLight]: { model: Model?, baseBrightness: number, phase: number } } = {}
 local spinBases: { [BasePart]: { cf: CFrame, speed: number, axis: string } } = {}
 local floatBases: { [BasePart]: { cf: CFrame, phase: number } } = {}
 local recoilBusy: { [Instance]: boolean } = {}
@@ -227,7 +237,374 @@ local function applyCharacterAnimations(now: number)
 	end
 end
 
+local function getMobPulse(model: Model?, now: number): (number, number, number)
+	if not model then
+		return -1, -1, 0
+	end
+	local st = mobPulses[model]
+	if not st then
+		st = {
+			lastAttackSeq = tonumber(model:GetAttribute("AttackSeq")) or 0,
+			attackStart = -10,
+			lastHitSeq = tonumber(model:GetAttribute("HitSeq")) or 0,
+			hitStart = -10,
+			phase = math.random() * math.pi * 2,
+		}
+		mobPulses[model] = st
+	end
+	local atkSeq = tonumber(model:GetAttribute("AttackSeq")) or 0
+	if atkSeq ~= st.lastAttackSeq then
+		st.lastAttackSeq = atkSeq
+		st.attackStart = now
+	end
+	local hitSeq = tonumber(model:GetAttribute("HitSeq")) or 0
+	if hitSeq ~= st.lastHitSeq then
+		st.lastHitSeq = hitSeq
+		st.hitStart = now
+	end
+	local atkAlpha = (now - st.attackStart) / 0.56
+	local hitAlpha = (now - st.hitStart) / 0.24
+	return if atkAlpha >= 0 and atkAlpha < 1 then atkAlpha else -1,
+		if hitAlpha >= 0 and hitAlpha < 1 then hitAlpha else -1,
+		st.phase
+end
+
+local function evalForestAttackCurve(alpha: number): (number, number, number, number)
+	-- Returns (torsoPitchRad, torsoForwardStuds, armPitchRad, glowBoost)
+	if alpha < 0.34 then
+		local t = alpha / 0.34
+		local e = math.sin(t * math.pi * 0.5)
+		return math.rad(-22) * e, -0.45 * e, math.rad(-52) * e, 1.4 * e
+	elseif alpha < 0.60 then
+		local t = (alpha - 0.34) / 0.26
+		local e = 1 - (1 - t) * (1 - t)
+		return math.rad(-22 + 50 * e), -0.45 + 1.80 * e, math.rad(-52 + 88 * e), 1.6
+	else
+		local t = (alpha - 0.60) / 0.40
+		local rem = 1 - (t * t * (3 - 2 * t))
+		return math.rad(28) * rem, 1.35 * rem, math.rad(36) * rem, 1.6 * rem
+	end
+end
+
+local function evalFrostAttackCurve(alpha: number): (number, number, number, number, number)
+	-- Whirling Blizzard Cleave: (torsoYawRad, torsoFwdStuds, armPitchRad, armYawRad, glowBoost)
+	if alpha < 0.30 then
+		local e = math.sin((alpha / 0.30) * math.pi * 0.5)
+		return math.rad(-42) * e, -0.30 * e, math.rad(-32) * e, math.rad(-28) * e, 1.5 * e
+	elseif alpha < 0.58 then
+		local t = (alpha - 0.30) / 0.28
+		local e = 1 - (1 - t) * (1 - t)
+		return math.rad(-42 + 90 * e),
+			-0.30 + 1.70 * e,
+			math.rad(-32 + 50 * e),
+			math.rad(-28 + 72 * e),
+			2.2
+	else
+		local t = (alpha - 0.58) / 0.42
+		local rem = 1 - (t * t * (3 - 2 * t))
+		return math.rad(48) * rem, 1.40 * rem, math.rad(18) * rem, math.rad(44) * rem, 2.2 * rem
+	end
+end
+
+local function evalVolcanicAttackCurve(alpha: number): (number, number, number, number, number)
+	-- Volcanic Leap-Smash Ground Pound: (torsoPitchRad, liftY, fwdStuds, armPitchRad, glowBoost)
+	if alpha < 0.36 then
+		local e = math.sin((alpha / 0.36) * math.pi * 0.5)
+		return math.rad(-26) * e, 1.45 * e, -0.35 * e, math.rad(-74) * e, 1.8 * e
+	elseif alpha < 0.56 then
+		local t = (alpha - 0.36) / 0.20
+		local e = t * t
+		return math.rad(-26 + 64 * e),
+			1.45 - 1.80 * e,
+			-0.35 + 1.60 * e,
+			math.rad(-74 + 126 * e),
+			2.8
+	elseif alpha < 0.76 then
+		return math.rad(38), -0.35, 1.25, math.rad(52), 2.5
+	else
+		local t = (alpha - 0.76) / 0.24
+		local rem = 1 - (t * t * (3 - 2 * t))
+		return math.rad(38) * rem, -0.35 * rem, 1.25 * rem, math.rad(52) * rem, 2.5 * rem
+	end
+end
+
+local function computeForestTransform(
+	role: string,
+	now: number,
+	phase: number,
+	isMoving: boolean,
+	atkAlpha: number,
+	hitAlpha: number
+): CFrame
+	local atkPitch, atkFwd, atkArm = 0, 0, 0
+	if atkAlpha >= 0 then
+		atkPitch, atkFwd, atkArm = evalForestAttackCurve(atkAlpha)
+	end
+	local hitRecoil = if hitAlpha >= 0 then math.sin(hitAlpha * math.pi) else 0
+	local strideT = now * (if isMoving then 6.4 else 2.2) + phase
+	local breathT = now * 2.3 + phase
+
+	if role == "ForestTorso" then
+		local bob = if isMoving
+			then math.abs(math.sin(strideT)) * 0.42
+			else math.sin(breathT) * 0.16
+		local pitch = (
+			if isMoving
+				then math.rad(10) + math.sin(strideT * 2) * math.rad(4)
+				else math.sin(breathT) * math.rad(4)
+		)
+			+ atkPitch
+			- hitRecoil * math.rad(16)
+		local yaw = if isMoving
+			then math.sin(strideT) * math.rad(10)
+			else math.sin(now * 1.15 + phase) * math.rad(11)
+		local roll = if isMoving
+			then math.cos(strideT) * math.rad(8)
+			else math.sin(breathT * 0.5) * math.rad(3)
+		return CFrame.new(0, bob, -atkFwd) * CFrame.Angles(pitch, yaw, roll)
+	elseif role == "ForestArms" then
+		local pitch = (
+			if isMoving
+				then math.sin(strideT) * math.rad(22)
+				else math.sin(breathT - 0.5) * math.rad(6)
+		)
+			+ atkArm
+			- hitRecoil * math.rad(18)
+		local yaw = if isMoving
+			then math.cos(strideT) * math.rad(12)
+			else math.sin(breathT * 0.6) * math.rad(4)
+		local roll = if isMoving
+			then math.sin(strideT) * math.rad(7)
+			else math.cos(breathT) * math.rad(2.5)
+		return CFrame.Angles(pitch, yaw, roll)
+	elseif role == "ForestLegs" then
+		local roll = if isMoving
+			then -math.cos(strideT) * math.rad(11)
+			else math.sin(breathT * 0.5) * math.rad(2)
+		local yaw = if isMoving then -math.sin(strideT) * math.rad(12) else 0
+		local lift = if isMoving then math.abs(math.sin(strideT)) * 0.22 else 0
+		return CFrame.new(0, lift, 0) * CFrame.Angles(0, yaw, roll)
+	elseif role == "ForestFoliage" then
+		local rustle = math.sin(now * (if isMoving then 8.5 else 3.4) + phase - 0.7)
+		local flutter = (if isMoving then math.rad(9) else math.rad(3.8)) + hitRecoil * math.rad(12)
+		return CFrame.Angles(
+			rustle * flutter - atkPitch * 0.28,
+			math.cos(now * 2.6 + phase) * math.rad(3),
+			rustle * flutter * 0.7
+		)
+	else
+		local sway = math.sin(now * (if isMoving then 6.4 else 2.5) + phase - 1.0)
+		local deg = if isMoving then math.rad(5.5) else math.rad(2.2)
+		return CFrame.Angles(sway * deg, 0, math.cos(strideT - 0.8) * deg * 0.6)
+	end
+end
+
+local function computeFrostTransform(
+	role: string,
+	now: number,
+	phase: number,
+	isMoving: boolean,
+	atkAlpha: number,
+	hitAlpha: number
+): CFrame
+	local atkYaw, atkFwd, atkArmP, atkArmY = 0, 0, 0, 0
+	if atkAlpha >= 0 then
+		atkYaw, atkFwd, atkArmP, atkArmY = evalFrostAttackCurve(atkAlpha)
+	end
+	local hitRecoil = if hitAlpha >= 0 then math.sin(hitAlpha * math.pi) else 0
+	local rattle = if hitAlpha >= 0
+		then math.sin(now * 38 + phase) * math.rad(10) * hitRecoil
+		else 0
+	local shiverGate = math.max(0, math.sin(now * 1.4 + phase) - 0.55)
+	local shiver = math.sin(now * 26 + phase) * math.rad(5) * shiverGate
+	local glideT = now * (if isMoving then 4.8 else 1.8) + phase
+
+	if role == "ForestTorso" then
+		local hover = 0.35 + math.sin(glideT) * (if isMoving then 0.22 else 0.28)
+		local pitch = (if isMoving then math.rad(18) else math.sin(glideT * 0.7) * math.rad(3))
+			- hitRecoil * math.rad(14)
+		local yaw = (
+			if isMoving
+				then math.sin(glideT) * math.rad(14)
+				else math.sin(now * 0.9 + phase) * math.rad(16)
+		)
+			+ atkYaw
+			+ rattle
+		local roll = (
+			if isMoving
+				then math.cos(glideT) * math.rad(14)
+				else math.sin(glideT * 0.5) * math.rad(5)
+		) + shiver * 0.4
+		return CFrame.new(math.sin(glideT) * (if isMoving then 0.35 else 0), hover, -atkFwd)
+			* CFrame.Angles(pitch, yaw, roll)
+	elseif role == "ForestArms" then
+		local pitch = (
+			if isMoving then math.rad(14) + math.cos(glideT) * math.rad(14) else math.rad(-8)
+		)
+			+ atkArmP
+			- hitRecoil * math.rad(16)
+		local yaw = (
+			if isMoving
+				then math.sin(glideT) * math.rad(28)
+				else math.sin(glideT * 0.8) * math.rad(9)
+		)
+			+ atkArmY
+			+ rattle
+		local roll = (if isMoving then math.cos(glideT) * math.rad(16) else math.rad(6)) + shiver
+		return CFrame.Angles(pitch, yaw, roll)
+	elseif role == "ForestLegs" then
+		local pitch = if isMoving
+			then math.rad(-14) + math.sin(glideT) * math.rad(8)
+			else math.rad(-6)
+		local roll = if isMoving then -math.cos(glideT) * math.rad(9) else 0
+		return CFrame.new(0, 0.25 + math.sin(glideT) * 0.14, 0) * CFrame.Angles(pitch, 0, roll)
+	elseif role == "ForestFoliage" then
+		return CFrame.Angles(
+			shiver * 1.6 + rattle * 1.2,
+			atkYaw * 0.25 + math.sin(now * 4.5 + phase) * math.rad(4),
+			shiver * 1.3 + math.cos(glideT) * math.rad(5)
+		)
+	else
+		local drift = math.sin(glideT - 0.6) * math.rad(if isMoving then 8 else 3.5)
+		return CFrame.Angles(drift, atkYaw * 0.2, shiver * 0.8)
+	end
+end
+
+local function computeVolcanicTransform(
+	role: string,
+	now: number,
+	phase: number,
+	isMoving: boolean,
+	atkAlpha: number,
+	hitAlpha: number
+): CFrame
+	local atkPitch, atkLift, atkFwd, atkArm = 0, 0, 0, 0
+	if atkAlpha >= 0 then
+		atkPitch, atkLift, atkFwd, atkArm = evalVolcanicAttackCurve(atkAlpha)
+	end
+	local quake = if atkAlpha >= 0.56 and atkAlpha < 0.76
+		then math.sin(now * 44 + phase) * math.rad(6)
+		else 0
+	local hitSnap = if hitAlpha >= 0
+		then (if hitAlpha < 0.5
+			then -math.sin(hitAlpha * 2 * math.pi) * math.rad(18)
+			else math.sin((hitAlpha - 0.5) * 2 * math.pi) * math.rad(12))
+		else 0
+	local rumble = math.sin(now * 17 + phase) * math.rad(2.2)
+	local stompT = now * (if isMoving then 8.2 else 3.8) + phase
+
+	if role == "ForestTorso" then
+		local heave = if isMoving
+			then math.abs(math.sin(stompT)) * 0.48
+			else math.sin(stompT) * 0.24
+		local pitch = (
+			if isMoving
+				then math.rad(22) + math.sin(stompT * 2) * math.rad(5)
+				else math.rad(11) + math.sin(stompT) * math.rad(5)
+		)
+			+ atkPitch
+			+ hitSnap
+		local yaw = if isMoving
+			then math.sin(stompT) * math.rad(12)
+			else math.sin(now * 1.6 + phase) * math.rad(8)
+		local roll = (
+			if isMoving
+				then math.cos(stompT) * math.rad(11)
+				else math.sin(stompT * 0.5) * math.rad(4)
+		) + quake
+		return CFrame.new(0, heave + atkLift, -atkFwd) * CFrame.Angles(pitch, yaw, roll)
+	elseif role == "ForestArms" then
+		local pitch = (
+			if isMoving
+				then math.sin(stompT) * math.rad(34)
+				else math.rad(12) + math.sin(stompT - 0.4) * math.rad(9)
+		)
+			+ atkArm
+			+ hitSnap
+		local yaw = if isMoving
+			then math.cos(stompT) * math.rad(16)
+			else math.sin(stompT * 0.5) * math.rad(6)
+		local roll = (if isMoving then math.sin(stompT) * math.rad(14) else math.rad(10)) + quake
+		return CFrame.Angles(pitch, yaw, roll)
+	elseif role == "ForestLegs" then
+		local roll = if isMoving then -math.cos(stompT) * math.rad(15) else rumble * 0.5
+		local yaw = if isMoving then -math.sin(stompT) * math.rad(15) else 0
+		local lift = (if isMoving then math.abs(math.sin(stompT)) * 0.30 else 0)
+			+ math.max(0, atkLift * 0.55)
+		return CFrame.new(0, lift, 0) * CFrame.Angles(0, yaw, roll)
+	elseif role == "ForestFoliage" then
+		return CFrame.Angles(
+			rumble * 2.2 - atkPitch * 0.25 + quake * 1.4,
+			math.sin(now * 6.5 + phase) * math.rad(4),
+			rumble * 1.8 + math.cos(stompT) * math.rad(if isMoving then 8 else 3)
+		)
+	else
+		return CFrame.Angles(
+			math.sin(stompT - 0.6) * math.rad(if isMoving then 7 else 3.5) + rumble,
+			0,
+			quake + rumble
+		)
+	end
+end
+
+local function computeBiomeMonsterTransform(
+	model: Model?,
+	role: string,
+	now: number,
+	phase: number,
+	isMoving: boolean,
+	atkAlpha: number,
+	hitAlpha: number
+): CFrame
+	local style = if model
+		then tostring(model:GetAttribute("BiomeAnimStyle") or "Forest")
+		else "Forest"
+	if style == "Frost" then
+		return computeFrostTransform(role, now, phase, isMoving, atkAlpha, hitAlpha)
+	elseif style == "Volcanic" then
+		return computeVolcanicTransform(role, now, phase, isMoving, atkAlpha, hitAlpha)
+	end
+	return computeForestTransform(role, now, phase, isMoving, atkAlpha, hitAlpha)
+end
+
+local function computeBiomeGlowBrightness(
+	model: Model?,
+	baseBrightness: number,
+	now: number,
+	phase: number,
+	atkAlpha: number
+): number
+	local style = if model
+		then tostring(model:GetAttribute("BiomeAnimStyle") or "Forest")
+		else "Forest"
+	if style == "Frost" then
+		local surge = if atkAlpha >= 0 then select(5, evalFrostAttackCurve(atkAlpha)) else 0
+		local shimmer = 0.80
+			+ 0.24 * math.sin(now * 3.6 + phase)
+			+ 0.14 * math.sin(now * 11.0 + phase)
+		return baseBrightness * (shimmer + surge * 0.65)
+	elseif style == "Volcanic" then
+		local surge = if atkAlpha >= 0 then select(5, evalVolcanicAttackCurve(atkAlpha)) else 0
+		local flicker = 0.82
+			+ 0.22 * math.sin(now * 5.4 + phase)
+			+ 0.18 * math.sin(now * 14.3 + phase * 1.7)
+		return baseBrightness * (flicker + surge * 0.70)
+	end
+	local surge = if atkAlpha >= 0 then select(4, evalForestAttackCurve(atkAlpha)) else 0
+	local pulse = 0.78 + 0.28 * math.sin(now * 2.8 + phase)
+	return baseBrightness * (pulse + surge * 0.65)
+end
+
 local function registerMotor(inst: Instance)
+	if inst:IsA("PointLight") and inst.Name == "BioGlowLight" then
+		local model = inst:FindFirstAncestorOfClass("Model")
+		bioGlowLights[inst] = {
+			model = model,
+			baseBrightness = tonumber(inst:GetAttribute("BaseBrightness")) or inst.Brightness,
+			phase = math.random() * math.pi * 2,
+		}
+		return
+	end
 	if not inst:IsA("Motor6D") then
 		return
 	end
@@ -257,10 +634,16 @@ local function stepRigMotors(now: number, camPos: Vector3)
 		end
 		local model = entry.model
 		local isMoving = if model then (model:GetAttribute("IsMoving") == true) else false
+		local role = entry.role
+		if string.sub(role, 1, 6) == "Forest" then
+			local atkAlpha, hitAlpha, mPhase = getMobPulse(model, now)
+			motor.Transform =
+				computeBiomeMonsterTransform(model, role, now, mPhase, isMoving, atkAlpha, hitAlpha)
+			continue
+		end
 		local spd = entry.speed * (if isMoving then 1.45 else 1.0)
 		local amp = entry.amp * (if isMoving then 1.35 else 1.0)
 		local s = math.sin(now * spd + entry.phase)
-		local role = entry.role
 
 		if role == "WingL" then
 			motor.Transform = CFrame.Angles(0, 0, s * amp)
@@ -290,6 +673,15 @@ local function stepRigMotors(now: number, camPos: Vector3)
 		elseif role == "Core" then
 			motor.Transform = CFrame.new(0, s * amp, 0) * CFrame.Angles(0, now * 1.4, 0)
 		end
+	end
+	for light, info in pairs(bioGlowLights) do
+		if not light.Parent then
+			bioGlowLights[light] = nil
+			continue
+		end
+		local atkAlpha = getMobPulse(info.model, now)
+		light.Brightness =
+			computeBiomeGlowBrightness(info.model, info.baseBrightness, now, info.phase, atkAlpha)
 	end
 end
 
@@ -657,6 +1049,10 @@ function AnimationController.start()
 	workspace.DescendantRemoving:Connect(function(inst: Instance)
 		if inst:IsA("Motor6D") then
 			rigMotors[inst] = nil
+		elseif inst:IsA("PointLight") then
+			bioGlowLights[inst] = nil
+		elseif inst:IsA("Model") then
+			mobPulses[inst] = nil
 		end
 	end)
 
