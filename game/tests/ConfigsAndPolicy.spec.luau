@@ -37,6 +37,20 @@ assertNear(
 	"Overcharged Solo Meadow Boss HP"
 )
 
+-- 1b. Emerald Meadow common Forest Monster replacements keep canonical gameplay stats
+assertTrue(
+	BiomeConfigs.MOBS.MossSlime.displayName == "Forest Monster",
+	"Tier-1 Meadow display name"
+)
+assertNear(BiomeConfigs.MOBS.MossSlime.maxHP, 45, "Tier-1 Meadow HP preserved")
+assertNear(BiomeConfigs.MOBS.MossSlime.coinReward, 28, "Tier-1 Meadow coins preserved")
+assertTrue(
+	BiomeConfigs.MOBS.BrambleBoar.displayName == "Elder Forest Monster",
+	"Tier-2 Meadow display name"
+)
+assertNear(BiomeConfigs.MOBS.BrambleBoar.maxHP, 85, "Tier-2 Meadow HP preserved")
+assertNear(BiomeConfigs.MOBS.BrambleBoar.coinReward, 50, "Tier-2 Meadow coins preserved")
+
 -- 2. Trait weights sum to 100%
 assertNear(TraitConfigs.getTotalWeight(), 100, "Trait roll weights sum")
 assertTrue(TraitConfigs.rollTrait(0.0).id == "Greedy", "First trait bucket Greedy")

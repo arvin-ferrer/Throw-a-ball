@@ -364,7 +364,8 @@ function ProceduralModels.createMobModel(mobId: string): Model
 	local prefab = findAssetPrefab("Mobs", cfg.id)
 	if prefab and prefab:IsA("Model") and prefab.PrimaryPart then
 		local clone = prefab:Clone()
-		addHealthBar(clone.PrimaryPart, cfg.displayName, accent, 4.0, 150)
+		local hbOffset = tonumber(clone:GetAttribute("HealthBarOffsetY")) or 4.0
+		addHealthBar(clone.PrimaryPart, cfg.displayName, accent, hbOffset, 150)
 		return clone
 	end
 

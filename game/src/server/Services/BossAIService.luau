@@ -78,7 +78,11 @@ local function spawnMobInstance(mob: ActiveMob)
 	model:SetAttribute("EntityKind", "PvEMob")
 	model:SetAttribute("BiomeId", mob.biomeId)
 	model:SetAttribute("MobType", mob.mobType)
-	model:PivotTo(mob.spawnPart.CFrame * CFrame.new(0, 3.2, 0))
+	local groundOffset = tonumber(model:GetAttribute("GroundOffsetY")) or 3.2
+	local sp = mob.spawnPart.Position
+	local spawnCF = CFrame.new(sp.X, sp.Y + groundOffset, sp.Z)
+		* CFrame.Angles(0, math.random() * math.pi * 2, 0)
+	model:PivotTo(spawnCF)
 	model.Parent = mob.spawnPart.Parent
 	mob.model = model
 	mob.hp = cfg.maxHP
@@ -310,6 +314,10 @@ function BossAIService.damageMob(
 	end
 	mob.hp = math.max(0, mob.hp - damage)
 	updateHealthBar(mob.model, mob.hp, mob.maxHP)
+	if mob.hp > 0 then
+		local hitSeq = (tonumber(mob.model:GetAttribute("HitSeq")) or 0) + 1
+		mob.model:SetAttribute("HitSeq", hitSeq)
+	end
 	if mob.hp <= 0 then
 		local cfg = BiomeConfigs.MOBS[mob.mobType]
 		mob.alive = false
@@ -405,8 +413,11 @@ local function stepSingleMob(mob: ActiveMob, now: number, dt: number)
 			mob.model:SetAttribute("IsMoving", true)
 		else
 			mob.model:SetAttribute("IsMoving", false)
+			smoothStepModel(mob.model, root.Position, targetHrp.Position, dt)
 			if now >= mob.lastAttackAt + cfg.attackCooldown then
 				mob.lastAttackAt = now
+				local atkSeq = (tonumber(mob.model:GetAttribute("AttackSeq")) or 0) + 1
+				mob.model:SetAttribute("AttackSeq", atkSeq)
 				local hum = if targetPlr.Character
 					then targetPlr.Character:FindFirstChildOfClass("Humanoid")
 					else nil
@@ -416,7 +427,9 @@ local function stepSingleMob(mob: ActiveMob, now: number, dt: number)
 			end
 		end
 	else
-		local home = mob.spawnPart.Position + Vector3.new(0, 3.2, 0)
+		local groundOffset = tonumber(mob.model:GetAttribute("GroundOffsetY")) or 3.2
+		local sp = mob.spawnPart.Position
+		local home = Vector3.new(sp.X, sp.Y + groundOffset, sp.Z)
 		local toHome = Vector3.new(home.X - root.Position.X, 0, home.Z - root.Position.Z)
 		if toHome.Magnitude > 2.5 then
 			local nextPos = root.Position

@@ -143,7 +143,7 @@ BiomeConfigs.BIOMES = {
 BiomeConfigs.MOBS = {
 	MossSlime = {
 		id = "MossSlime",
-		displayName = "Moss Slime",
+		displayName = "Forest Monster",
 		biomeId = "EmeraldMeadow",
 		maxHP = 45,
 		moveSpeed = 12,
@@ -159,7 +159,7 @@ BiomeConfigs.MOBS = {
 	},
 	BrambleBoar = {
 		id = "BrambleBoar",
-		displayName = "Bramble Boar",
+		displayName = "Elder Forest Monster",
 		biomeId = "EmeraldMeadow",
 		maxHP = 85,
 		moveSpeed = 15,
