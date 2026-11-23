@@ -2,7 +2,7 @@
 --[[
 	BossAIService.luau
 	Server-authoritative AI for all 3 Biome Bosses (Mossback Golem, Glacier Yeti, Obsidian Wyrm)
-	with telegraphed AoE/Cone/Projectile/Ring/Geyser attacks AND all 24 Open PvE Layer Mob Spawns.
+	with telegraphed AoE/Cone/Projectile/Ring/Geyser attacks AND all Open PvE Layer Mob Spawns.
 ]]
 
 local CollectionService = game:GetService("CollectionService")

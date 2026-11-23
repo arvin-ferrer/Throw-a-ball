@@ -37,18 +37,46 @@ assertNear(
 	"Overcharged Solo Meadow Boss HP"
 )
 
--- 1b. Emerald Meadow common Forest Monster replacements keep canonical gameplay stats
+-- 1b. Biome-themed Monster variants and biome-scaled HP progression across all 3 biomes
 assertTrue(
 	BiomeConfigs.MOBS.MossSlime.displayName == "Forest Monster",
 	"Tier-1 Meadow display name"
 )
-assertNear(BiomeConfigs.MOBS.MossSlime.maxHP, 45, "Tier-1 Meadow HP preserved")
-assertNear(BiomeConfigs.MOBS.MossSlime.coinReward, 28, "Tier-1 Meadow coins preserved")
 assertTrue(
 	BiomeConfigs.MOBS.BrambleBoar.displayName == "Elder Forest Monster",
 	"Tier-2 Meadow display name"
 )
-assertNear(BiomeConfigs.MOBS.BrambleBoar.maxHP, 85, "Tier-2 Meadow HP preserved")
+assertTrue(
+	BiomeConfigs.MOBS.IceWraith.displayName == "Frost Monster",
+	"Tier-1 Frostbite display name"
+)
+assertTrue(
+	BiomeConfigs.MOBS.CrystalWolf.displayName == "Elder Frost Monster",
+	"Tier-2 Frostbite display name"
+)
+assertTrue(
+	BiomeConfigs.MOBS.CinderImp.displayName == "Magma Monster",
+	"Tier-1 Caldera display name"
+)
+assertTrue(
+	BiomeConfigs.MOBS.MagmaHound.displayName == "Elder Magma Monster",
+	"Tier-2 Caldera display name"
+)
+assertNear(BiomeConfigs.MOBS.MossSlime.maxHP, 75, "Tier-1 Meadow biome-scaled HP")
+assertNear(BiomeConfigs.MOBS.BrambleBoar.maxHP, 140, "Tier-2 Meadow biome-scaled HP")
+assertNear(BiomeConfigs.MOBS.IceWraith.maxHP, 950, "Tier-1 Frostbite biome-scaled HP")
+assertNear(BiomeConfigs.MOBS.CrystalWolf.maxHP, 1650, "Tier-2 Frostbite biome-scaled HP")
+assertNear(BiomeConfigs.MOBS.CinderImp.maxHP, 9000, "Tier-1 Caldera biome-scaled HP")
+assertNear(BiomeConfigs.MOBS.MagmaHound.maxHP, 15500, "Tier-2 Caldera biome-scaled HP")
+assertTrue(
+	BiomeConfigs.MOBS.MossSlime.maxHP < BiomeConfigs.MOBS.BrambleBoar.maxHP
+		and BiomeConfigs.MOBS.BrambleBoar.maxHP < BiomeConfigs.MOBS.IceWraith.maxHP
+		and BiomeConfigs.MOBS.IceWraith.maxHP < BiomeConfigs.MOBS.CrystalWolf.maxHP
+		and BiomeConfigs.MOBS.CrystalWolf.maxHP < BiomeConfigs.MOBS.CinderImp.maxHP
+		and BiomeConfigs.MOBS.CinderImp.maxHP < BiomeConfigs.MOBS.MagmaHound.maxHP,
+	"Strict biome-tiered monster HP progression"
+)
+assertNear(BiomeConfigs.MOBS.MossSlime.coinReward, 28, "Tier-1 Meadow coins preserved")
 assertNear(BiomeConfigs.MOBS.BrambleBoar.coinReward, 50, "Tier-2 Meadow coins preserved")
 
 -- 2. Trait weights sum to 100%
