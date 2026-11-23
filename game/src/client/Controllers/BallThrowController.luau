@@ -32,6 +32,25 @@ local DASH_END_SPEED = 30
 local DASH_DURATION = 0.26
 local DASH_COOLDOWN = 2.5
 
+type VisualBall = {
+	id: number,
+	ball: Model,
+	mode: "Homing" | "Ballistic",
+	pos: Vector3,
+	vel: Vector3,
+	startPos: Vector3,
+	serverOrigin: Vector3,
+	launchTime: number,
+	homingPart: BasePart?,
+	homingEndPos: Vector3,
+	homingDur: number,
+	arcBoost: number,
+	expiresAt: number,
+	bounced: boolean,
+	rolling: boolean,
+	spinAngle: number,
+}
+
 local localPlayer = Players.LocalPlayer
 local isSprinting = false
 local isOnTrainingPad = false
@@ -43,6 +62,7 @@ local afkTargetCycle = 0
 local autoAimEnabled = UserInputService.PreferredInput == Enum.PreferredInput.Touch
 local currentLockedPart: BasePart? = nil
 local lockReticleGui: BillboardGui? = nil
+local activeVisualBalls: { [number]: VisualBall } = {}
 
 local function getRootAndHum(): (BasePart?, Humanoid?)
 	local char = localPlayer.Character
@@ -255,15 +275,10 @@ local function findAutoAimTarget(origin: Vector3): BasePart?
 	return if chosen then partById[chosen.id] else nil
 end
 
-local function computeManualAim(origin: Vector3, cam: Camera): Vector3
-	local baseDir = cam.CFrame.LookVector
-	if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
-		local mouseLoc = UserInputService:GetMouseLocation()
-		local ray = cam:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
-		local targetPoint = ray.Origin + ray.Direction * 120
-		baseDir = (targetPoint - origin).Unit
-	end
-	return baseDir
+local function computeManualAim(cam: Camera): Vector3
+	local look = cam.CFrame.LookVector
+	local dx, dy, dz = CombatLogic.computeCameraAimDirection(look.X, look.Y, look.Z)
+	return Vector3.new(dx, dy, dz)
 end
 
 local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
@@ -304,7 +319,7 @@ local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
 			end
 		end
 	else
-		aimDir = computeManualAim(origin, cam)
+		aimDir = computeManualAim(cam)
 	end
 
 	AnimationController.playThrowAnim(localPlayer)
@@ -457,6 +472,7 @@ local function triggerImpactFeedback(
 		spawnDamagePopup(impactPos, if isCrit then `CRIT {dmgTxt}!` else `-{dmgTxt}`, col)
 		AnimationController.playImpactEffect(impactPos, hitKind, isCrit, col, hitInst)
 	elseif hitKind == "Surface" then
+		AudioCatalog.play("Throw", 1.42, 0.12)
 		AnimationController.playImpactEffect(
 			impactPos,
 			"Surface",
@@ -467,64 +483,24 @@ local function triggerImpactFeedback(
 	end
 end
 
-local function runPostImpactBounce(
-	ball: Model,
-	impactPos: Vector3,
-	incomingVel: Vector3,
-	normal: Vector3
-)
-	local n = if normal.Magnitude > 0.1 then normal.Unit else Vector3.yAxis
-	local reflected = incomingVel - 2 * incomingVel:Dot(n) * n
-	local bounceVel = reflected * 0.32
-		+ Vector3.new(
-			(math.random() - 0.5) * 14,
-			math.max(12, math.abs(reflected.Y) * 0.4),
-			(math.random() - 0.5) * 14
-		)
-	local pos = impactPos
-	local startAt = os.clock()
-	local bounceDur = 0.42
-	local floorY = math.max(1.2, impactPos.Y - 4.5)
-	local spinAngle = 0
-	local conn: RBXScriptConnection? = nil
-
-	conn = RunService.RenderStepped:Connect(function(dt: number)
-		local elapsed = os.clock() - startAt
-		if elapsed >= bounceDur or not ball.Parent then
-			if conn then
-				conn:Disconnect()
-				conn = nil
-			end
-			if ball.Parent then
-				ball:Destroy()
-			end
-			return
-		end
-		local stepDt = math.min(dt, 0.05)
-		bounceVel += Vector3.new(0, -68 * stepDt, 0)
-		pos += bounceVel * stepDt
-		if pos.Y < floorY then
-			pos = Vector3.new(pos.X, floorY, pos.Z)
-			bounceVel =
-				Vector3.new(bounceVel.X * 0.72, math.abs(bounceVel.Y) * 0.48, bounceVel.Z * 0.72)
-		end
-		spinAngle += stepDt * 14
-		local fade = math.clamp(1 - (elapsed / bounceDur), 0.18, 1)
-		ball:PivotTo(CFrame.new(pos) * CFrame.Angles(spinAngle, spinAngle * 0.5, 0))
-		if ball.PrimaryPart then
-			ball.PrimaryPart.Transparency = math.clamp(1 - fade, 0, 0.92)
-		end
-	end)
-end
-
-local function onProjectileBroadcast(data: any)
-	if
-		type(data) ~= "table"
-		or typeof(data.origin) ~= "Vector3"
-		or typeof(data.endPos) ~= "Vector3"
-	then
+local function destroyVisualBall(ballId: number)
+	local entry = activeVisualBalls[ballId]
+	if not entry then
 		return
 	end
+	activeVisualBalls[ballId] = nil
+	if entry.ball.Parent then
+		entry.ball:Destroy()
+	end
+end
+
+local function handleLaunchPacket(data: any)
+	local ballId = tonumber(data.ballId)
+	if not ballId or typeof(data.origin) ~= "Vector3" or typeof(data.endPos) ~= "Vector3" then
+		return
+	end
+	destroyVisualBall(ballId)
+
 	local shooterId = tonumber(data.shooterId)
 	local shooterPlr = if shooterId then Players:GetPlayerByUserId(shooterId) else nil
 	if shooterPlr and shooterPlr ~= localPlayer then
@@ -549,78 +525,151 @@ local function onProjectileBroadcast(data: any)
 			and hitInst:IsA("BasePart")
 		then hitInst
 		else nil
-	local dur = math.clamp(tonumber(data.travelSec) or 0.25, 0.08, 1.65)
+	local dur = math.clamp(tonumber(data.travelSec) or 0.25, 0.08, 2.2)
 	local launchVel: Vector3 = if typeof(data.launchVel) == "Vector3"
 		then data.launchVel
 		else (staticEnd - serverOrigin).Unit * (tonumber(data.speed) or 115)
-	local normal: Vector3 = if typeof(data.normal) == "Vector3" then data.normal else Vector3.yAxis
-	local hitKind = tostring(data.hitKind or "Miss")
-	local isCrit = data.isCrit == true
-	local damage = tonumber(data.damage) or 1
 
-	ball:PivotTo(CFrame.new(startPos, staticEnd))
+	ball:PivotTo(CFrame.lookAt(startPos, staticEnd))
 	ball.Parent = workspace
 
-	local startTime = os.clock()
-	local prevPos = startPos
-	local lastVel = launchVel
-	local arcBoost = math.clamp((staticEnd - startPos).Magnitude * 0.08, 0.8, 5.5)
-	local conn: RBXScriptConnection? = nil
+	local now = os.clock()
+	activeVisualBalls[ballId] = {
+		id = ballId,
+		ball = ball,
+		mode = if homingPart then "Homing" else "Ballistic",
+		pos = serverOrigin,
+		vel = launchVel,
+		startPos = startPos,
+		serverOrigin = serverOrigin,
+		launchTime = now,
+		homingPart = homingPart,
+		homingEndPos = staticEnd,
+		homingDur = dur,
+		arcBoost = math.clamp((staticEnd - startPos).Magnitude * 0.08, 0.8, 5.5),
+		expiresAt = now + dur + CombatLogic.POST_BOUNCE_LIFETIME + 0.5,
+		bounced = false,
+		rolling = false,
+		spinAngle = 0,
+	}
+end
 
-	conn = RunService.RenderStepped:Connect(function(dt: number)
-		local elapsed = os.clock() - startTime
-		local alpha = math.clamp(elapsed / dur, 0, 1)
-		local nextPos: Vector3
-		if homingPart and homingPart.Parent then
-			-- Real-time homing curve right into the moving target's live center!
-			local liveDest = homingPart.Position
-			local linear = startPos:Lerp(liveDest, alpha)
-			nextPos = linear + Vector3.new(0, 4 * alpha * (1 - alpha) * arcBoost, 0)
+local function handleBouncePacket(data: any)
+	local ballId = tonumber(data.ballId)
+	if not ballId or typeof(data.pos) ~= "Vector3" or typeof(data.vel) ~= "Vector3" then
+		return
+	end
+	local entry = activeVisualBalls[ballId]
+	local hitKind = tostring(data.hitKind or "Surface")
+	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
+	if entry then
+		entry.mode = "Ballistic"
+		entry.bounced = true
+		entry.rolling = hitKind == "Roll"
+		entry.pos = data.pos
+		entry.vel = data.vel
+		local rem = math.clamp(
+			tonumber(data.remainingLife) or 0.1,
+			0.05,
+			CombatLogic.POST_BOUNCE_LIFETIME + 0.2
+		)
+		entry.expiresAt = os.clock() + rem
+	end
+	if hitKind ~= "Roll" then
+		triggerImpactFeedback(
+			data.pos,
+			hitKind,
+			data.isCrit == true,
+			tonumber(data.damage) or 0,
+			hitInst
+		)
+	end
+end
+
+local function handleImpactDespawnPacket(data: any)
+	local ballId = tonumber(data.ballId)
+	if ballId then
+		destroyVisualBall(ballId)
+	end
+	if typeof(data.pos) == "Vector3" then
+		local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
+		triggerImpactFeedback(
+			data.pos,
+			tostring(data.hitKind or "Surface"),
+			data.isCrit == true,
+			tonumber(data.damage) or 0,
+			hitInst
+		)
+	end
+end
+
+local function onProjectileBroadcast(data: any)
+	if type(data) ~= "table" then
+		return
+	end
+	local kind = data.msgKind
+	if kind == "Launch" then
+		handleLaunchPacket(data)
+	elseif kind == "Bounce" then
+		handleBouncePacket(data)
+	elseif kind == "ImpactDespawn" then
+		handleImpactDespawnPacket(data)
+	elseif kind == "Despawn" then
+		local ballId = tonumber(data.ballId)
+		if ballId then
+			destroyVisualBall(ballId)
+		end
+	end
+end
+
+local function stepVisualBalls(dt: number)
+	local now = os.clock()
+	local stepDt = math.min(dt, 0.05)
+	for ballId, entry in pairs(activeVisualBalls) do
+		if now >= entry.expiresAt or not entry.ball.Parent then
+			destroyVisualBall(ballId)
+			continue
+		end
+		local renderPos: Vector3
+		local forwardDir = Vector3.zAxis
+		if entry.mode == "Homing" then
+			local alpha = math.clamp((now - entry.launchTime) / entry.homingDur, 0, 1)
+			local dest = if entry.homingPart and entry.homingPart.Parent
+				then entry.homingPart.Position
+				else entry.homingEndPos
+			local linear = entry.startPos:Lerp(dest, alpha)
+			renderPos = linear + Vector3.new(0, 4 * alpha * (1 - alpha) * entry.arcBoost, 0)
+			local delta = dest - entry.startPos
+			if delta.Magnitude > 0.1 then
+				forwardDir = delta.Unit
+			end
 		else
-			-- True ballistic gravity arc blended smoothly from hand launch to server curve
-			local sx, sy, sz = CombatLogic.sampleBallisticPosition(
-				serverOrigin.X,
-				serverOrigin.Y,
-				serverOrigin.Z,
-				launchVel.X,
-				launchVel.Y,
-				launchVel.Z,
-				elapsed,
-				CombatLogic.BALL_GRAVITY
-			)
-			local handBlend = math.clamp(1 - alpha * 4, 0, 1)
-			nextPos = Vector3.new(sx, sy, sz) + (startPos - serverOrigin) * handBlend
-		end
-
-		local stepVel = (nextPos - prevPos) / math.max(0.008, dt)
-		if stepVel.Magnitude > 1 then
-			lastVel = stepVel
-		end
-		prevPos = nextPos
-
-		if ball.Parent then
-			local rollSpin = elapsed * 20
-			local lookPos = nextPos
-				+ (if lastVel.Magnitude > 0.5 then lastVel.Unit else Vector3.zAxis)
-			ball:PivotTo(CFrame.lookAt(nextPos, lookPos) * CFrame.Angles(-rollSpin, 0, 0))
-		end
-
-		if alpha >= 1 then
-			if conn then
-				conn:Disconnect()
-				conn = nil
+			if entry.rolling then
+				entry.pos += Vector3.new(entry.vel.X, 0, entry.vel.Z) * stepDt
+			else
+				local g = CombatLogic.BALL_GRAVITY
+				entry.pos += entry.vel * stepDt + Vector3.new(0, -0.5 * g * stepDt * stepDt, 0)
+				entry.vel += Vector3.new(0, -g * stepDt, 0)
 			end
-			local impactPos = if homingPart and homingPart.Parent
-				then homingPart.Position
-				else staticEnd
-			triggerImpactFeedback(impactPos, hitKind, isCrit, damage, hitInst)
-			if hitKind ~= "Miss" and ball.Parent then
-				runPostImpactBounce(ball, impactPos, lastVel, normal)
-			elseif ball.Parent then
-				ball:Destroy()
+			if entry.vel.Magnitude > 0.5 then
+				forwardDir = entry.vel.Unit
 			end
+			local handBlend = if entry.bounced
+				then 0
+				else math.clamp(1 - (now - entry.launchTime) * 8, 0, 1)
+			renderPos = entry.pos + (entry.startPos - entry.serverOrigin) * handBlend
 		end
-	end)
+		entry.spinAngle += stepDt * math.clamp(entry.vel.Magnitude * 0.22, 4, 22)
+		entry.ball:PivotTo(
+			CFrame.lookAt(renderPos, renderPos + forwardDir) * CFrame.Angles(-entry.spinAngle, 0, 0)
+		)
+		if entry.bounced and entry.ball.PrimaryPart then
+			local rem = entry.expiresAt - now
+			entry.ball.PrimaryPart.Transparency = if rem < 0.35
+				then math.clamp(1 - (rem / 0.35), 0, 0.92)
+				else 0
+		end
+	end
 end
 
 local function onBossTelegraph(data: any)
@@ -670,6 +719,7 @@ end
 
 function BallThrowController.start()
 	BallThrowController.setAutoAimEnabled(autoAimEnabled)
+	RunService.RenderStepped:Connect(stepVisualBalls)
 	local remotes = Remotes.waitClient()
 	remotes.ProjectileBroadcast.OnClientEvent:Connect(onProjectileBroadcast)
 	remotes.BossTelegraph.OnClientEvent:Connect(onBossTelegraph)

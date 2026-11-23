@@ -95,11 +95,11 @@ To eliminate the dead-wait churn trap while preserving `GameIdea.txt`'s signatur
 ## 5. Throwable Ball Combat & Movement Specification
 
 ### 5.1 Dual Context Movement Rule
-- **Personal Training Range (Stationary Firing Pad):** Stepping onto your Plot's Training Pad anchors your character smoothly into a stationary shooting stance. Aim with mouse cursor (PC) or tap/hold-to-aim (Mobile) to fire throwable balls downrange at targets. Stepping/jumping off cancels stationary mode instantly.
+- **Personal Training Range (Stationary Firing Pad):** Stepping onto your Plot's Training Pad anchors your character smoothly into a stationary shooting stance. Aim along your camera look direction (PC & Mobile) or use Auto-Aim to fire throwable balls downrange at targets. Stepping/jumping off cancels stationary mode instantly.
 - **Biome PvE, Boss Phase & PvP Scramble (Free Movement + Dodge):** Players move freely (`18 studs/s` base walk, `24 studs/s` sprint), trigger a short **Dash/Dodge** (`0.35s` impulse, `2.5s` cooldown) to evade boss AoEs and incoming PvP shots, and throw balls on the run.
 
 ### 5.2 Ball Projectile Feel & Mobile Ergonomics
-- **Aiming & Trajectory:** Fast arc/linear throwable ball with a crisp client-side prediction trail and **server-authoritative hit validation** (raycast/swept-sphere segments along projectile path to prevent wall-clipping and damage spoofing).
+- **Aiming & Trajectory:** Fast arc/linear throwable ball with a crisp client-side prediction trail and **server-authoritative hit validation** (raycast/swept-sphere segments along projectile path to prevent wall-clipping and damage spoofing). After its **first surface bounce**, each ball remains physically active for **1.0 second**, continuing to bounce and deal server-validated damage before disappearing (and auto-despawns immediately upon hitting an enemy or target).
 - **Mobile-First Assist:** On touch devices, a dedicated **Throw / Hold-to-Aim Button** provides generous soft magnetic aim-assist toward targets/mobs/bosses (mildly tuned in PvP so dodging still works cleanly).
 - **Ball Tiers (Bought with Coins):** Upgrading your physical Ball model in the Hub Shop increases base damage multiplier, projectile velocity, and visual trail prestige (e.g., *Rubber Ball → Iron Sphere → Frost Orb → Magma Core → Nova Sphere*).
 

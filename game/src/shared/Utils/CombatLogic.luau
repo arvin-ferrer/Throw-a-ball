@@ -99,6 +99,12 @@ CombatLogic.CRIT_MULTIPLIER = 1.75
 CombatLogic.LEECH_CAP_PER_HIT_FRAC = 0.15
 CombatLogic.AUTO_AIM_MAX_RANGE = 185
 CombatLogic.BALL_GRAVITY = 42
+CombatLogic.POST_BOUNCE_LIFETIME = 1.0
+CombatLogic.MAX_INITIAL_FLIGHT_SEC = 2.0
+CombatLogic.BOUNCE_RESTITUTION = 0.78
+CombatLogic.BOUNCE_TANGENT_RETENTION = 0.88
+CombatLogic.BOUNCE_HIT_COOLDOWN = 0.25
+CombatLogic.MAX_ACTIVE_BALLS_PER_PLAYER = 12
 
 function CombatLogic.getActiveTraitBonuses(activePets: { OwnedPetSnapshot }): (number, number)
 	local throwSpeedBonus = 0
@@ -285,6 +291,25 @@ function CombatLogic.selectAutoAimTarget(
 	return best
 end
 
+function CombatLogic.computeCameraAimDirection(
+	lookX: number,
+	lookY: number,
+	lookZ: number
+): (number, number, number)
+	if
+		not MathUtil.isFinite(lookX)
+		or not MathUtil.isFinite(lookY)
+		or not MathUtil.isFinite(lookZ)
+	then
+		return 0, 0, -1
+	end
+	local mag = math.sqrt(lookX * lookX + lookY * lookY + lookZ * lookZ)
+	if mag < 1e-4 then
+		return 0, 0, -1
+	end
+	return lookX / mag, lookY / mag, lookZ / mag
+end
+
 function CombatLogic.computeBallisticLaunchVelocity(
 	dirX: number,
 	dirY: number,
@@ -313,6 +338,97 @@ function CombatLogic.sampleBallisticPosition(
 ): (number, number, number)
 	local g = gravity or CombatLogic.BALL_GRAVITY
 	return originX + velX * t, originY + velY * t - 0.5 * g * t * t, originZ + velZ * t
+end
+
+function CombatLogic.computeBounceVelocity(
+	velX: number,
+	velY: number,
+	velZ: number,
+	normX: number,
+	normY: number,
+	normZ: number,
+	restitution: number?,
+	tangentRetention: number?
+): (number, number, number)
+	if
+		not MathUtil.isFinite(velX)
+		or not MathUtil.isFinite(velY)
+		or not MathUtil.isFinite(velZ)
+		or not MathUtil.isFinite(normX)
+		or not MathUtil.isFinite(normY)
+		or not MathUtil.isFinite(normZ)
+	then
+		return 0, 0, 0
+	end
+	local nMag = math.sqrt(normX * normX + normY * normY + normZ * normZ)
+	local nx, ny, nz = 0, 1, 0
+	if nMag >= 1e-4 then
+		nx, ny, nz = normX / nMag, normY / nMag, normZ / nMag
+	end
+	local e = restitution or CombatLogic.BOUNCE_RESTITUTION
+	local tRet = tangentRetention or CombatLogic.BOUNCE_TANGENT_RETENTION
+	local vn = velX * nx + velY * ny + velZ * nz
+	local vtX, vtY, vtZ = velX - vn * nx, velY - vn * ny, velZ - vn * nz
+	local outNormal = if vn < 0 then -vn * e else math.max(vn, 4)
+	local ox = vtX * tRet + nx * outNormal
+	local oy = vtY * tRet + ny * outNormal
+	local oz = vtZ * tRet + nz * outNormal
+	if math.abs(ny) < 0.35 and oy < 10 then
+		oy = 10
+	elseif ny > 0.65 and oy < 3.5 then
+		oy = 0
+	end
+	return ox, oy, oz
+end
+
+function CombatLogic.isBounceActive(firstBounceAt: number?, now: number, lifetime: number?): boolean
+	if
+		firstBounceAt == nil
+		or not MathUtil.isFinite(firstBounceAt)
+		or not MathUtil.isFinite(now)
+	then
+		return false
+	end
+	local limit = lifetime or CombatLogic.POST_BOUNCE_LIFETIME
+	return now >= firstBounceAt and (now - firstBounceAt) < limit
+end
+
+function CombatLogic.getRemainingBounceTime(
+	firstBounceAt: number?,
+	now: number,
+	lifetime: number?
+): number
+	if
+		firstBounceAt == nil
+		or not MathUtil.isFinite(firstBounceAt)
+		or not MathUtil.isFinite(now)
+	then
+		return 0
+	end
+	local limit = lifetime or CombatLogic.POST_BOUNCE_LIFETIME
+	return math.max(0, limit - math.max(0, now - firstBounceAt))
+end
+
+function CombatLogic.canBounceHitTarget(lastHitAt: number?, now: number, cooldown: number?): boolean
+	if not MathUtil.isFinite(now) then
+		return false
+	end
+	if lastHitAt == nil then
+		return true
+	end
+	if not MathUtil.isFinite(lastHitAt) then
+		return false
+	end
+	local cd = cooldown or CombatLogic.BOUNCE_HIT_COOLDOWN
+	return (now - lastHitAt) >= cd
+end
+
+function CombatLogic.shouldDespawnOnHitKind(hitKind: string): boolean
+	return hitKind == "Mob"
+		or hitKind == "Boss"
+		or hitKind == "PvP"
+		or hitKind == "Target"
+		or hitKind == "GoldTarget"
 end
 
 return CombatLogic
