@@ -9,6 +9,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyConfigs = require(Shared.Configs.EconomyConfigs)
@@ -30,12 +31,30 @@ type ResolvedTarget = {
 	victim: Player?,
 }
 
+type ActiveProjectile = {
+	id: number,
+	player: Player,
+	profile: EconomyLogic.PlayerProfile,
+	speed: number,
+	pos: Vector3,
+	vel: Vector3,
+	launchedAt: number,
+	firstBounceAt: number?,
+	bounceCount: number,
+	maxInitialFlight: number,
+	homingTarget: ResolvedTarget?,
+	homingArrivesAt: number?,
+	lastSurfaceBroadcastAt: number,
+}
+
 local CombatService = {}
 
 local lastThrowTime: { [number]: number } = {}
 local lastDashTime: { [number]: number } = {}
 local goldComboByUser: { [number]: number } = {}
 local shieldByUser: { [number]: number } = {}
+local activeProjectiles: { ActiveProjectile } = {}
+local nextBallId = 0
 local DASH_COOLDOWN = 2.5
 
 local function applyShield(player: Player, amount: number)
@@ -220,40 +239,6 @@ local function castSegmentSphere(fromPos: Vector3, delta: Vector3, char: Model):
 	return nil
 end
 
-local function stepBallisticArc(
-	origin: Vector3,
-	launchVel: Vector3,
-	maxTime: number,
-	char: Model
-): (RaycastResult?, Vector3, Vector3, number)
-	local steps = 12
-	local dt = maxTime / steps
-	local prevPos = origin
-	for i = 1, steps do
-		local t = i * dt
-		local nx, ny, nz = CombatLogic.sampleBallisticPosition(
-			origin.X,
-			origin.Y,
-			origin.Z,
-			launchVel.X,
-			launchVel.Y,
-			launchVel.Z,
-			t,
-			CombatLogic.BALL_GRAVITY
-		)
-		local nextPos = Vector3.new(nx, ny, nz)
-		local seg = nextPos - prevPos
-		local res = castSegmentSphere(prevPos, seg, char)
-		if res then
-			local frac = math.clamp(res.Distance / math.max(0.01, seg.Magnitude), 0, 1)
-			local hitTime = (i - 1 + frac) * dt
-			return res, res.Position, res.Normal, hitTime
-		end
-		prevPos = nextPos
-	end
-	return nil, prevPos, Vector3.yAxis, maxTime
-end
-
 local function classifyHitPart(player: Player, hitPart: BasePart): ResolvedTarget?
 	local targetKind = tostring(hitPart:GetAttribute("TargetKind") or "")
 	if targetKind == "Static" or targetKind == "MovingGold" then
@@ -426,6 +411,196 @@ local function applyResolvedImpact(
 	end
 end
 
+local function evaluateCurrentHit(profile: EconomyLogic.PlayerProfile): CombatLogic.DamageEvalResult
+	return CombatLogic.evaluateBallHit({
+		baseBallDamage = profile.ballDamage,
+		ballTierId = profile.ballTierId,
+		activePets = EconomyLogic.getActivePets(profile),
+		critRollUnit = math.random(),
+	})
+end
+
+local function broadcastProjectile(payload: { [string]: any })
+	Remotes.ensureServer().ProjectileBroadcast:FireAllClients(payload)
+end
+
+local function despawnProjectileAt(index: number)
+	local proj = activeProjectiles[index]
+	if not proj then
+		return
+	end
+	table.remove(activeProjectiles, index)
+	broadcastProjectile({ msgKind = "Despawn", ballId = proj.id })
+end
+
+local function enforcePlayerBallCap(player: Player)
+	local count = 0
+	local oldestIdx: number? = nil
+	for i, proj in ipairs(activeProjectiles) do
+		if proj.player == player then
+			count += 1
+			if oldestIdx == nil then
+				oldestIdx = i
+			end
+		end
+	end
+	if count >= CombatLogic.MAX_ACTIVE_BALLS_PER_PLAYER and oldestIdx ~= nil then
+		despawnProjectileAt(oldestIdx)
+	end
+end
+
+local function handleProjectileCollision(
+	proj: ActiveProjectile,
+	now: number,
+	hitPos: Vector3,
+	hitCenter: Vector3,
+	hitNormal: Vector3,
+	hitPart: BasePart?,
+	forcedResolved: ResolvedTarget?
+): boolean
+	local n = if hitNormal.Magnitude > 1e-4 then hitNormal.Unit else Vector3.yAxis
+	local resolved = forcedResolved
+		or (if hitPart then classifyHitPart(proj.player, hitPart) else nil)
+
+	if resolved then
+		local eval = evaluateCurrentHit(proj.profile)
+		local impactDir = if proj.vel.Magnitude > 0.1 then proj.vel.Unit else -n
+		applyResolvedImpact(proj.player, proj.profile, resolved, impactDir, eval)
+		broadcastProjectile({
+			msgKind = "ImpactDespawn",
+			ballId = proj.id,
+			pos = hitPos,
+			normal = n,
+			hitKind = resolved.hitKind,
+			hitTarget = resolved.hitPart,
+			damage = eval.damage,
+			isCrit = eval.isCrit,
+		})
+		return false
+	end
+
+	local isFirstBounce = proj.firstBounceAt == nil
+	if isFirstBounce then
+		proj.firstBounceAt = now
+	end
+	proj.bounceCount += 1
+
+	local incomingIntoNormal = -(proj.vel:Dot(n))
+	local bx, by, bz =
+		CombatLogic.computeBounceVelocity(proj.vel.X, proj.vel.Y, proj.vel.Z, n.X, n.Y, n.Z)
+	proj.vel = Vector3.new(bx, by, bz)
+	proj.pos = hitCenter + n * 0.18
+
+	local remaining = CombatLogic.getRemainingBounceTime(proj.firstBounceAt, now)
+	local shouldBroadcastSurface = isFirstBounce
+		or (incomingIntoNormal >= 4.0 and (now - proj.lastSurfaceBroadcastAt) >= 0.08)
+	local shouldBroadcastRoll = not shouldBroadcastSurface
+		and n.Y > 0.65
+		and (now - proj.lastSurfaceBroadcastAt) >= 0.12
+
+	if shouldBroadcastSurface or shouldBroadcastRoll then
+		proj.lastSurfaceBroadcastAt = now
+		broadcastProjectile({
+			msgKind = "Bounce",
+			ballId = proj.id,
+			pos = proj.pos,
+			vel = proj.vel,
+			normal = n,
+			hitKind = if shouldBroadcastRoll then "Roll" else "Surface",
+			hitTarget = hitPart,
+			damage = 0,
+			isCrit = false,
+			remainingLife = remaining,
+			bounceCount = proj.bounceCount,
+		})
+	end
+	return true
+end
+
+local function stepHomingProjectile(proj: ActiveProjectile, now: number): boolean
+	local target = proj.homingTarget
+	local arrivesAt = proj.homingArrivesAt
+	if not target or not arrivesAt then
+		return false
+	end
+	if now < arrivesAt then
+		return true
+	end
+	local livePos = if target.hitPart.Parent then target.hitPart.Position else proj.pos
+	local delta = livePos - proj.pos
+	local dir = if delta.Magnitude > 0.1 then delta.Unit else proj.vel.Unit
+	proj.homingTarget = nil
+	proj.homingArrivesAt = nil
+	proj.vel = dir * proj.speed
+	local forced = if target.hitPart.Parent then target else nil
+	return handleProjectileCollision(proj, now, livePos, livePos, -dir, target.hitPart, forced)
+end
+
+local function stepBallisticProjectile(proj: ActiveProjectile, dt: number, now: number): boolean
+	if proj.firstBounceAt ~= nil then
+		if not CombatLogic.isBounceActive(proj.firstBounceAt, now) then
+			return false
+		end
+	elseif (now - proj.launchedAt) >= proj.maxInitialFlight then
+		return false
+	end
+
+	local char = proj.player.Character
+	if not char then
+		return false
+	end
+	local g = CombatLogic.BALL_GRAVITY
+	local nextPos = proj.pos + proj.vel * dt + Vector3.new(0, -0.5 * g * dt * dt, 0)
+	local nextVel = proj.vel + Vector3.new(0, -g * dt, 0)
+	local seg = nextPos - proj.pos
+	local segLen = seg.Magnitude
+	local castDelta = if segLen >= 0.05 then seg else Vector3.new(0, 0.08, 0)
+	local res = castSegmentSphere(proj.pos, castDelta, char)
+
+	if res then
+		local frac = if segLen >= 0.05 then math.clamp(res.Distance / segLen, 0, 1) else 0
+		proj.vel = proj.vel + Vector3.new(0, -g * dt * frac, 0)
+		local hitCenter = if segLen >= 0.05
+			then proj.pos + (seg / segLen) * math.max(0, res.Distance - 0.05)
+			else proj.pos
+		local hitPart = if res.Instance and res.Instance:IsA("BasePart") then res.Instance else nil
+		return handleProjectileCollision(
+			proj,
+			now,
+			res.Position,
+			hitCenter,
+			res.Normal,
+			hitPart,
+			nil
+		)
+	end
+	proj.pos = nextPos
+	proj.vel = nextVel
+	return true
+end
+
+local function stepAllProjectiles(dt: number)
+	if #activeProjectiles == 0 then
+		return
+	end
+	local stepDt = math.min(dt, 0.05)
+	local now = os.clock()
+	for i = #activeProjectiles, 1, -1 do
+		local proj = activeProjectiles[i]
+		local keepAlive = false
+		if proj.player.Parent then
+			if proj.homingTarget ~= nil then
+				keepAlive = stepHomingProjectile(proj, now)
+			else
+				keepAlive = stepBallisticProjectile(proj, stepDt, now)
+			end
+		end
+		if not keepAlive then
+			despawnProjectileAt(i)
+		end
+	end
+end
+
 local function onThrowBall(player: Player, aimDirection: any, autoAimFlag: any, targetHint: any)
 	if typeof(aimDirection) ~= "Vector3" then
 		return
@@ -457,20 +632,18 @@ local function onThrowBall(player: Player, aimDirection: any, autoAimFlag: any, 
 		return
 	end
 	lastThrowTime[player.UserId] = now
+	enforcePlayerBallCap(player)
 
 	local ballTier = EconomyConfigs.getBallTierById(profile.ballTierId)
 		or EconomyConfigs.BALL_TIERS[1]
 	local speed = MathUtil.computeProjectileSpeed(ballTier.projectileSpeed, profile.throwSpeed)
-	local eval = CombatLogic.evaluateBallHit({
-		baseBallDamage = profile.ballDamage,
-		ballTierId = profile.ballTierId,
-		activePets = activePets,
-		critRollUnit = math.random(),
-	})
-	if eval.shieldAmount > 0 then
-		applyShield(player, eval.shieldAmount)
+	local throwEval = evaluateCurrentHit(profile)
+	if throwEval.shieldAmount > 0 then
+		applyShield(player, throwEval.shieldAmount)
 	end
 
+	nextBallId += 1
+	local ballId = nextBallId
 	local wantsAutoAim = autoAimFlag == true
 	local homingTarget = if wantsAutoAim
 		then resolveAutoAimTarget(player, origin, targetHint)
@@ -483,63 +656,70 @@ local function onThrowBall(player: Player, aimDirection: any, autoAimFlag: any, 
 		local travelSec = math.clamp(dist / math.max(55, speed), 0.08, 0.52)
 		local vx, vy, vz =
 			CombatLogic.computeBallisticLaunchVelocity(dir.X, dir.Y, dir.Z, speed, 0.12)
-		task.delay(travelSec, function()
-			applyResolvedImpact(player, profile, homingTarget, dir, eval)
-		end)
-		Remotes.ensureServer().ProjectileBroadcast:FireAllClients({
+		local launchVel = Vector3.new(vx, vy, vz)
+		table.insert(activeProjectiles, {
+			id = ballId,
+			player = player,
+			profile = profile,
+			speed = speed,
+			pos = origin,
+			vel = launchVel,
+			launchedAt = now,
+			firstBounceAt = nil,
+			bounceCount = 0,
+			maxInitialFlight = travelSec + 0.5,
+			homingTarget = homingTarget,
+			homingArrivesAt = now + travelSec,
+			lastSurfaceBroadcastAt = 0,
+		})
+		broadcastProjectile({
+			msgKind = "Launch",
+			ballId = ballId,
 			shooterId = player.UserId,
 			ballTierId = profile.ballTierId,
 			ballSkin = profile.equippedBallSkin,
 			origin = origin,
 			endPos = homingTarget.hitPart.Position,
-			normal = -dir,
-			launchVel = Vector3.new(vx, vy, vz),
+			launchVel = launchVel,
 			travelSec = travelSec,
 			speed = speed,
 			isHoming = true,
-			hitKind = homingTarget.hitKind,
 			hitTarget = homingTarget.hitPart,
-			damage = eval.damage,
-			isCrit = eval.isCrit,
 		})
 		return
 	end
 
-	-- Manual free-aim: real stepped ballistic gravity arc with arrival-timed impact
 	local dir = aimDirection.Unit
 	local vx, vy, vz = CombatLogic.computeBallisticLaunchVelocity(dir.X, dir.Y, dir.Z, speed, 0.09)
 	local launchVel = Vector3.new(vx, vy, vz)
-	local maxTime = math.clamp(175 / math.max(55, speed), 0.75, 1.65)
-	local res, endPos, hitNormal, hitTime = stepBallisticArc(origin, launchVel, maxTime, char)
-	local hitTargetPart = if res
-			and res.Instance
-			and res.Instance:IsA("BasePart")
-		then res.Instance
-		else nil
-	local resolved = if hitTargetPart then classifyHitPart(player, hitTargetPart) else nil
-	local hitKind = if resolved then resolved.hitKind else (if res then "Surface" else "Miss")
-
-	if resolved then
-		task.delay(hitTime, function()
-			applyResolvedImpact(player, profile, resolved, dir, eval)
-		end)
-	end
-
-	Remotes.ensureServer().ProjectileBroadcast:FireAllClients({
+	table.insert(activeProjectiles, {
+		id = ballId,
+		player = player,
+		profile = profile,
+		speed = speed,
+		pos = origin,
+		vel = launchVel,
+		launchedAt = now,
+		firstBounceAt = nil,
+		bounceCount = 0,
+		maxInitialFlight = CombatLogic.MAX_INITIAL_FLIGHT_SEC,
+		homingTarget = nil,
+		homingArrivesAt = nil,
+		lastSurfaceBroadcastAt = 0,
+	})
+	broadcastProjectile({
+		msgKind = "Launch",
+		ballId = ballId,
 		shooterId = player.UserId,
 		ballTierId = profile.ballTierId,
 		ballSkin = profile.equippedBallSkin,
 		origin = origin,
-		endPos = endPos,
-		normal = hitNormal,
+		endPos = origin + dir * 120,
 		launchVel = launchVel,
-		travelSec = hitTime,
+		travelSec = CombatLogic.MAX_INITIAL_FLIGHT_SEC,
 		speed = speed,
 		isHoming = false,
-		hitKind = hitKind,
-		hitTarget = hitTargetPart,
-		damage = eval.damage,
-		isCrit = eval.isCrit,
+		hitTarget = nil,
 	})
 end
 
@@ -548,6 +728,7 @@ function CombatService.init() end
 function CombatService.start()
 	local remotes = Remotes.ensureServer()
 	remotes.ThrowBall.OnServerEvent:Connect(onThrowBall)
+	RunService.Heartbeat:Connect(stepAllProjectiles)
 
 	remotes.DashRequest.OnServerEvent:Connect(function(player: Player, moveDir: any)
 		local now = os.clock()
@@ -579,6 +760,11 @@ function CombatService.start()
 		lastDashTime[uid] = nil
 		goldComboByUser[uid] = nil
 		shieldByUser[uid] = nil
+		for i = #activeProjectiles, 1, -1 do
+			if activeProjectiles[i].player == player then
+				despawnProjectileAt(i)
+			end
+		end
 	end)
 end
 
