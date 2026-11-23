@@ -107,6 +107,66 @@ assertTrue(
 	"Ballistic gravity curves ball downward"
 )
 
+-- 1d. Camera-look manual aim direction (unified PC & Mobile camera look vector)
+local aimX, aimY, aimZ = CombatLogic.computeCameraAimDirection(3, 4, 0)
+assertTrue(
+	math.abs(aimX - 0.6) < 1e-4 and math.abs(aimY - 0.8) < 1e-4 and math.abs(aimZ) < 1e-4,
+	"Camera aim normalizes non-unit look vector"
+)
+local fbX, fbY, fbZ = CombatLogic.computeCameraAimDirection(0, 0, 0)
+assertTrue(fbX == 0 and fbY == 0 and fbZ == -1, "Zero camera look vector falls back safely")
+local nanX, nanY, nanZ = CombatLogic.computeCameraAimDirection(0 / 0, 1, 0)
+assertTrue(
+	nanX == 0 and nanY == 0 and nanZ == -1,
+	"Non-finite camera look vector falls back safely"
+)
+
+-- 1e. Active post-bounce physics & 1.0s damage lifetime
+assertTrue(CombatLogic.POST_BOUNCE_LIFETIME == 1.0, "Post-bounce lifetime is 1.0 second")
+local rvx, rvy, rvz = CombatLogic.computeBounceVelocity(20, -30, 0, 0, 1, 0)
+assertTrue(rvx > 10 and rvx < 20 and rvy > 15 and rvz == 0, "Floor bounce reflects upward cleanly")
+local wvx, wvy, wvz = CombatLogic.computeBounceVelocity(0, 0, -80, 0, 0, 1)
+assertTrue(wvz > 40 and wvy >= 8, "Wall/target bounce rebounds backward with lively arc")
+local svx, svy, svz = CombatLogic.computeBounceVelocity(12, -2, 0, 0, 1, 0)
+assertTrue(svx > 0 and svy == 0 and svz == 0, "Tiny floor impact settles smoothly without buzzing")
+local bnx, bny, bnz = CombatLogic.computeBounceVelocity(0 / 0, 5, 0, 0, 1, 0)
+assertTrue(bnx == 0 and bny == 0 and bnz == 0, "Non-finite bounce velocity returns zero safely")
+
+assertTrue(not CombatLogic.isBounceActive(nil, 10.0), "No bounce yet means bounce timer inactive")
+assertTrue(CombatLogic.isBounceActive(10.0, 10.0), "Active immediately at first bounce")
+assertTrue(CombatLogic.isBounceActive(10.0, 10.95), "Still active within 1.0s after first bounce")
+assertTrue(not CombatLogic.isBounceActive(10.0, 11.0), "Expires at exact 1.0s after first bounce")
+assertTrue(
+	math.abs(CombatLogic.getRemainingBounceTime(10.0, 10.25) - 0.75) < 1e-4,
+	"Remaining bounce time tracks 1s countdown accurately"
+)
+assertTrue(
+	CombatLogic.getRemainingBounceTime(10.0, 12.0) == 0,
+	"Remaining bounce time clamps at 0 after expiry"
+)
+assertTrue(CombatLogic.canBounceHitTarget(nil, 10.0), "First hit on a target is allowed")
+assertTrue(
+	not CombatLogic.canBounceHitTarget(10.0, 10.05),
+	"Same target debounced inside bounce hit cooldown"
+)
+assertTrue(
+	CombatLogic.canBounceHitTarget(10.0, 10.35),
+	"Same target can be hit again after bounce cooldown"
+)
+assertTrue(
+	CombatLogic.shouldDespawnOnHitKind("Mob")
+		and CombatLogic.shouldDespawnOnHitKind("Boss")
+		and CombatLogic.shouldDespawnOnHitKind("PvP")
+		and CombatLogic.shouldDespawnOnHitKind("Target")
+		and CombatLogic.shouldDespawnOnHitKind("GoldTarget"),
+	"Ball auto-despawns when hitting an enemy or target"
+)
+assertTrue(
+	not CombatLogic.shouldDespawnOnHitKind("Surface")
+		and not CombatLogic.shouldDespawnOnHitKind("Roll"),
+	"Ball keeps bouncing when hitting surfaces"
+)
+
 -- 2. Training off-pad rejection vs on-pad Moving Gold 2x + Throw Speed
 local offPad = CombatLogic.evaluateTrainingHit({
 	isOnAssignedPad = false,
