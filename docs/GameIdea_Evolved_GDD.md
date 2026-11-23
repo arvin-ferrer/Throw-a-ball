@@ -95,7 +95,7 @@ To eliminate the dead-wait churn trap while preserving `GameIdea.txt`'s signatur
 ## 5. Throwable Ball Combat & Movement Specification
 
 ### 5.1 Dual Context Movement Rule
-- **Personal Training Range (Stationary Firing Pad):** Stepping onto your Plot's Training Pad anchors your character smoothly into a stationary shooting stance. Aim with mouse cursor (PC) or tap/hold-to-aim (Mobile) to fire throwable balls downrange at targets. Stepping/jumping off cancels stationary mode instantly.
+- **Personal Training Range (Stationary Firing Pad):** Stepping onto your Plot's Training Pad anchors your character smoothly into a stationary shooting stance. Aim along your camera look direction (PC & Mobile) or use Auto-Aim to fire throwable balls downrange at targets. Stepping/jumping off cancels stationary mode instantly.
 - **Biome PvE, Boss Phase & PvP Scramble (Free Movement + Dodge):** Players move freely (`18 studs/s` base walk, `24 studs/s` sprint), trigger a short **Dash/Dodge** (`0.35s` impulse, `2.5s` cooldown) to evade boss AoEs and incoming PvP shots, and throw balls on the run.
 
 ### 5.2 Ball Projectile Feel & Mobile Ergonomics

@@ -285,6 +285,25 @@ function CombatLogic.selectAutoAimTarget(
 	return best
 end
 
+function CombatLogic.computeCameraAimDirection(
+	lookX: number,
+	lookY: number,
+	lookZ: number
+): (number, number, number)
+	if
+		not MathUtil.isFinite(lookX)
+		or not MathUtil.isFinite(lookY)
+		or not MathUtil.isFinite(lookZ)
+	then
+		return 0, 0, -1
+	end
+	local mag = math.sqrt(lookX * lookX + lookY * lookY + lookZ * lookZ)
+	if mag < 1e-4 then
+		return 0, 0, -1
+	end
+	return lookX / mag, lookY / mag, lookZ / mag
+end
+
 function CombatLogic.computeBallisticLaunchVelocity(
 	dirX: number,
 	dirY: number,

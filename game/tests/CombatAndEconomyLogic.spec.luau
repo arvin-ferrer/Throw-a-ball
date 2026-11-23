@@ -107,6 +107,20 @@ assertTrue(
 	"Ballistic gravity curves ball downward"
 )
 
+-- 1d. Camera-look manual aim direction (unified PC & Mobile camera look vector)
+local aimX, aimY, aimZ = CombatLogic.computeCameraAimDirection(3, 4, 0)
+assertTrue(
+	math.abs(aimX - 0.6) < 1e-4 and math.abs(aimY - 0.8) < 1e-4 and math.abs(aimZ) < 1e-4,
+	"Camera aim normalizes non-unit look vector"
+)
+local fbX, fbY, fbZ = CombatLogic.computeCameraAimDirection(0, 0, 0)
+assertTrue(fbX == 0 and fbY == 0 and fbZ == -1, "Zero camera look vector falls back safely")
+local nanX, nanY, nanZ = CombatLogic.computeCameraAimDirection(0 / 0, 1, 0)
+assertTrue(
+	nanX == 0 and nanY == 0 and nanZ == -1,
+	"Non-finite camera look vector falls back safely"
+)
+
 -- 2. Training off-pad rejection vs on-pad Moving Gold 2x + Throw Speed
 local offPad = CombatLogic.evaluateTrainingHit({
 	isOnAssignedPad = false,

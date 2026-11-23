@@ -255,15 +255,10 @@ local function findAutoAimTarget(origin: Vector3): BasePart?
 	return if chosen then partById[chosen.id] else nil
 end
 
-local function computeManualAim(origin: Vector3, cam: Camera): Vector3
-	local baseDir = cam.CFrame.LookVector
-	if UserInputService.PreferredInput == Enum.PreferredInput.KeyboardAndMouse then
-		local mouseLoc = UserInputService:GetMouseLocation()
-		local ray = cam:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
-		local targetPoint = ray.Origin + ray.Direction * 120
-		baseDir = (targetPoint - origin).Unit
-	end
-	return baseDir
+local function computeManualAim(cam: Camera): Vector3
+	local look = cam.CFrame.LookVector
+	local dx, dy, dz = CombatLogic.computeCameraAimDirection(look.X, look.Y, look.Z)
+	return Vector3.new(dx, dy, dz)
 end
 
 local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
@@ -304,7 +299,7 @@ local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
 			end
 		end
 	else
-		aimDir = computeManualAim(origin, cam)
+		aimDir = computeManualAim(cam)
 	end
 
 	AnimationController.playThrowAnim(localPlayer)
