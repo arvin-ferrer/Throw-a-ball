@@ -121,8 +121,8 @@ assertTrue(
 	"Non-finite camera look vector falls back safely"
 )
 
--- 1e. Active post-bounce physics & 3.0s damage lifetime
-assertTrue(CombatLogic.POST_BOUNCE_LIFETIME == 3.0, "Post-bounce lifetime is 3.0 seconds")
+-- 1e. Active post-bounce physics & 1.0s damage lifetime
+assertTrue(CombatLogic.POST_BOUNCE_LIFETIME == 1.0, "Post-bounce lifetime is 1.0 second")
 local rvx, rvy, rvz = CombatLogic.computeBounceVelocity(20, -30, 0, 0, 1, 0)
 assertTrue(rvx > 10 and rvx < 20 and rvy > 15 and rvz == 0, "Floor bounce reflects upward cleanly")
 local wvx, wvy, wvz = CombatLogic.computeBounceVelocity(0, 0, -80, 0, 0, 1)
@@ -134,14 +134,14 @@ assertTrue(bnx == 0 and bny == 0 and bnz == 0, "Non-finite bounce velocity retur
 
 assertTrue(not CombatLogic.isBounceActive(nil, 10.0), "No bounce yet means bounce timer inactive")
 assertTrue(CombatLogic.isBounceActive(10.0, 10.0), "Active immediately at first bounce")
-assertTrue(CombatLogic.isBounceActive(10.0, 12.95), "Still active within 3.0s after first bounce")
-assertTrue(not CombatLogic.isBounceActive(10.0, 13.0), "Expires at exact 3.0s after first bounce")
+assertTrue(CombatLogic.isBounceActive(10.0, 10.95), "Still active within 1.0s after first bounce")
+assertTrue(not CombatLogic.isBounceActive(10.0, 11.0), "Expires at exact 1.0s after first bounce")
 assertTrue(
-	math.abs(CombatLogic.getRemainingBounceTime(10.0, 11.25) - 1.75) < 1e-4,
-	"Remaining bounce time tracks 3s countdown accurately"
+	math.abs(CombatLogic.getRemainingBounceTime(10.0, 10.25) - 0.75) < 1e-4,
+	"Remaining bounce time tracks 1s countdown accurately"
 )
 assertTrue(
-	CombatLogic.getRemainingBounceTime(10.0, 15.0) == 0,
+	CombatLogic.getRemainingBounceTime(10.0, 12.0) == 0,
 	"Remaining bounce time clamps at 0 after expiry"
 )
 assertTrue(CombatLogic.canBounceHitTarget(nil, 10.0), "First hit on a target is allowed")
