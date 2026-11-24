@@ -44,20 +44,23 @@ end
 
 function PetIncomeService.collectPad(player: Player, pedestalIndex: number)
 	local profile = DataService.getProfile(player)
-	if not profile or not MathUtil.isPositiveFinite(pedestalIndex) then
+	if
+		not profile
+		or not MathUtil.isPositiveFinite(pedestalIndex)
+		or math.floor(pedestalIndex) ~= pedestalIndex
+	then
 		return
 	end
-	local idx = math.floor(pedestalIndex)
-	if idx < 1 or idx > 14 or not canReachPad(player, idx) then
+	if pedestalIndex < 1 or pedestalIndex > 14 or not canReachPad(player, pedestalIndex) then
 		return
 	end
-	local gained = EconomyLogic.collectCashPad(profile, idx)
+	local gained = EconomyLogic.collectCashPad(profile, pedestalIndex)
 	if gained <= 0 then
 		return
 	end
 	local plot = PlotService.getPlotForPlayer(player)
-	if plot and plot.pedestals[idx] then
-		local pad = plot.pedestals[idx]:FindFirstChild("CashPad")
+	if plot and plot.pedestals[pedestalIndex] then
+		local pad = plot.pedestals[pedestalIndex]:FindFirstChild("CashPad")
 		if pad and pad:IsA("BasePart") then
 			pad:SetAttribute("StoredCoins", 0)
 			pad.Color = Color3.fromRGB(56, 72, 92)
@@ -68,7 +71,7 @@ function PetIncomeService.collectPad(player: Player, pedestalIndex: number)
 	if telemetryHook then
 		telemetryHook(
 			"CashPadSweep",
-			{ userId = player.UserId, pedestalIndex = idx, coins = gained }
+			{ userId = player.UserId, pedestalIndex = pedestalIndex, coins = gained }
 		)
 	end
 end

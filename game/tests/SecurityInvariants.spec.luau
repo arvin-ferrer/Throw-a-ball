@@ -206,6 +206,39 @@ local function walletCases(currency: string, operations: { [string]: Tx })
 	end
 end
 
+local function cashTransfers()
+	for _, stored in { -1, 0 / 0, math.huge } do
+		local p = profileWithPup()
+		p.padStoredCoins[1] = stored
+		reject(
+			`cash transfer / {if stored ~= stored
+				then "NaN"
+				elseif stored < 0 then "negative"
+				else "+inf"}`,
+			p,
+			function()
+				return Economy.collectCashPad(p, 1) ~= 0
+			end
+		)
+	end
+	local overflowCash = profileWithPup()
+	overflowCash.coins = 1.7e308
+	overflowCash.padStoredCoins[1] = 1e308
+	reject("cash transfer / wallet overflow", overflowCash, function()
+		return Economy.collectCashPad(overflowCash, 1) ~= 0
+	end)
+	local invalidSell = profileWithPup()
+	invalidSell.eggs.EmeraldMeadow_BossEgg = 1
+	assert(
+		Economy.hatchEggOnPedestal(invalidSell, "EmeraldMeadow_BossEgg", 2, false, 0.2, 0.2).ok,
+		"Fixture needs two pets to test sell guard"
+	)
+	invalidSell.coins = math.huge
+	reject("sell pet / +inf wallet", invalidSell, function()
+		return Economy.sellPet(invalidSell, invalidSell.pets[2].uid).ok
+	end)
+end
+
 local function purchases()
 	local fusionProfile = profileWithPup()
 	reject("fusion with missing ingredients", fusionProfile, function()
@@ -231,46 +264,7 @@ local function purchases()
 			return Economy.rerollPetTrait(p, p.pets[1].uid, 0.5)
 		end,
 	})
-	-- Collecting a corrupt or overflowing stored amount must not poison either side of the transfer.
-	for _, stored in { -1, 0 / 0, math.huge } do
-		local p = profileWithPup()
-		p.padStoredCoins[1] = stored
-		reject(
-			`cash transfer / {if stored ~= stored
-				then "NaN"
-				elseif stored < 0 then "negative"
-				else "+inf"}`,
-			p,
-			function()
-				return Economy.collectCashPad(p, 1) ~= 0
-			end
-		)
-	end
-	local overflowCash = profileWithPup()
-	overflowCash.coins = 1.7e308
-	overflowCash.padStoredCoins[1] = 1e308
-	reject("cash transfer / wallet overflow", overflowCash, function()
-		return Economy.collectCashPad(overflowCash, 1) ~= 0
-	end)
-	local invalidSell = profileWithPup()
-	assert(
-		Economy.hatchEggOnPedestal(
-			(function()
-				invalidSell.eggs.EmeraldMeadow_BossEgg = 1
-				return invalidSell
-			end)(),
-			"EmeraldMeadow_BossEgg",
-			2,
-			false,
-			0.2,
-			0.2
-		).ok,
-		"Fixture needs two pets to test sell guard"
-	)
-	invalidSell.coins = math.huge
-	reject("sell pet / +inf wallet", invalidSell, function()
-		return Economy.sellPet(invalidSell, invalidSell.pets[2].uid).ok
-	end)
+	cashTransfers()
 end
 
 local function offlineClock()

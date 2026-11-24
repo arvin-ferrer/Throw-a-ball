@@ -203,6 +203,7 @@ end
 
 function DataService.isFirstSession(player: Player): boolean
 	return firstSessionByUser[player.UserId] == true
+		or player:GetAttribute("IsFirstSession") == true
 end
 
 function DataService.syncToClient(player: Player)
