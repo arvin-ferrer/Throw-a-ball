@@ -16,7 +16,7 @@ function OnboardingLogic.currentStep(profile: any): OnboardingStep?
 	if type(profile) ~= "table" or profile.starterEggHatched ~= true then
 		return {
 			id = "HatchStarter",
-			text = "Step 1: Press [E] at Pedestal #1 to hatch your FREE Starter Egg!",
+			text = "Step 1: Tap Hatch or press [E] at Pedestal #1 for your FREE Starter Egg!",
 			targetTag = "CashPad",
 		}
 	end

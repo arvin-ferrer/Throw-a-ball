@@ -988,6 +988,7 @@ function HudGui.mount(callbacks: {
 		10
 	)
 	bannerFrame.AnchorPoint = Vector2.new(0.5, 1)
+	bannerFrame.Visible = false
 	guideFrame = bannerFrame
 	guideBanner = Theme.makeLabel(
 		bannerFrame,
@@ -1002,6 +1003,7 @@ function HudGui.mount(callbacks: {
 	if guideBanner then
 		guideBanner.TextXAlignment = Enum.TextXAlignment.Center
 		guideBanner.TextScaled = true
+		guideBanner.TextWrapped = true
 		local tc = Instance.new("UITextSizeConstraint")
 		tc.MaxTextSize = 13
 		tc.MinTextSize = 9
