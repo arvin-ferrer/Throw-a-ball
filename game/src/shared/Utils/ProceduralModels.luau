@@ -229,16 +229,49 @@ local function applyMutationAndHalo(
 	end
 end
 
+local function ensureBallTrail(core: BasePart, col0: Color3, col1: Color3)
+	local trail = core:FindFirstChildOfClass("Trail")
+	if not trail then
+		local att0 = core:FindFirstChild("Trail0")
+		if not att0 then
+			local a0 = Instance.new("Attachment")
+			a0.Name = "Trail0"
+			a0.Position = Vector3.new(0, 0.7, 0)
+			a0.Parent = core
+			att0 = a0
+		end
+		local att1 = core:FindFirstChild("Trail1")
+		if not att1 then
+			local a1 = Instance.new("Attachment")
+			a1.Name = "Trail1"
+			a1.Position = Vector3.new(0, -0.7, 0)
+			a1.Parent = core
+			att1 = a1
+		end
+		local newTrail = Instance.new("Trail")
+		newTrail.Lifetime = 0.25
+		if att0 and att0:IsA("Attachment") then
+			newTrail.Attachment0 = att0
+		end
+		if att1 and att1:IsA("Attachment") then
+			newTrail.Attachment1 = att1
+		end
+		newTrail.Parent = core
+		trail = newTrail
+	end
+	if trail then
+		trail.Lifetime = 0.25
+		trail.Color = ColorSequence.new(col0, col1)
+	end
+end
+
 function ProceduralModels.createBallVisual(ballTierId: string, skinColor: Color3?): Model
 	local prefab = findAssetPrefab("Balls", ballTierId)
 	if prefab and prefab:IsA("Model") and prefab.PrimaryPart then
 		local clone = prefab:Clone()
 		if skinColor then
 			clone.PrimaryPart.Color = skinColor
-			local trail = clone.PrimaryPart:FindFirstChildOfClass("Trail")
-			if trail then
-				trail.Color = ColorSequence.new(skinColor)
-			end
+			ensureBallTrail(clone.PrimaryPart, skinColor, skinColor)
 		end
 		return clone
 	end
@@ -257,20 +290,7 @@ function ProceduralModels.createBallVisual(ballTierId: string, skinColor: Color3
 		Enum.PartType.Ball
 	)
 	model.PrimaryPart = core
-	local att0 = Instance.new("Attachment")
-	att0.Name = "Trail0"
-	att0.Position = Vector3.new(0, 0.7, 0)
-	att0.Parent = core
-	local att1 = Instance.new("Attachment")
-	att1.Name = "Trail1"
-	att1.Position = Vector3.new(0, -0.7, 0)
-	att1.Parent = core
-	local trail = Instance.new("Trail")
-	trail.Attachment0 = att0
-	trail.Attachment1 = att1
-	trail.Lifetime = 0.25
-	trail.Color = ColorSequence.new(trailCol, primary)
-	trail.Parent = core
+	ensureBallTrail(core, trailCol, primary)
 	return model
 end
 

@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local PetConfigs = require(Shared.Configs.PetConfigs)
 local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
 local PolicyLogic = require(Shared.Utils.PolicyLogic)
 local Remotes = require(Shared.Net.Remotes)
 
@@ -231,15 +232,14 @@ local function renderCosmeticCard(
 )
 	local btnText = if isEquipped
 		then "EQUIPPED"
-		elseif isOwned and cos.category == "BallSkin" then "EQUIP"
-		elseif isOwned then "OWNED"
+		elseif isOwned then "EQUIP"
 		else `{cos.costGems} Gems`
-	local btnColor = if isEquipped or (isOwned and cos.category ~= "BallSkin")
+	local btnColor = if isEquipped
 		then Theme.Colors.CardAlt
 		elseif isOwned then Theme.Colors.Frost
 		else Theme.Colors.Gems
 	local card = makeShopCardRow(parent, "Cos_" .. cos.id, 58, btnText, 104, btnColor, function()
-		if not isOwned or (cos.category == "BallSkin" and not isEquipped) then
+		if not isEquipped then
 			remotes.UpgradeAction:FireServer("BuyCosmetic", cos.id)
 		end
 	end)
@@ -281,9 +281,7 @@ local function renderCosmeticSection(parent: ScrollingFrame, remotes: any)
 	local ownedCos = if latestProfile then (latestProfile.ownedCosmetics or {}) else {}
 	for _, cos in ipairs(ordered) do
 		local isOwned = ownedCos[cos.id] == true
-		local isEquipped = cos.category == "BallSkin"
-			and latestProfile ~= nil
-			and latestProfile.equippedBallSkin == cos.id
+		local isEquipped = EconomyLogic.isCosmeticEquipped(latestProfile, cos.id)
 		renderCosmeticCard(parent, remotes, cos, isOwned, isEquipped)
 	end
 end

@@ -25,6 +25,9 @@ local TraitConfigs = if isRoblox
 local EggConfigs = if isRoblox
 	then req(scriptRef.Parent.Parent.Configs.EggConfigs)
 	else req("../Configs/EggConfigs")
+local MonetizationConfigs = if isRoblox
+	then req(scriptRef.Parent.Parent.Configs.MonetizationConfigs)
+	else req("../Configs/MonetizationConfigs")
 local MathUtil = if isRoblox then req(scriptRef.Parent.MathUtil) else req("./MathUtil")
 
 export type OwnedPet = {
@@ -60,6 +63,9 @@ export type PlayerProfile = {
 	codexUnlocked: { [string]: boolean },
 	ownedCosmetics: { [string]: boolean },
 	equippedBallSkin: string?,
+	equippedHatchVfx: string?,
+	equippedEliminationVfx: string?,
+	equippedPlotTheme: string?,
 	purchaseIds: { string },
 	processedPurchases: { [string]: boolean }?,
 	lastLogoutTime: number,
@@ -75,6 +81,14 @@ export type TxResult = {
 local EconomyLogic = {}
 
 EconomyLogic.CURRENT_SCHEMA_VERSION = 1
+EconomyLogic.COSMETIC_MAX_BURST_PARTICLES = 36
+
+local COSMETIC_SLOT_FIELDS: { [string]: string } = {
+	BallSkin = "equippedBallSkin",
+	HatchVFX = "equippedHatchVfx",
+	EliminationVFX = "equippedEliminationVfx",
+	PlotTheme = "equippedPlotTheme",
+}
 
 local function isValidBalance(value: any, cost: number): boolean
 	return MathUtil.isFinite(value)
@@ -112,6 +126,9 @@ function EconomyLogic.createDefaultProfile(now: number): PlayerProfile
 		codexUnlocked = {},
 		ownedCosmetics = {},
 		equippedBallSkin = nil,
+		equippedHatchVfx = nil,
+		equippedEliminationVfx = nil,
+		equippedPlotTheme = nil,
 		purchaseIds = {},
 		processedPurchases = {},
 		lastLogoutTime = now,
@@ -625,6 +642,70 @@ function EconomyLogic.addExp(profile: PlayerProfile, amount: number): number
 		levelsGained += 1
 	end
 	return levelsGained
+end
+
+local function applyEquippedCosmetic(profile: any, spec: any)
+	local slotField = COSMETIC_SLOT_FIELDS[spec.category]
+	if slotField then
+		profile[slotField] = spec.id
+	end
+end
+
+function EconomyLogic.isCosmeticEquipped(profile: any, cosmeticId: string): boolean
+	if type(profile) ~= "table" or type(cosmeticId) ~= "string" then
+		return false
+	end
+	local spec = MonetizationConfigs.COSMETICS[cosmeticId]
+	if not spec then
+		return false
+	end
+	local slotField = COSMETIC_SLOT_FIELDS[spec.category]
+	return if slotField then profile[slotField] == cosmeticId else false
+end
+
+function EconomyLogic.buyOrEquipCosmetic(profile: PlayerProfile, cosmeticId: string): TxResult
+	if type(profile) ~= "table" or type(cosmeticId) ~= "string" then
+		return { ok = false, reason = "InvalidCosmetic" }
+	end
+	local spec = MonetizationConfigs.COSMETICS[cosmeticId]
+	if not spec then
+		return { ok = false, reason = "UnknownCosmetic" }
+	end
+	if type(profile.ownedCosmetics) == "table" and profile.ownedCosmetics[cosmeticId] == true then
+		local alreadyEquipped = EconomyLogic.isCosmeticEquipped(profile, cosmeticId)
+		if not alreadyEquipped then
+			applyEquippedCosmetic(profile, spec)
+		end
+		return {
+			ok = true,
+			data = {
+				purchased = false,
+				changed = not alreadyEquipped,
+				alreadyEquipped = alreadyEquipped,
+				cosmeticId = cosmeticId,
+				spec = spec,
+			},
+		}
+	end
+	if not isValidBalance(profile.bossGems, spec.costGems) then
+		return { ok = false, reason = "InsufficientGems" }
+	end
+	if type(profile.ownedCosmetics) ~= "table" then
+		profile.ownedCosmetics = {}
+	end
+	profile.bossGems -= spec.costGems
+	profile.ownedCosmetics[cosmeticId] = true
+	applyEquippedCosmetic(profile, spec)
+	return {
+		ok = true,
+		data = {
+			purchased = true,
+			changed = true,
+			alreadyEquipped = false,
+			cosmeticId = cosmeticId,
+			spec = spec,
+		},
+	}
 end
 
 return EconomyLogic

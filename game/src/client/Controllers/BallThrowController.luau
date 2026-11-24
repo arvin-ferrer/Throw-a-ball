@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local CombatLogic = require(Shared.Utils.CombatLogic)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
 local MathUtil = require(Shared.Utils.MathUtil)
 local ProceduralModels = require(Shared.Utils.ProceduralModels)
 local AudioCatalog = require(Shared.Utils.AudioCatalog)
@@ -494,45 +495,24 @@ local function destroyVisualBall(ballId: number)
 	end
 end
 
-local function handleLaunchPacket(data: any)
-	local ballId = tonumber(data.ballId)
-	if not ballId or typeof(data.origin) ~= "Vector3" or typeof(data.endPos) ~= "Vector3" then
-		return
+local function resolveBallSkinColor(ballSkin: any): Color3?
+	if type(ballSkin) ~= "string" then
+		return nil
 	end
-	destroyVisualBall(ballId)
+	local spec = MonetizationConfigs.COSMETICS[ballSkin]
+	return if spec then Color3.fromRGB(spec.color[1], spec.color[2], spec.color[3]) else nil
+end
 
-	local shooterId = tonumber(data.shooterId)
-	local shooterPlr = if shooterId then Players:GetPlayerByUserId(shooterId) else nil
-	if shooterPlr and shooterPlr ~= localPlayer then
-		AnimationController.playThrowAnim(shooterPlr)
-	end
-
-	local skinCol: Color3? = nil
-	if type(data.ballSkin) == "string" then
-		local spec = MonetizationConfigs.COSMETICS[data.ballSkin]
-		if spec then
-			skinCol = Color3.fromRGB(spec.color[1], spec.color[2], spec.color[3])
-		end
-	end
-	local ball =
-		ProceduralModels.createBallVisual(tostring(data.ballTierId or "RubberBall"), skinCol)
-	local startPos = getThrowHandOrigin(shooterPlr, data.origin)
-	local serverOrigin: Vector3 = data.origin
-	local staticEnd: Vector3 = data.endPos
-	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
-	local homingPart = if data.isHoming == true
-			and hitInst
-			and hitInst:IsA("BasePart")
-		then hitInst
-		else nil
-	local dur = math.clamp(tonumber(data.travelSec) or 0.25, 0.08, 2.2)
-	local launchVel: Vector3 = if typeof(data.launchVel) == "Vector3"
-		then data.launchVel
-		else (staticEnd - serverOrigin).Unit * (tonumber(data.speed) or 115)
-
-	ball:PivotTo(CFrame.lookAt(startPos, staticEnd))
-	ball.Parent = workspace
-
+local function registerVisualBall(
+	ballId: number,
+	ball: Model,
+	startPos: Vector3,
+	serverOrigin: Vector3,
+	staticEnd: Vector3,
+	launchVel: Vector3,
+	dur: number,
+	homingPart: BasePart?
+)
 	local now = os.clock()
 	activeVisualBalls[ballId] = {
 		id = ballId,
@@ -552,6 +532,42 @@ local function handleLaunchPacket(data: any)
 		rolling = false,
 		spinAngle = 0,
 	}
+end
+
+local function handleLaunchPacket(data: any)
+	local ballId = tonumber(data.ballId)
+	if not ballId or typeof(data.origin) ~= "Vector3" or typeof(data.endPos) ~= "Vector3" then
+		return
+	end
+	destroyVisualBall(ballId)
+
+	local shooterId = tonumber(data.shooterId)
+	local shooterPlr = if shooterId then Players:GetPlayerByUserId(shooterId) else nil
+	if shooterPlr and shooterPlr ~= localPlayer then
+		AnimationController.playThrowAnim(shooterPlr)
+	end
+
+	local ball = ProceduralModels.createBallVisual(
+		tostring(data.ballTierId or "RubberBall"),
+		resolveBallSkinColor(data.ballSkin)
+	)
+	local startPos = getThrowHandOrigin(shooterPlr, data.origin)
+	local serverOrigin: Vector3 = data.origin
+	local staticEnd: Vector3 = data.endPos
+	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
+	local homingPart = if data.isHoming == true
+			and hitInst
+			and hitInst:IsA("BasePart")
+		then hitInst
+		else nil
+	local dur = math.clamp(tonumber(data.travelSec) or 0.25, 0.08, 2.2)
+	local launchVel: Vector3 = if typeof(data.launchVel) == "Vector3"
+		then data.launchVel
+		else (staticEnd - serverOrigin).Unit * (tonumber(data.speed) or 115)
+
+	ball:PivotTo(CFrame.lookAt(startPos, staticEnd))
+	ball.Parent = workspace
+	registerVisualBall(ballId, ball, startPos, serverOrigin, staticEnd, launchVel, dur, homingPart)
 end
 
 local function handleBouncePacket(data: any)
@@ -603,6 +619,46 @@ local function handleImpactDespawnPacket(data: any)
 	end
 end
 
+local function playEliminationVfx(data: any)
+	if typeof(data.pos) ~= "Vector3" then
+		return
+	end
+	local isVoid = data.eliminationVfx == "VoidShatter"
+	local col = if isVoid then Color3.fromRGB(168, 85, 247) else Color3.fromRGB(251, 146, 60)
+	local burst = Instance.new("Part")
+	burst.Name = "EliminationBurst"
+	burst.Shape = Enum.PartType.Ball
+	burst.Material = Enum.Material.Neon
+	burst.Color = col
+	burst.Transparency = 0.25
+	burst.Size = Vector3.new(2.5, 2.5, 2.5)
+	burst.Anchored = true
+	burst.CanCollide = false
+	burst.CanQuery = false
+	burst.CFrame = CFrame.new(data.pos :: Vector3)
+	burst.Parent = workspace
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Rate = 0
+	emitter.Speed = NumberRange.new(14, 30)
+	emitter.Lifetime = NumberRange.new(0.4, 0.8)
+	emitter.Size = NumberSequence.new(1.1, 0)
+	emitter.Color = ColorSequence.new(col, Color3.fromRGB(255, 255, 255))
+	emitter.LightEmission = 1
+	emitter.Parent = burst
+	emitter:Emit(math.min(32, EconomyLogic.COSMETIC_MAX_BURST_PARTICLES))
+
+	TweenService
+		:Create(burst, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+			Size = Vector3.new(16, 16, 16),
+		})
+		:Play()
+	task.delay(0.9, function()
+		burst:Destroy()
+	end)
+end
+
 local function onProjectileBroadcast(data: any)
 	if type(data) ~= "table" then
 		return
@@ -614,6 +670,8 @@ local function onProjectileBroadcast(data: any)
 		handleBouncePacket(data)
 	elseif kind == "ImpactDespawn" then
 		handleImpactDespawnPacket(data)
+	elseif kind == "Elimination" then
+		playEliminationVfx(data)
 	elseif kind == "Despawn" then
 		local ballId = tonumber(data.ballId)
 		if ballId then
