@@ -19,6 +19,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MathUtil = require(Shared.Utils.MathUtil)
 local AudioCatalog = require(Shared.Utils.AudioCatalog)
+local OnboardingLogic = require(Shared.Utils.OnboardingLogic)
 local Remotes = require(Shared.Net.Remotes)
 
 local Theme = require(script.Parent.Theme)
@@ -1097,16 +1098,10 @@ function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
 	updateHumanoidHpBar()
 
 	if guideBanner and guideFrame then
-		if not profile.starterEggHatched then
+		local step = OnboardingLogic.currentStep(profile)
+		if step then
 			guideFrame.Visible = true
-			guideBanner.Text = "Step 1: Press [E] at Pedestal #1 to hatch your FREE Starter Egg!"
-		elseif (profile.ballDamage or 5) < 15 then
-			guideFrame.Visible = true
-			guideBanner.Text =
-				"Step 2: Stand on your glowing Training Pad to AUTO-SHOOT & grind DMG (AFK-ready!)"
-		elseif (profile.level or 1) < 2 then
-			guideFrame.Visible = true
-			guideBanner.Text = "Step 3: Walk into Portal 1 (Emerald Meadow) for PvE & Boss Brawl!"
+			guideBanner.Text = step.text
 		else
 			guideFrame.Visible = false
 		end

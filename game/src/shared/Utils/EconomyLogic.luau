@@ -52,6 +52,7 @@ export type PlayerProfile = {
 	offlineVaultTier: number,
 	activeSlotsUnlocked: number,
 	starterEggHatched: boolean,
+	hasCollectedCash: boolean?,
 	eggs: { [string]: number },
 	pets: { OwnedPet },
 	activeFollowerUids: { string },
@@ -103,6 +104,7 @@ function EconomyLogic.createDefaultProfile(now: number): PlayerProfile
 		offlineVaultTier = 1,
 		activeSlotsUnlocked = 1,
 		starterEggHatched = false,
+		hasCollectedCash = false,
 		eggs = { StarterEgg = 1 },
 		pets = {},
 		activeFollowerUids = {},
@@ -235,6 +237,7 @@ function EconomyLogic.collectCashPad(profile: PlayerProfile, pedestalIndex: numb
 	end
 	profile.padStoredCoins[pedestalIndex] = (rawStored :: number) - stored
 	profile.coins = nextCoins
+	profile.hasCollectedCash = true
 	return stored
 end
 
