@@ -587,4 +587,70 @@ function ArenaCycleLogic.stepBiome(
 	return events
 end
 
+export type LightingTarget = {
+	key: string,
+	ambient: { number },
+	outdoorAmbient: { number },
+	clockTime: number,
+}
+
+function ArenaCycleLogic.isOverchargedVisualActive(biomes: { [string]: any }?): boolean
+	if type(biomes) ~= "table" then
+		return false
+	end
+	for _, b in pairs(biomes) do
+		if
+			type(b) == "table"
+			and b.isOvercharged == true
+			and (
+				b.phase == "OptIn_Window"
+				or b.phase == "Boss_Phase"
+				or b.phase == "PvP_EggScramble"
+			)
+		then
+			return true
+		end
+	end
+	return false
+end
+
+function ArenaCycleLogic.getBiomeLighting(
+	zone: string,
+	biomeId: string,
+	overchargedActive: boolean
+): LightingTarget
+	if overchargedActive then
+		return {
+			key = "Overcharged",
+			ambient = { 110, 62, 145 },
+			outdoorAmbient = { 145, 72, 180 },
+			clockTime = 20.5,
+		}
+	end
+	local biome = BiomeConfigs.getBiome(biomeId)
+	if zone ~= "Hub" and biome then
+		local a = biome.ambientColor
+		local clockTime = if biomeId == "MoltenCaldera"
+			then 18.2
+			elseif biomeId == "FrostbiteCavern" then 11.5
+			else 14.0
+		return {
+			key = `Biome:{biomeId}`,
+			ambient = { a[1], a[2], a[3] },
+			outdoorAmbient = {
+				math.min(255, a[1] + 24),
+				math.min(255, a[2] + 24),
+				math.min(255, a[3] + 24),
+			},
+			clockTime = clockTime,
+		}
+	end
+	return {
+		key = "Hub",
+		ambient = { 115, 130, 152 },
+		outdoorAmbient = { 142, 156, 178 },
+		clockTime = 13.5,
+	}
+end
+
 return ArenaCycleLogic

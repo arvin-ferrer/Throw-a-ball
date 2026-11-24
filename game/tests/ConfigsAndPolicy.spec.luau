@@ -5,6 +5,7 @@
 	Robux exclusion), and PolicyLogic (ArePaidRandomItemsRestricted fallback + receipt idempotency).
 ]]
 
+local ArenaCycleLogic = require("../src/shared/Utils/ArenaCycleLogic")
 local BiomeConfigs = require("../src/shared/Configs/BiomeConfigs")
 local PetConfigs = require("../src/shared/Configs/PetConfigs")
 local TraitConfigs = require("../src/shared/Configs/TraitConfigs")
@@ -126,26 +127,93 @@ assertTrue(#restrictedShop == 2, "Restricted region sees 2 direct non-random bun
 for _, offer in ipairs(restrictedShop) do
 	assertTrue(offer.kind == "DirectBundle", "Restricted offer must be DirectBundle (zero RNG)")
 	assertTrue(offer.guaranteedPetId ~= nil, "DirectBundle names exact guaranteed pet")
+	assertTrue(
+		offer.petOdds == nil and offer.mutationOdds == nil,
+		"DirectBundle must never expose random odds"
+	)
 end
 
-local canPaidEggRestricted = PolicyLogic.canPromptProduct(190000101, true)
-assertTrue(not canPaidEggRestricted, "Restricted account cannot prompt paid random egg")
-local canDirectRestricted = PolicyLogic.canPromptProduct(190000201, true)
-assertTrue(canDirectRestricted, "Restricted account CAN prompt direct bundle")
+-- Nil/unknown policy status must fail closed (never expose paid random eggs)
+local nilShop = PolicyLogic.buildShopOfferings(nil :: any)
+assertTrue(
+	#nilShop == 2 and nilShop[1].kind == "DirectBundle",
+	"Nil policy fails closed to DirectBundle"
+)
+assertTrue(
+	not PolicyLogic.canPromptProduct(190000101, nil :: any),
+	"Nil policy blocks prompting paid random egg"
+)
 
--- 5. Receipt idempotency
+for _, paidEggProduct in ipairs({ 190000101, 190000102 }) do
+	local canPrompt = PolicyLogic.canPromptProduct(paidEggProduct, true)
+	assertTrue(not canPrompt, `Restricted account cannot prompt paid random egg {paidEggProduct}`)
+end
+for _, bundleProduct in ipairs({ 190000201, 190000202 }) do
+	local canPrompt = PolicyLogic.canPromptProduct(bundleProduct, true)
+	assertTrue(canPrompt, `Restricted account CAN prompt direct bundle {bundleProduct}`)
+end
+
+-- 5. Receipt idempotency & restricted paid-random rejection
 local profile = EconomyLogic.createDefaultProfile(1000)
 local r1 = PolicyLogic.applyProductReceipt(profile, "rcpt_001", 190000201, true)
-assertTrue(r1.granted and not r1.duplicate, "First receipt grants Direct Bundle")
+assertTrue(r1.granted and not r1.duplicate, "First receipt grants Direct Bundle 1")
 assertTrue(
 	#profile.pets == 1 and profile.pets[1].speciesId == "StarlightBeetle",
-	"Direct Bundle pet added"
+	"Direct Bundle 1 pet added"
+)
+local r1b = PolicyLogic.applyProductReceipt(profile, "rcpt_001b", 190000202, true)
+assertTrue(r1b.granted and not r1b.duplicate, "First receipt grants Direct Bundle 2")
+assertTrue(
+	#profile.pets == 2 and profile.pets[2].speciesId == "NeonMoth",
+	"Direct Bundle 2 pet added"
 )
 local r2 = PolicyLogic.applyProductReceipt(profile, "rcpt_001", 190000201, true)
 assertTrue(r2.granted and r2.duplicate, "Duplicate receipt is idempotent")
-assertTrue(#profile.pets == 1, "Duplicate receipt did NOT duplicate pet")
+assertTrue(#profile.pets == 2, "Duplicate receipt did NOT duplicate pet")
 
-local rForbidden = PolicyLogic.applyProductReceipt(profile, "rcpt_002", 190000101, true)
-assertTrue(not rForbidden.granted, "Restricted account receipt for random egg rejected")
+for idx, paidEggProduct in ipairs({ 190000101, 190000102 }) do
+	local petCountBefore = #profile.pets
+	local txCountBefore = #profile.purchaseIds
+	local rForbidden =
+		PolicyLogic.applyProductReceipt(profile, `rcpt_forb_{idx}`, paidEggProduct, true)
+	assertTrue(not rForbidden.granted, `Restricted account receipt {paidEggProduct} rejected`)
+	assertTrue(
+		#profile.pets == petCountBefore
+			and #profile.purchaseIds == txCountBefore
+			and profile.eggs.Shop_PrismEgg == nil
+			and profile.eggs.Seasonal_CyberEgg == nil,
+		"Rejected restricted random egg receipt leaves profile unmutated"
+	)
+end
+
+local rNil = PolicyLogic.applyProductReceipt(profile, "rcpt_nil_policy", 190000101, nil :: any)
+assertTrue(not rNil.granted, "Nil policy receipt for paid random egg fails closed")
+
+local rUnrestricted = PolicyLogic.applyProductReceipt(profile, "rcpt_unrest_1", 190000101, false)
+assertTrue(
+	rUnrestricted.granted and profile.eggs.Shop_PrismEgg == 1,
+	"Unrestricted account receives paid random egg"
+)
+
+-- 6. Overcharged & Biome lighting targets (#16)
+assertTrue(
+	ArenaCycleLogic.isOverchargedVisualActive({
+		EmeraldMeadow = { isOvercharged = true, phase = "PvP_EggScramble" },
+	}),
+	"Overcharged lighting remains active through PvP_EggScramble"
+)
+assertTrue(not ArenaCycleLogic.isOverchargedVisualActive({
+	EmeraldMeadow = { isOvercharged = true, phase = "PvE_Open" },
+}), "Overcharged lighting clears once reset to PvE_Open")
+local ovLight = ArenaCycleLogic.getBiomeLighting("Hub", "", true)
+local hubLight = ArenaCycleLogic.getBiomeLighting("Hub", "", false)
+local moltenLight = ArenaCycleLogic.getBiomeLighting("BiomePvE", "MoltenCaldera", false)
+assertTrue(
+	ovLight.key == "Overcharged"
+		and ovLight.clockTime == 20.5
+		and hubLight.key == "Hub"
+		and moltenLight.key == "Biome:MoltenCaldera",
+	"Lighting targets resolve distinctly for Overcharged, Hub, and Biomes"
+)
 
 print("PASS: ConfigsAndPolicy.spec.luau")

@@ -2,7 +2,7 @@
 --[[
 	ShopCodexGui.luau
 	PolicyService-Compliant Shop & Full 19-Species Codex UI:
-	- Automatically swaps Paid Random Eggs -> Direct Non-Random Bundles when ArePaidRandomItemsRestricted == true
+	- Automatically swaps Paid Random Eggs -> Direct Non-Random Bundles when ArePaidRandomItemsRestricted ~= false
 	- Displays exact 100.0% server-driven Pet & Mutation odds on every Paid Egg card
 	- Lists all 5 Game Passes (reading Pass_* attributes) & Gem Cosmetics
 ]]
@@ -26,6 +26,14 @@ local scrollBody: ScrollingFrame? = nil
 local activeTab = "Shop"
 local latestProfile: any = nil
 
+local function applyTextConstraint(lbl: TextLabel, minSize: number, maxSize: number)
+	lbl.TextScaled = true
+	local tc = Instance.new("UITextSizeConstraint")
+	tc.MinTextSize = minSize
+	tc.MaxTextSize = maxSize
+	tc.Parent = lbl
+end
+
 local function clearScroll()
 	if not scrollBody then
 		return
@@ -43,83 +51,157 @@ local function formatOddsLine(oddsList: { any }?): string
 	end
 	local parts: { string } = {}
 	for _, entry in ipairs(oddsList) do
-		table.insert(parts, string.format("%s %.1f%%", entry.id, entry.percent))
+		local sp = PetConfigs.getSpecies(entry.id)
+		local label = if sp then sp.displayName else entry.id
+		table.insert(parts, string.format("%s %.1f%%", label, entry.percent))
 	end
 	return table.concat(parts, " | ")
 end
 
-local function renderShopTab()
-	if not scrollBody then
-		return
-	end
-	local remotes = Remotes.waitClient()
-	local restricted = localPlayer:GetAttribute("ArePaidRandomItemsRestricted") == true
+local function makeShopCardRow(
+	parent: ScrollingFrame,
+	name: string,
+	height: number,
+	btnText: string,
+	btnWidth: number,
+	btnColor: Color3,
+	onClick: () -> ()
+): Frame
+	local card = Theme.makeFrame(
+		parent,
+		name,
+		UDim2.new(1, -8, 0, height),
+		UDim2.fromOffset(0, 0),
+		Theme.Colors.Card,
+		10
+	)
+	local btn = Theme.makeButton(
+		card,
+		"BuyBtn",
+		btnText,
+		UDim2.fromOffset(btnWidth, 44),
+		UDim2.new(1, -(btnWidth + 10), 0.5, -22),
+		btnColor,
+		onClick
+	)
+	applyTextConstraint(btn :: any, 10, 14)
+	return card
+end
 
+local function renderOfferCard(
+	parent: ScrollingFrame,
+	remotes: any,
+	item: PolicyLogic.ShopCatalogItem
+)
+	local card = makeShopCardRow(
+		parent,
+		"Offer_" .. item.id,
+		108,
+		"BUY (ROBUX)",
+		116,
+		Theme.Colors.Emerald,
+		function()
+			remotes.ShopRequest:FireServer("Product", item.devProductId)
+		end
+	)
+	local title = Theme.makeLabel(
+		card,
+		"Name",
+		item.displayName,
+		UDim2.new(1, -144, 0, 24),
+		UDim2.fromOffset(10, 6),
+		15,
+		Theme.Colors.Text,
+		true
+	)
+	applyTextConstraint(title, 10, 15)
+	local detail = if item.kind == "DirectBundle"
+		then item.description
+		else `Pets (100%): {formatOddsLine(item.petOdds)}\nMutations (100%): {formatOddsLine(
+			item.mutationOdds
+		)}`
+	local desc = Theme.makeLabel(
+		card,
+		"Desc",
+		detail,
+		UDim2.new(1, -144, 0, 68),
+		UDim2.fromOffset(10, 32),
+		11,
+		Theme.Colors.Muted,
+		false
+	)
+	desc.TextWrapped = true
+	applyTextConstraint(desc, 8, 12)
+end
+
+local function renderEggSection(parent: ScrollingFrame, remotes: any, restricted: boolean)
 	local headerText = if restricted
 		then "DIRECT NON-RANDOM BUNDLES (Regional Policy Compliance — Zero RNG)"
 		else "SHOP EXCLUSIVE EGGS (100.0% Disclosed Odds • Boss Eggs Stay 100% Gameplay-Earned!)"
-	Theme.makeLabel(
-		scrollBody,
+	local hdr = Theme.makeLabel(
+		parent,
 		"ShopHeader",
 		headerText,
-		UDim2.new(1, -8, 0, 26),
+		UDim2.new(1, -8, 0, 32),
 		UDim2.fromOffset(0, 0),
 		13,
 		Theme.Colors.Coins,
 		true
 	)
-
-	local offerings = PolicyLogic.buildShopOfferings(restricted)
-	for _, item in ipairs(offerings) do
-		local card = Theme.makeFrame(
-			scrollBody,
-			"Offer_" .. item.id,
-			UDim2.new(1, -8, 0, 96),
-			UDim2.fromOffset(0, 0),
-			Theme.Colors.Card,
-			10
-		)
-		Theme.makeLabel(
-			card,
-			"Name",
-			item.displayName,
-			UDim2.new(0.68, 0, 0, 24),
-			UDim2.fromOffset(10, 6),
-			15,
-			Theme.Colors.Text,
-			true
-		)
-		local detail = if item.kind == "DirectBundle"
-			then `Guaranteed: {item.guaranteedPetId} + {item.guaranteedBallSkin} (No RNG)`
-			else `Pets (100%): {formatOddsLine(item.petOdds)}\nMutations (100%): {formatOddsLine(
-				item.mutationOdds
-			)}`
-		local desc = Theme.makeLabel(
-			card,
-			"Desc",
-			detail,
-			UDim2.new(0.68, 0, 0, 56),
-			UDim2.fromOffset(10, 30),
-			11,
-			Theme.Colors.Muted,
-			false
-		)
-		desc.TextWrapped = true
-		Theme.makeButton(
-			card,
-			"BuyBtn",
-			"BUY (ROBUX)",
-			UDim2.fromOffset(128, 38),
-			UDim2.new(1, -140, 0, 28),
-			Theme.Colors.Emerald,
-			function()
-				remotes.ShopRequest:FireServer("Product", item.devProductId)
-			end
-		)
+	hdr.TextWrapped = true
+	applyTextConstraint(hdr, 9, 13)
+	for _, item in ipairs(PolicyLogic.buildShopOfferings(restricted)) do
+		renderOfferCard(parent, remotes, item)
 	end
+end
 
+local function renderGamePassCard(
+	parent: ScrollingFrame,
+	remotes: any,
+	pass: MonetizationConfigs.GamePassSpec
+)
+	local owned = localPlayer:GetAttribute(pass.attributeName) == true
+	local card = makeShopCardRow(
+		parent,
+		"Pass_" .. pass.key,
+		68,
+		if owned then "OWNED" else "GET PASS",
+		104,
+		if owned then Theme.Colors.CardAlt else Theme.Colors.Coins,
+		function()
+			if not owned then
+				remotes.ShopRequest:FireServer("GamePass", pass.key)
+			end
+		end
+	)
+	local title = Theme.makeLabel(
+		card,
+		"Title",
+		pass.displayName,
+		UDim2.new(1, -130, 0, 22),
+		UDim2.fromOffset(10, 6),
+		14,
+		Theme.Colors.Text,
+		true
+	)
+	applyTextConstraint(title, 10, 14)
+	local desc = Theme.makeLabel(
+		card,
+		"Desc",
+		pass.description,
+		UDim2.new(1, -130, 0, 34),
+		UDim2.fromOffset(10, 28),
+		11,
+		Theme.Colors.Muted,
+		false
+	)
+	desc.TextWrapped = true
+	applyTextConstraint(desc, 8, 11)
+end
+
+local function renderGamePassSection(parent: ScrollingFrame, remotes: any)
 	Theme.makeLabel(
-		scrollBody,
+		parent,
 		"PassHeader",
 		"GAME PASSES (Progression & QoL)",
 		UDim2.new(1, -8, 0, 24),
@@ -128,53 +210,56 @@ local function renderShopTab()
 		Theme.Colors.Frost,
 		true
 	)
+	local ordered: { MonetizationConfigs.GamePassSpec } = {}
 	for _, pass in pairs(MonetizationConfigs.GAME_PASSES) do
-		local owned = localPlayer:GetAttribute(pass.attributeName) == true
-		local card = Theme.makeFrame(
-			scrollBody,
-			"Pass_" .. pass.key,
-			UDim2.new(1, -8, 0, 58),
-			UDim2.fromOffset(0, 0),
-			Theme.Colors.Card,
-			10
-		)
-		Theme.makeLabel(
-			card,
-			"Title",
-			pass.displayName,
-			UDim2.new(0.66, 0, 0, 22),
-			UDim2.fromOffset(10, 6),
-			14,
-			Theme.Colors.Text,
-			true
-		)
-		Theme.makeLabel(
-			card,
-			"Desc",
-			pass.description,
-			UDim2.new(0.66, 0, 0, 26),
-			UDim2.fromOffset(10, 28),
-			11,
-			Theme.Colors.Muted,
-			false
-		)
-		Theme.makeButton(
-			card,
-			"BuyBtn",
-			if owned then "OWNED" else "GET PASS",
-			UDim2.fromOffset(116, 36),
-			UDim2.new(1, -128, 0, 11),
-			if owned then Theme.Colors.CardAlt else Theme.Colors.Coins,
-			function()
-				if not owned then
-					remotes.ShopRequest:FireServer("GamePass", pass.key)
-				end
-			end
-		)
+		table.insert(ordered, pass)
 	end
+	table.sort(ordered, function(a, b)
+		return a.passId < b.passId
+	end)
+	for _, pass in ipairs(ordered) do
+		renderGamePassCard(parent, remotes, pass)
+	end
+end
 
+local function renderCosmeticCard(
+	parent: ScrollingFrame,
+	remotes: any,
+	cos: MonetizationConfigs.CosmeticSpec,
+	isOwned: boolean,
+	isEquipped: boolean
+)
+	local btnText = if isEquipped
+		then "EQUIPPED"
+		elseif isOwned and cos.category == "BallSkin" then "EQUIP"
+		elseif isOwned then "OWNED"
+		else `{cos.costGems} Gems`
+	local btnColor = if isEquipped or (isOwned and cos.category ~= "BallSkin")
+		then Theme.Colors.CardAlt
+		elseif isOwned then Theme.Colors.Frost
+		else Theme.Colors.Gems
+	local card = makeShopCardRow(parent, "Cos_" .. cos.id, 58, btnText, 104, btnColor, function()
+		if not isOwned or (cos.category == "BallSkin" and not isEquipped) then
+			remotes.UpgradeAction:FireServer("BuyCosmetic", cos.id)
+		end
+	end)
+	local title = Theme.makeLabel(
+		card,
+		"Title",
+		`{cos.displayName} [{cos.category}]`,
+		UDim2.new(1, -130, 1, -8),
+		UDim2.fromOffset(10, 4),
+		14,
+		Theme.Colors.Text,
+		true
+	)
+	title.TextWrapped = true
+	applyTextConstraint(title, 9, 14)
+end
+
+local function renderCosmeticSection(parent: ScrollingFrame, remotes: any)
 	Theme.makeLabel(
-		scrollBody,
+		parent,
 		"CosHeader",
 		"COSMETICS (Boss Gems)",
 		UDim2.new(1, -8, 0, 24),
@@ -183,39 +268,74 @@ local function renderShopTab()
 		Theme.Colors.Gems,
 		true
 	)
-	local ownedCos = if latestProfile then (latestProfile.ownedCosmetics or {}) else {}
+	local ordered: { MonetizationConfigs.CosmeticSpec } = {}
 	for _, cos in pairs(MonetizationConfigs.COSMETICS) do
-		local isOwned = ownedCos[cos.id] == true
-		local card = Theme.makeFrame(
-			scrollBody,
-			"Cos_" .. cos.id,
-			UDim2.new(1, -8, 0, 50),
-			UDim2.fromOffset(0, 0),
-			Theme.Colors.Card,
-			10
-		)
-		Theme.makeLabel(
-			card,
-			"Title",
-			`{cos.displayName} [{cos.category}]`,
-			UDim2.fromScale(0.66, 1),
-			UDim2.fromOffset(10, 0),
-			14,
-			Theme.Colors.Text,
-			true
-		)
-		Theme.makeButton(
-			card,
-			"Btn",
-			if isOwned then "EQUIP" else `{cos.costGems} Gems`,
-			UDim2.fromOffset(116, 32),
-			UDim2.new(1, -128, 0, 9),
-			if isOwned then Theme.Colors.Frost else Theme.Colors.Gems,
-			function()
-				remotes.UpgradeAction:FireServer("BuyCosmetic", cos.id)
-			end
-		)
+		table.insert(ordered, cos)
 	end
+	table.sort(ordered, function(a, b)
+		if a.costGems ~= b.costGems then
+			return a.costGems < b.costGems
+		end
+		return a.id < b.id
+	end)
+	local ownedCos = if latestProfile then (latestProfile.ownedCosmetics or {}) else {}
+	for _, cos in ipairs(ordered) do
+		local isOwned = ownedCos[cos.id] == true
+		local isEquipped = cos.category == "BallSkin"
+			and latestProfile ~= nil
+			and latestProfile.equippedBallSkin == cos.id
+		renderCosmeticCard(parent, remotes, cos, isOwned, isEquipped)
+	end
+end
+
+local function renderShopTab()
+	if not scrollBody then
+		return
+	end
+	local remotes = Remotes.waitClient()
+	local restricted = localPlayer:GetAttribute("ArePaidRandomItemsRestricted") ~= false
+	renderEggSection(scrollBody, remotes, restricted)
+	renderGamePassSection(scrollBody, remotes)
+	renderCosmeticSection(scrollBody, remotes)
+end
+
+local function renderCodexCard(
+	parent: ScrollingFrame,
+	sp: PetConfigs.PetSpecies,
+	discovered: boolean
+)
+	local card = Theme.makeFrame(
+		parent,
+		"Codex_" .. sp.id,
+		UDim2.new(1, -8, 0, 62),
+		UDim2.fromOffset(0, 0),
+		if discovered then Theme.Colors.Card else Theme.Colors.Panel,
+		10
+	)
+	local rCol = PetConfigs.RARITY_COLORS[sp.rarity] or { 200, 200, 200 }
+	local title = Theme.makeLabel(
+		card,
+		"Name",
+		if discovered then `{sp.displayName} [{sp.rarity}]` else `??? [{sp.rarity} — {sp.source}]`,
+		UDim2.new(1, -24, 0, 22),
+		UDim2.fromOffset(12, 6),
+		14,
+		Color3.fromRGB(rCol[1], rCol[2], rCol[3]),
+		true
+	)
+	applyTextConstraint(title, 10, 14)
+	local meta = Theme.makeLabel(
+		card,
+		"Meta",
+		`Base: {sp.baseRate} Coins/s | Active Perk: {sp.perkLabel} | Source: {sp.source}`,
+		UDim2.new(1, -24, 0, 28),
+		UDim2.fromOffset(12, 28),
+		11,
+		Theme.Colors.Muted,
+		false
+	)
+	meta.TextWrapped = true
+	applyTextConstraint(meta, 8, 11)
 end
 
 local function renderCodexTab()
@@ -230,7 +350,7 @@ local function renderCodexTab()
 			unlockedCount += 1
 		end
 	end
-	Theme.makeLabel(
+	local summary = Theme.makeLabel(
 		scrollBody,
 		"Summary",
 		`CREATURE CODEX: {unlockedCount} / {#allSpecies} DISCOVERED`,
@@ -240,40 +360,9 @@ local function renderCodexTab()
 		Theme.Colors.Gems,
 		true
 	)
-
+	applyTextConstraint(summary, 11, 15)
 	for _, sp in ipairs(allSpecies) do
-		local discovered = unlockedMap[sp.id] == true
-		local card = Theme.makeFrame(
-			scrollBody,
-			"Codex_" .. sp.id,
-			UDim2.new(1, -8, 0, 54),
-			UDim2.fromOffset(0, 0),
-			if discovered then Theme.Colors.Card else Theme.Colors.Panel,
-			10
-		)
-		local rCol = PetConfigs.RARITY_COLORS[sp.rarity] or { 200, 200, 200 }
-		Theme.makeLabel(
-			card,
-			"Name",
-			if discovered
-				then `{sp.displayName} [{sp.rarity}]`
-				else `??? [{sp.rarity} — {sp.source}]`,
-			UDim2.new(0.65, 0, 0, 24),
-			UDim2.fromOffset(12, 6),
-			14,
-			Color3.fromRGB(rCol[1], rCol[2], rCol[3]),
-			true
-		)
-		Theme.makeLabel(
-			card,
-			"Meta",
-			`Base: {sp.baseRate} Coins/s | Active Perk: {sp.perkLabel} | Source: {sp.source}`,
-			UDim2.new(1, -24, 0, 20),
-			UDim2.fromOffset(12, 28),
-			11,
-			Theme.Colors.Muted,
-			false
-		)
+		renderCodexCard(scrollBody, sp, unlockedMap[sp.id] == true)
 	end
 end
 
@@ -287,6 +376,84 @@ local function rerender()
 	else
 		renderCodexTab()
 	end
+end
+
+local function buildTabButton(
+	tabRow: Frame,
+	name: string,
+	label: string,
+	color: Color3,
+	tabId: string
+)
+	local tb = Theme.makeButton(
+		tabRow,
+		name,
+		label,
+		UDim2.fromScale(0.48, 1),
+		UDim2.fromOffset(0, 0),
+		color,
+		function()
+			activeTab = tabId
+			rerender()
+		end
+	)
+	applyTextConstraint(tb :: any, 10, 14)
+	local fx = Instance.new("UIFlexItem")
+	fx.FlexMode = Enum.UIFlexMode.Fill
+	fx.Parent = tb
+end
+
+local function buildHeaderAndTabs(panel: Frame)
+	local title = Theme.makeLabel(
+		panel,
+		"Title",
+		"SHOP & CREATURE CODEX",
+		UDim2.new(1, -72, 0, 34),
+		UDim2.fromOffset(16, 10),
+		18,
+		Theme.Colors.Coins,
+		true
+	)
+	applyTextConstraint(title, 12, 18)
+	Theme.makeButton(
+		panel,
+		"CloseBtn",
+		"X",
+		UDim2.fromOffset(44, 44),
+		UDim2.new(1, -50, 0, 6),
+		Theme.Colors.Danger,
+		function()
+			panel.Visible = false
+		end
+	)
+	local tabRow = Instance.new("Frame")
+	tabRow.Name = "TabRow"
+	tabRow.BackgroundTransparency = 1
+	tabRow.Position = UDim2.fromOffset(14, 54)
+	tabRow.Size = UDim2.new(1, -28, 0, 36)
+	tabRow.Parent = panel
+	local tl = Instance.new("UIListLayout")
+	tl.FillDirection = Enum.FillDirection.Horizontal
+	tl.Padding = UDim.new(0, 8)
+	tl.Parent = tabRow
+	buildTabButton(tabRow, "ShopTab", "SHOP & PASSES", Theme.Colors.Coins, "Shop")
+	buildTabButton(tabRow, "CodexTab", "CREATURE CODEX", Theme.Colors.Gems, "Codex")
+end
+
+local function buildScrollContainer(panel: Frame)
+	local sc = Instance.new("ScrollingFrame")
+	sc.Name = "Body"
+	sc.BackgroundTransparency = 1
+	sc.Position = UDim2.fromOffset(12, 98)
+	sc.Size = UDim2.new(1, -24, 1, -110)
+	sc.CanvasSize = UDim2.fromOffset(0, 0)
+	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.ScrollBarThickness = 6
+	sc.Parent = panel
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 8)
+	list.Parent = sc
+	scrollBody = sc
 end
 
 function ShopCodexGui.mount()
@@ -306,73 +473,8 @@ function ShopCodexGui.mount()
 	scConstraint.Parent = panel
 	rootFrame = panel
 
-	Theme.makeLabel(
-		panel,
-		"Title",
-		"SHOP & CREATURE CODEX",
-		UDim2.new(1, -68, 0, 34),
-		UDim2.fromOffset(16, 10),
-		18,
-		Theme.Colors.Coins,
-		true
-	)
-	Theme.makeButton(
-		panel,
-		"CloseBtn",
-		"X",
-		UDim2.fromOffset(40, 40),
-		UDim2.new(1, -48, 0, 6),
-		Theme.Colors.Danger,
-		function()
-			panel.Visible = false
-		end
-	)
-
-	local tabRow = Instance.new("Frame")
-	tabRow.Name = "TabRow"
-	tabRow.BackgroundTransparency = 1
-	tabRow.Position = UDim2.fromOffset(14, 52)
-	tabRow.Size = UDim2.new(1, -28, 0, 34)
-	tabRow.Parent = panel
-	local tl = Instance.new("UIListLayout")
-	tl.FillDirection = Enum.FillDirection.Horizontal
-	tl.Padding = UDim.new(0, 8)
-	tl.Parent = tabRow
-
-	local function addTab(name: string, label: string, color: Color3, tabId: string)
-		local tb = Theme.makeButton(
-			tabRow,
-			name,
-			label,
-			UDim2.fromScale(0.48, 1),
-			UDim2.fromOffset(0, 0),
-			color,
-			function()
-				activeTab = tabId
-				rerender()
-			end
-		)
-		local fx = Instance.new("UIFlexItem")
-		fx.FlexMode = Enum.UIFlexMode.Fill
-		fx.Parent = tb
-	end
-	addTab("ShopTab", "SHOP & PASSES", Theme.Colors.Coins, "Shop")
-	addTab("CodexTab", "CREATURE CODEX", Theme.Colors.Gems, "Codex")
-
-	local sc = Instance.new("ScrollingFrame")
-	sc.Name = "Body"
-	sc.BackgroundTransparency = 1
-	sc.Position = UDim2.fromOffset(12, 94)
-	sc.Size = UDim2.new(1, -24, 1, -106)
-	sc.CanvasSize = UDim2.fromOffset(0, 0)
-	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	sc.ScrollBarThickness = 6
-	sc.Parent = panel
-	local list = Instance.new("UIListLayout")
-	list.Padding = UDim.new(0, 8)
-	list.Parent = sc
-	scrollBody = sc
-
+	buildHeaderAndTabs(panel)
+	buildScrollContainer(panel)
 	localPlayer:GetAttributeChangedSignal("ArePaidRandomItemsRestricted"):Connect(rerender)
 end
 
