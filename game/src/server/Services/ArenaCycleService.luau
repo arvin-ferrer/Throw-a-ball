@@ -29,8 +29,18 @@ type ArenaRefs = {
 	eggPedestal: BasePart,
 	eggPrompt: ProximityPrompt?,
 	suddenDeathRing: BasePart?,
+	roomVolume: BasePart?,
+	arenaFloor: BasePart?,
 	optInSpawns: { BasePart },
 	eggVisual: Model?,
+}
+
+local ROOM_VOLUME_NAMES = {
+	"RoomVolume",
+	"ArenaVolume",
+	"RoomBounds",
+	"ArenaBounds",
+	"BossRoomVolume",
 }
 
 local ArenaCycleService = {}
@@ -45,6 +55,80 @@ local spawnBossCallback: ((string, BasePart, number, boolean) -> ())? = nil
 local clearBossCallback: ((string) -> ())? = nil
 local telemetryCallback: ((string, { [string]: any }) -> ())? = nil
 
+local function findArenaRoomVolume(arena: Instance): BasePart?
+	for _, name in ipairs(ROOM_VOLUME_NAMES) do
+		local found = arena:FindFirstChild(name)
+		if found and found:IsA("BasePart") then
+			return found
+		end
+	end
+	for _, child in ipairs(arena:GetChildren()) do
+		if child:IsA("BasePart") and child:GetAttribute("IsRoomVolume") == true then
+			return child
+		end
+	end
+	return nil
+end
+
+local function configureArenaPrompt(eggPed: BasePart): ProximityPrompt?
+	local prompt = eggPed:FindFirstChildOfClass("ProximityPrompt")
+	if not prompt then
+		local created = Instance.new("ProximityPrompt")
+		created.Name = "Prompt"
+		created.Parent = eggPed
+		prompt = created
+	end
+	if prompt then
+		prompt.ActionText = "Hold 5s to Claim Egg"
+		prompt.ObjectText = "Boss Egg"
+		prompt.HoldDuration = 0.05
+		prompt.MaxActivationDistance = BiomeConfigs.EGG_CLAIM_RADIUS
+		prompt.Enabled = false
+	end
+	return prompt
+end
+
+local function discoverSingleArena(biomesFolder: Instance, biomeId: string)
+	local bFolder = biomesFolder:FindFirstChild(biomeId)
+	local arena = if bFolder then bFolder:FindFirstChild("BossPvPArena") else nil
+	if not arena then
+		return
+	end
+	local bossSpawn = arena:FindFirstChild("BossSpawn")
+	local eggPed = arena:FindFirstChild("EggClaimPedestal")
+	if
+		not bossSpawn
+		or not bossSpawn:IsA("BasePart")
+		or not eggPed
+		or not eggPed:IsA("BasePart")
+	then
+		return
+	end
+	local sdRing = arena:FindFirstChild("SuddenDeathRingMarker")
+	local arenaFloor = arena:FindFirstChild("ArenaFloor")
+	local spawns: { BasePart } = {}
+	for _, child in ipairs(arena:GetChildren()) do
+		if child:IsA("BasePart") and string.find(child.Name, "OptInSpawn_") then
+			table.insert(spawns, child)
+		end
+	end
+	table.sort(spawns, function(a, b)
+		return a.Name < b.Name
+	end)
+	arenaRefs[biomeId] = {
+		biomeId = biomeId,
+		arenaFolder = arena,
+		bossSpawn = bossSpawn,
+		eggPedestal = eggPed,
+		eggPrompt = configureArenaPrompt(eggPed),
+		suddenDeathRing = if sdRing and sdRing:IsA("BasePart") then sdRing else nil,
+		roomVolume = findArenaRoomVolume(arena),
+		arenaFloor = if arenaFloor and arenaFloor:IsA("BasePart") then arenaFloor else nil,
+		optInSpawns = spawns,
+		eggVisual = nil,
+	}
+end
+
 local function discoverArenas()
 	local mapRoot = PlotService.getMapRoot()
 	local biomesFolder = if mapRoot then mapRoot:FindFirstChild("Biomes") else nil
@@ -52,48 +136,7 @@ local function discoverArenas()
 		return
 	end
 	for _, biomeId in ipairs(BiomeConfigs.ORDERED_MVP_BIOMES) do
-		local bFolder = biomesFolder:FindFirstChild(biomeId)
-		local arena = if bFolder then bFolder:FindFirstChild("BossPvPArena") else nil
-		if arena then
-			local bossSpawn = arena:FindFirstChild("BossSpawn")
-			local eggPed = arena:FindFirstChild("EggClaimPedestal")
-			local sdRing = arena:FindFirstChild("SuddenDeathRingMarker")
-			local spawns: { BasePart } = {}
-			for _, child in ipairs(arena:GetChildren()) do
-				if child:IsA("BasePart") and string.find(child.Name, "OptInSpawn_") then
-					table.insert(spawns, child)
-				end
-			end
-			table.sort(spawns, function(a, b)
-				return a.Name < b.Name
-			end)
-			if bossSpawn and bossSpawn:IsA("BasePart") and eggPed and eggPed:IsA("BasePart") then
-				local prompt = eggPed:FindFirstChildOfClass("ProximityPrompt")
-				if not prompt then
-					local created = Instance.new("ProximityPrompt")
-					created.Name = "Prompt"
-					created.Parent = eggPed
-					prompt = created
-				end
-				if prompt then
-					prompt.ActionText = "Hold 5s to Claim Egg"
-					prompt.ObjectText = "Boss Egg"
-					prompt.HoldDuration = 0.05
-					prompt.MaxActivationDistance = BiomeConfigs.EGG_CLAIM_RADIUS
-					prompt.Enabled = false
-				end
-				arenaRefs[biomeId] = {
-					biomeId = biomeId,
-					arenaFolder = arena,
-					bossSpawn = bossSpawn,
-					eggPedestal = eggPed,
-					eggPrompt = prompt,
-					suddenDeathRing = if sdRing and sdRing:IsA("BasePart") then sdRing else nil,
-					optInSpawns = spawns,
-					eggVisual = nil,
-				}
-			end
-		end
+		discoverSingleArena(biomesFolder, biomeId)
 	end
 end
 
@@ -227,11 +270,7 @@ local function onBossPhaseAdmitted(biomeId: string, ref: ArenaRefs, payload: { [
 	end
 end
 
-local function isPlayerZoneEligibleForOptIn(
-	player: Player,
-	biomeId: string,
-	isOvercharged: boolean
-): boolean
+local function isPlayerZoneEligibleForOptIn(player: Player, biomeId: string): boolean
 	if playerArenaBiome[player.UserId] ~= nil then
 		return false
 	end
@@ -240,18 +279,18 @@ local function isPlayerZoneEligibleForOptIn(
 	end
 	local zone = tostring(player:GetAttribute("Zone") or "Hub")
 	local activeBiome = tostring(player:GetAttribute("ActiveBiome") or "")
-	return (zone == "BiomePvE" and activeBiome == biomeId) or (zone == "Hub" and isOvercharged)
+	return ArenaCycleLogic.isZoneEligibleForOptIn(zone, activeBiome, biomeId)
 end
 
-local function recordOptInOffers(biomeId: string, isOvercharged: boolean)
+local function recordOptInOffers(biomeId: string)
 	local st = biomeStates[biomeId]
 	if not st or not telemetryCallback then
 		return
 	end
 	for _, plr in ipairs(Players:GetPlayers()) do
-		if isPlayerZoneEligibleForOptIn(plr, biomeId, isOvercharged) then
+		if isPlayerZoneEligibleForOptIn(plr, biomeId) then
 			if ArenaCycleLogic.markOptInOffered(st, plr.UserId) then
-				telemetryCallback("BossOptInOffered", { userId = plr.UserId, value = 1 })
+				telemetryCallback("BossFightOffered", { userId = plr.UserId, value = 1 })
 			end
 		end
 	end
@@ -274,10 +313,13 @@ local function onPhaseChangedEvent(biomeId: string, ref: ArenaRefs?, payload: { 
 	local phase = payload.phase
 	emitOptInDecisions(payload.optInDecisions)
 	if phase == "OptIn_Window" then
-		recordOptInOffers(biomeId, payload.isOvercharged == true)
+		recordOptInOffers(biomeId)
 	elseif phase == "Boss_Phase" and ref then
 		onBossPhaseAdmitted(biomeId, ref, payload)
 	elseif phase == "PvE_Open" then
+		if payload.reason == "ScrambleTimeout" then
+			awardParticipation(biomeId, payload.participants or {}, nil, nil)
+		end
 		paidParticipantsByBiome[biomeId] = {}
 		setEggVisual(biomeId, nil, false)
 		if clearBossCallback then
@@ -287,6 +329,14 @@ local function onPhaseChangedEvent(biomeId: string, ref: ArenaRefs?, payload: { 
 			playerArenaBiome[uid] = nil
 			local plr = Players:GetPlayerByUserId(uid)
 			if plr then
+				if payload.reason == "ScrambleTimeout" then
+					Remotes.ensureServer().ToastNotify
+						:FireClient(
+							plr,
+							"Egg Scramble timed out! Returning to PvE.",
+							{ 248, 113, 113 }
+						)
+				end
 				PlotService.teleportToBiomePvE(plr, biomeId)
 			end
 		end
@@ -312,6 +362,21 @@ local function onBossDefeatedEvent(biomeId: string, payload: { [string]: any })
 				{ 250, 204, 21 }
 			)
 		end
+	end
+end
+
+local function onPlayerEliminatedEvent(biomeId: string, payload: { [string]: any })
+	local uid = payload.userId
+	playerArenaBiome[uid] = nil
+	local plr = Players:GetPlayerByUserId(uid)
+	if not plr then
+		return
+	end
+	if payload.reason ~= "OutOfBounds" or payload.phase == "PvP_EggScramble" then
+		awardParticipation(biomeId, { uid }, nil, nil)
+	end
+	if payload.reason ~= "OutOfBounds" or plr:GetAttribute("Zone") == "LockedBossPvP" then
+		PlotService.teleportToBiomePvE(plr, biomeId)
 	end
 end
 
@@ -344,13 +409,7 @@ local function handleArenaEvents(events: { ArenaCycleLogic.ArenaEvent })
 				})
 			end
 		elseif ev.kind == "PlayerEliminated" then
-			local uid = ev.payload.userId
-			playerArenaBiome[uid] = nil
-			local plr = Players:GetPlayerByUserId(uid)
-			if plr then
-				awardParticipation(biomeId, { uid }, nil, nil)
-				PlotService.teleportToBiomePvE(plr, biomeId)
-			end
+			onPlayerEliminatedEvent(biomeId, ev.payload)
 		elseif ev.kind == "ClaimCanceled" then
 			local plr = Players:GetPlayerByUserId(ev.payload.userId)
 			if plr then
@@ -441,6 +500,77 @@ function ArenaCycleService.getPlayerArenaBiome(userId: number): string?
 	return playerArenaBiome[userId]
 end
 
+local function computePartHalfY(part: BasePart): number
+	local cf = part.CFrame
+	local sz = part.Size
+	return 0.5
+		* (
+			math.abs(cf.XVector.Y) * sz.X
+			+ math.abs(cf.YVector.Y) * sz.Y
+			+ math.abs(cf.ZVector.Y) * sz.Z
+		)
+end
+
+local function isInsideFloorPart(floor: BasePart, pos: Vector3): boolean
+	local sz = floor.Size
+	local floorTopY = floor.Position.Y + computePartHalfY(floor)
+	local rel = floor.CFrame:PointToObjectSpace(pos)
+	local isCyl = floor:IsA("Part") and floor.Shape == Enum.PartType.Cylinder
+	if isCyl then
+		if math.abs(floor.CFrame.XVector.Y) >= 0.7 then
+			return ArenaCycleLogic.isInsideFloorFootprint(
+				rel.Y,
+				rel.Z,
+				sz.Y,
+				sz.Z,
+				pos.Y,
+				floorTopY,
+				true,
+				120
+			)
+		end
+		local dx = pos.X - floor.Position.X
+		local dz = pos.Z - floor.Position.Z
+		local span = math.max(sz.X, sz.Z)
+		return ArenaCycleLogic.isInsideFloorFootprint(
+			dx,
+			dz,
+			span,
+			span,
+			pos.Y,
+			floorTopY,
+			true,
+			120
+		)
+	end
+	return ArenaCycleLogic.isInsideFloorFootprint(
+		rel.X,
+		rel.Z,
+		sz.X,
+		sz.Z,
+		pos.Y,
+		floorTopY,
+		false,
+		120
+	)
+end
+
+local function isPositionInArenaRoom(ref: ArenaRefs, pos: Vector3): boolean
+	if ref.roomVolume and ref.roomVolume.Parent then
+		local vol = ref.roomVolume
+		local rel = vol.CFrame:PointToObjectSpace(pos)
+		local sz = vol.Size
+		local isCyl = vol:IsA("Part") and vol.Shape == Enum.PartType.Cylinder
+		return ArenaCycleLogic.isInsideVolumeBounds(rel.X, rel.Y, rel.Z, sz.X, sz.Y, sz.Z, isCyl)
+	end
+	if ref.arenaFloor and ref.arenaFloor.Parent then
+		return isInsideFloorPart(ref.arenaFloor, pos)
+	end
+	local c = ref.eggPedestal.Position
+	local roomRadius = BiomeConfigs.SUDDEN_DEATH_START_RADIUS + 25
+	return ArenaCycleLogic.isInsideArenaBounds(pos.X, pos.Y, pos.Z, c.X, c.Y, c.Z, roomRadius, 120)
+end
+
 local function hasLivingCharacterInArena(player: Player, biomeId: string): boolean
 	if player:GetAttribute("Zone") ~= "LockedBossPvP" then
 		return false
@@ -458,18 +588,7 @@ local function hasLivingCharacterInArena(player: Player, biomeId: string): boole
 	if not hrp or not hrp:IsA("BasePart") or not hum or hum.Health <= 0 then
 		return false
 	end
-	local c = ref.eggPedestal.Position
-	local roomRadius = BiomeConfigs.SUDDEN_DEATH_START_RADIUS + 25
-	return ArenaCycleLogic.isInsideArenaBounds(
-		hrp.Position.X,
-		hrp.Position.Y,
-		hrp.Position.Z,
-		c.X,
-		c.Y,
-		c.Z,
-		roomRadius,
-		120
-	)
+	return isPositionInArenaRoom(ref, hrp.Position)
 end
 
 function ArenaCycleService.canDealPvPDamage(attacker: Player, victim: Player): boolean
@@ -586,13 +705,13 @@ local function handleOptInRequest(player: Player, biomeId: any, wantsIn: any)
 	if player:GetAttribute("Zone") == "LockedBossPvP" then
 		return
 	end
-	local eligible = isPlayerZoneEligibleForOptIn(player, biomeId, st.isOvercharged)
+	local eligible = isPlayerZoneEligibleForOptIn(player, biomeId)
 	local alreadyQueued = st.queuedPlayers[player.UserId] ~= nil
 	if not eligible and not (not wantsIn and alreadyQueued) then
 		return
 	end
 	if eligible and ArenaCycleLogic.markOptInOffered(st, player.UserId) and telemetryCallback then
-		telemetryCallback("BossOptInOffered", { userId = player.UserId, value = 1 })
+		telemetryCallback("BossFightOffered", { userId = player.UserId, value = 1 })
 	end
 	local power = tonumber(player:GetAttribute("PowerRating")) or 10
 	ArenaCycleLogic.switchOptIn(biomeStates, biomeId, player.UserId, wantsIn, power)
@@ -605,10 +724,13 @@ local function handleClaimEggAction(player: Player, action: any)
 	local biomeId = playerArenaBiome[player.UserId]
 	local st = if biomeId then biomeStates[biomeId] else nil
 	local ref = if biomeId then arenaRefs[biomeId] else nil
-	if not st or not ref then
+	if not biomeId or not st or not ref then
 		return
 	end
 	if action == "Begin" then
+		if not hasLivingCharacterInArena(player, biomeId) then
+			return
+		end
 		local char = player.Character
 		local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
 		if hrp and hrp:IsA("BasePart") then
@@ -634,58 +756,103 @@ local function isEntrantReady(biomeId: string, userId: number): boolean
 end
 
 local function stepSuddenDeathStorm(st: ArenaCycleLogic.BiomeArenaState, ref: ArenaRefs)
-	if st.phase ~= "PvP_EggScramble" or not ref.suddenDeathRing then
+	if st.phase ~= "PvP_EggScramble" then
 		return
 	end
 	local r = st.suddenDeathRadius
-	ref.suddenDeathRing.Size = Vector3.new(0.4, r * 2, r * 2)
+	if ref.suddenDeathRing then
+		ref.suddenDeathRing.Size = Vector3.new(0.4, r * 2, r * 2)
+	end
 	if r >= BiomeConfigs.SUDDEN_DEATH_START_RADIUS - 0.5 then
 		return
 	end
+	local activeIds: { number } = {}
 	for uid in pairs(st.activePlayers) do
+		table.insert(activeIds, uid)
+	end
+	for _, uid in ipairs(activeIds) do
 		local plr = Players:GetPlayerByUserId(uid)
-		local char = if plr then plr.Character else nil
-		local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
-		local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
-		if plr and hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
-			local d = MathUtil.distance2D(
-				hrp.Position.X,
-				hrp.Position.Z,
-				ref.eggPedestal.Position.X,
-				ref.eggPedestal.Position.Z
-			)
-			if d > r then
-				local tickDmg = hum.MaxHealth * BiomeConfigs.SUDDEN_DEATH_DPS_FRACTION * 0.25
-				hum.Health = math.max(0, hum.Health - tickDmg)
-				ArenaCycleService.onPlayerDamagedInPvP(plr, nil, hum.Health <= 0)
+		if plr and st.activePlayers[uid] and hasLivingCharacterInArena(plr, st.biomeId) then
+			local char = plr.Character
+			local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+			local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+			if hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
+				local d = MathUtil.distance2D(
+					hrp.Position.X,
+					hrp.Position.Z,
+					ref.eggPedestal.Position.X,
+					ref.eggPedestal.Position.Z
+				)
+				if d > r then
+					local tickDmg = hum.MaxHealth * BiomeConfigs.SUDDEN_DEATH_DPS_FRACTION * 0.25
+					hum.Health = math.max(0, hum.Health - tickDmg)
+					ArenaCycleService.onPlayerDamagedInPvP(plr, nil, hum.Health <= 0)
+				end
 			end
 		end
 	end
 end
 
+local function reconcileArenaEntrants(
+	biomeId: string,
+	st: ArenaCycleLogic.BiomeArenaState,
+	now: number
+)
+	local activeIds: { number } = {}
+	for uid in pairs(st.activePlayers) do
+		table.insert(activeIds, uid)
+	end
+	for _, uid in ipairs(activeIds) do
+		local plr = Players:GetPlayerByUserId(uid)
+		if not plr or not hasLivingCharacterInArena(plr, biomeId) then
+			local remEv = ArenaCycleLogic.removePlayerFromArena(st, uid, now, "OutOfBounds")
+			if #remEv > 0 then
+				handleArenaEvents(remEv)
+			end
+		end
+	end
+end
+
+local function resolveClaimerDistance(
+	biomeId: string,
+	st: ArenaCycleLogic.BiomeArenaState,
+	ref: ArenaRefs?
+): number?
+	if not st.claim.claimerId or not ref then
+		return nil
+	end
+	local claimer = Players:GetPlayerByUserId(st.claim.claimerId)
+	if not claimer or not hasLivingCharacterInArena(claimer, biomeId) then
+		return BiomeConfigs.EGG_CLAIM_RADIUS + 1
+	end
+	local hrp = if claimer.Character
+		then claimer.Character:FindFirstChild("HumanoidRootPart")
+		else nil
+	return if hrp and hrp:IsA("BasePart")
+		then (hrp.Position - ref.eggPedestal.Position).Magnitude
+		else BiomeConfigs.EGG_CLAIM_RADIUS + 1
+end
+
 local function stepSingleBiome(biomeId: string, now: number)
 	local st = biomeStates[biomeId]
 	local ref = arenaRefs[biomeId]
-	if st.phase == "OptIn_Window" and now >= st.phaseEndsAt then
-		ArenaCycleLogic.pruneQueuedPlayers(st, function(uid: number): boolean
-			return isEntrantReady(biomeId, uid)
-		end)
+	if st.phase == "OptIn_Window" then
+		recordOptInOffers(biomeId)
+		if now >= st.phaseEndsAt then
+			ArenaCycleLogic.pruneQueuedPlayers(st, function(uid: number): boolean
+				return isEntrantReady(biomeId, uid)
+			end)
+		end
 	end
-	local claimDist: number? = nil
-	if st.claim.claimerId and ref then
-		local claimer = Players:GetPlayerByUserId(st.claim.claimerId)
-		local hrp = if claimer and claimer.Character
-			then claimer.Character:FindFirstChild("HumanoidRootPart")
-			else nil
-		claimDist = if hrp and hrp:IsA("BasePart")
-			then (hrp.Position - ref.eggPedestal.Position).Magnitude
-			else 999
-	end
+	local claimDist = resolveClaimerDistance(biomeId, st, ref)
 	local ev = ArenaCycleLogic.stepBiome(st, now, claimDist)
 	if #ev > 0 then
 		handleArenaEvents(ev)
 	end
-	if ref then
+	if ref and (st.phase == "Boss_Phase" or st.phase == "PvP_EggScramble") then
+		reconcileArenaEntrants(biomeId, st, now)
+	end
+	if ref and st.phase == "PvP_EggScramble" then
 		stepSuddenDeathStorm(st, ref)
 	end
 end

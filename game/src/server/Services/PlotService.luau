@@ -130,7 +130,13 @@ local function collectPlotPedestals(plotModel: Model): { [number]: Model }
 end
 
 local function parsePlotRecord(plotModel: Model): PlotRecord?
-	local plotId = tonumber(plotModel:GetAttribute("PlotId"))
+	local rawPlotId = tonumber(plotModel:GetAttribute("PlotId"))
+		or tonumber(string.match(plotModel.Name, "(%d+)$"))
+	local plotId = if rawPlotId
+			and MathUtil.isPositiveFinite(rawPlotId)
+			and math.floor(rawPlotId) == rawPlotId
+		then rawPlotId
+		else nil
 	local plotSpawn = plotModel:FindFirstChild("PlotSpawn")
 	local tr = plotModel:FindFirstChild("TrainingRange")
 	local firingPad = if tr then tr:FindFirstChild("FiringPad") else nil
@@ -169,6 +175,17 @@ local function parsePlotRecord(plotModel: Model): PlotRecord?
 	}
 end
 
+local function registerDiscoveredPlot(plotModel: Instance)
+	if not plotModel:IsA("Model") then
+		return
+	end
+	local rec = parsePlotRecord(plotModel)
+	if rec then
+		plotsById[rec.plotId] = rec
+		setOwnerSignText(rec, `Plot #{rec.plotId} — Open`)
+	end
+end
+
 local function discoverPlots()
 	local root = findMapRoot()
 	if not root then
@@ -181,29 +198,11 @@ local function discoverPlots()
 		return
 	end
 	for _, plotModel in ipairs(plotsFolder:GetChildren()) do
-		if plotModel:IsA("Model") then
-			local rec = parsePlotRecord(plotModel)
-			if rec then
-				plotsById[rec.plotId] = rec
-				setOwnerSignText(rec, `Plot #{rec.plotId} — Open`)
-			end
-		end
+		registerDiscoveredPlot(plotModel)
 	end
 end
 
-local function wirePlotInteractions(plot: PlotRecord)
-	-- Training Range Upgrade Terminal
-	local terminal = plot.trainingRange:FindFirstChild("UpgradeTerminal")
-	if terminal and terminal:IsA("BasePart") then
-		local prompt = ensurePrompt(terminal, "Upgrade Targets", "Training Range", 12)
-		prompt.Triggered:Connect(function(player: Player)
-			if plot.ownerUserId == player.UserId and onUpgradeTargetRequested then
-				onUpgradeTargetRequested(player)
-			end
-		end)
-	end
-
-	-- Pedestal Prompts & CashPad touch sweeps
+local function wirePedestalPromptsAndPads(plot: PlotRecord)
 	for idx, pedModel in pairs(plot.pedestals) do
 		local base = pedModel:FindFirstChild("Base")
 		if base and base:IsA("BasePart") then
@@ -227,9 +226,21 @@ local function wirePlotInteractions(plot: PlotRecord)
 	end
 end
 
-local function wireHubPortalsAndServices()
+local function wirePlotInteractions(plot: PlotRecord)
+	local terminal = plot.trainingRange:FindFirstChild("UpgradeTerminal")
+	if terminal and terminal:IsA("BasePart") then
+		local prompt = ensurePrompt(terminal, "Upgrade Targets", "Training Range", 12)
+		prompt.Triggered:Connect(function(player: Player)
+			if plot.ownerUserId == player.UserId and onUpgradeTargetRequested then
+				onUpgradeTargetRequested(player)
+			end
+		end)
+	end
+	wirePedestalPromptsAndPads(plot)
+end
+
+local function wireBiomePortals(portalDebounce: { [number]: number })
 	-- Unrestricted Biome Portals (GDD §7.1: 100% unrestricted entry from Minute 1)
-	local portalDebounce: { [number]: number } = {}
 	for _, field in ipairs(CollectionService:GetTagged("BiomePortal")) do
 		if field:IsA("BasePart") then
 			local biomeId = tostring(field:GetAttribute("BiomeId") or "")
@@ -250,8 +261,9 @@ local function wireHubPortalsAndServices()
 			end
 		end
 	end
+end
 
-	-- Return Portals inside Biomes -> back to Personal Plot
+local function wireReturnPortals(portalDebounce: { [number]: number })
 	for _, field in ipairs(CollectionService:GetTagged("ReturnPortal")) do
 		if field:IsA("BasePart") then
 			field.Touched:Connect(function(hit: BasePart)
@@ -268,8 +280,9 @@ local function wireHubPortalsAndServices()
 			end)
 		end
 	end
+end
 
-	-- Hub Service stations (BallShop, EggShop, TraitAltar, GemEggCrafter, AscensionShrine, CodexPavilion)
+local function wireServiceStations()
 	for _, part in ipairs(CollectionService:GetTagged("ServiceInteract")) do
 		if part:IsA("BasePart") then
 			local serviceId = tostring(part:GetAttribute("ServiceId") or "")
@@ -281,6 +294,13 @@ local function wireHubPortalsAndServices()
 			end)
 		end
 	end
+end
+
+local function wireHubPortalsAndServices()
+	local portalDebounce: { [number]: number } = {}
+	wireBiomePortals(portalDebounce)
+	wireReturnPortals(portalDebounce)
+	wireServiceStations()
 end
 
 function PlotService.setCallbacks(callbacks: {
@@ -335,10 +355,11 @@ function PlotService.isPlayerOnAssignedPad(player: Player): boolean
 	if not plot or not hrp or not hrp:IsA("BasePart") or not hum or hum.Health <= 0 then
 		return false
 	end
+	local isGrounded = hum.FloorMaterial ~= Enum.Material.Air
 	local pad = plot.firingPad
 	local hx, hy, hz = computeWorldHalfExtents(pad)
 	local delta = hrp.Position - pad.Position
-	return CombatLogic.isWithinPadFootprint(delta.X, delta.Y, delta.Z, hx, hy, hz)
+	return CombatLogic.isWithinPadFootprint(delta.X, delta.Y, delta.Z, hx, hy, hz, isGrounded)
 end
 
 function PlotService.teleportCharacter(player: Player, targetCF: CFrame)
@@ -646,12 +667,21 @@ function PlotService.refreshPlotVisuals(player: Player, profile: EconomyLogic.Pl
 	end
 end
 
+local function getSortedPlotIds(): { number }
+	local ids: { number } = {}
+	for id in pairs(plotsById) do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	return ids
+end
+
 local function assignPlot(player: Player, profile: EconomyLogic.PlayerProfile)
 	if plotByUserId[player.UserId] then
 		PlotService.refreshPlotVisuals(player, profile)
 		return
 	end
-	for id = 1, 8 do
+	for _, id in ipairs(getSortedPlotIds()) do
 		local rec = plotsById[id]
 		if rec and rec.ownerUserId == 0 then
 			rec.ownerUserId = player.UserId

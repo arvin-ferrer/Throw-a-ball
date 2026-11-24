@@ -616,6 +616,71 @@ local function handleProjectileCollision(
 	return true
 end
 
+local function isSameHomingTarget(hitPart: BasePart?, target: ResolvedTarget): boolean
+	if not hitPart then
+		return false
+	end
+	if hitPart == target.hitPart then
+		return true
+	end
+	if target.mob and target.mob.model and hitPart:IsDescendantOf(target.mob.model) then
+		return true
+	end
+	if target.boss and target.boss.model and hitPart:IsDescendantOf(target.boss.model) then
+		return true
+	end
+	if
+		target.victim
+		and target.victim.Character
+		and hitPart:IsDescendantOf(target.victim.Character)
+	then
+		return true
+	end
+	return false
+end
+
+local function resolveHomingSweep(
+	proj: ActiveProjectile,
+	now: number,
+	char: Model,
+	target: ResolvedTarget,
+	livePos: Vector3,
+	delta: Vector3,
+	dir: Vector3
+): boolean
+	local segLen = delta.Magnitude
+	if segLen >= 0.05 then
+		local res = castSegmentSphere(proj.pos, delta, char)
+		if res then
+			local hitPart = if res.Instance and res.Instance:IsA("BasePart")
+				then res.Instance
+				else nil
+			if not isSameHomingTarget(hitPart, target) then
+				local hitCenter = proj.pos + (delta / segLen) * math.max(0, res.Distance - 0.05)
+				return handleProjectileCollision(
+					proj,
+					now,
+					res.Position,
+					hitCenter,
+					res.Normal,
+					hitPart,
+					nil
+				)
+			end
+			return handleProjectileCollision(
+				proj,
+				now,
+				res.Position,
+				livePos,
+				res.Normal,
+				hitPart or target.hitPart,
+				target
+			)
+		end
+	end
+	return handleProjectileCollision(proj, now, livePos, livePos, -dir, target.hitPart, target)
+end
+
 local function stepHomingProjectile(proj: ActiveProjectile, now: number): boolean
 	local target = proj.homingTarget
 	local arrivesAt = proj.homingArrivesAt
@@ -625,19 +690,20 @@ local function stepHomingProjectile(proj: ActiveProjectile, now: number): boolea
 	if now < arrivesAt then
 		return true
 	end
+	local char = proj.player.Character
+	if not char then
+		return false
+	end
 	local livePos = if target.hitPart.Parent then target.hitPart.Position else proj.pos
 	local delta = livePos - proj.pos
 	local dir = if delta.Magnitude > 0.1 then delta.Unit else proj.vel.Unit
 	proj.homingTarget = nil
 	proj.homingArrivesAt = nil
 	proj.vel = dir * proj.speed
-	local forced = if target.hitPart.Parent and isTargetEligibleForPlayer(proj.player, target)
-		then target
-		else nil
-	if not forced then
+	if not target.hitPart.Parent or not isTargetEligibleForPlayer(proj.player, target) then
 		return false
 	end
-	return handleProjectileCollision(proj, now, livePos, livePos, -dir, target.hitPart, forced)
+	return resolveHomingSweep(proj, now, char, target, livePos, delta, dir)
 end
 
 local function stepBallisticProjectile(proj: ActiveProjectile, dt: number, now: number): boolean
