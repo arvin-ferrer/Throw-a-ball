@@ -23,17 +23,9 @@ local DataService = require(script.Parent.DataService)
 local TelemetryService = {}
 
 local joinTimestamps: { [number]: number } = {}
+local funnelStepByUser: { [number]: number } = {}
+local starterHatchRecorded: { [number]: boolean } = {}
 local counters: { [string]: number } = {}
-
-local FUNNEL_STEPS: { [string]: { step: number, label: string } } = {
-	SessionStart = { step = 1, label = "SessionStart" },
-	StarterHatch_Within30s = { step = 2, label = "StarterHatch" },
-	StarterHatch_Over30s = { step = 2, label = "StarterHatch" },
-	CashPadSweep = { step = 3, label = "CashPadSweep" },
-	BossOptInOffered = { step = 4, label = "BossOptInOffered" },
-	BossOptInAccepted = { step = 5, label = "BossOptInAccepted" },
-	SoftAscension = { step = 6, label = "SoftAscension" },
-}
 
 local function logCustom(player: Player?, eventName: string, value: number?)
 	counters[eventName] = (counters[eventName] or 0) + 1
@@ -44,26 +36,45 @@ local function logCustom(player: Player?, eventName: string, value: number?)
 	pcall(function()
 		AnalyticsService:LogCustomEvent(player, eventName, safeVal)
 	end)
-	local funnel = FUNNEL_STEPS[eventName]
+	local uid = player.UserId
+	local funnel = TelemetryLogic.nextFunnelStep(eventName, funnelStepByUser[uid])
 	if funnel then
+		funnelStepByUser[uid] = funnel.step
 		pcall(function()
 			AnalyticsService:LogOnboardingFunnelStepEvent(player, funnel.step, funnel.label)
 		end)
 	end
 end
 
+local function recordStarterHatch(plr: Player?, uid: number?, explicitSeconds: number?)
+	if not plr or not uid or starterHatchRecorded[uid] then
+		return
+	end
+	local isFirst = plr:GetAttribute("IsFirstSession") == true
+	if not isFirst then
+		return
+	end
+	local elapsed = explicitSeconds
+	if elapsed == nil then
+		local joined = joinTimestamps[uid]
+		elapsed = if joined then os.clock() - joined else nil
+	end
+	local outcome, safeSec = TelemetryLogic.starterHatchOutcome(elapsed, isFirst)
+	if outcome and safeSec then
+		starterHatchRecorded[uid] = true
+		logCustom(plr, outcome, safeSec)
+		logCustom(plr, "FirstEggHatchSeconds", safeSec)
+	end
+end
+
 function TelemetryService.record(eventName: string, payload: { [string]: any })
 	local uid = tonumber(payload.userId)
 	local plr = if uid then Players:GetPlayerByUserId(uid) else nil
-	if eventName == "StarterHatch" then
-		local joined = if uid then joinTimestamps[uid] else nil
-		if not joined then
-			return
-		end
-		local outcome, elapsed = TelemetryLogic.starterHatchOutcome(os.clock() - joined)
-		if outcome and elapsed then
-			logCustom(plr, outcome, elapsed)
-		end
+	if eventName == "StarterHatch" or eventName == "FirstEggHatchSeconds" then
+		local explicit = if eventName == "FirstEggHatchSeconds"
+			then tonumber(payload.value or payload.seconds)
+			else nil
+		recordStarterHatch(plr, uid, explicit)
 		return
 	end
 	local raw = tonumber(payload.value or payload.coins or payload.rank or 1)
@@ -76,11 +87,27 @@ function TelemetryService.getCounters(): { [string]: number }
 end
 
 local function onPlayerAdded(player: Player)
-	if joinTimestamps[player.UserId] then
+	local uid = player.UserId
+	if joinTimestamps[uid] then
 		return
 	end
-	joinTimestamps[player.UserId] = os.clock()
+	joinTimestamps[uid] = os.clock()
+	funnelStepByUser[uid] = 0
+	starterHatchRecorded[uid] = nil
 	logCustom(player, "SessionStart", 1)
+end
+
+local function onPlayerRemoving(player: Player)
+	local uid = player.UserId
+	local joined = joinTimestamps[uid]
+	joinTimestamps[uid] = nil
+	funnelStepByUser[uid] = nil
+	starterHatchRecorded[uid] = nil
+	if joined then
+		local duration = os.clock() - joined
+		local isFirst = DataService.isFirstSession(player)
+		logCustom(player, TelemetryLogic.sessionBucket(duration, isFirst), duration)
+	end
 end
 
 function TelemetryService.init()
@@ -95,16 +122,7 @@ function TelemetryService.start()
 	for _, player in ipairs(Players:GetPlayers()) do
 		onPlayerAdded(player)
 	end
-
-	Players.PlayerRemoving:Connect(function(player: Player)
-		local joined = joinTimestamps[player.UserId]
-		joinTimestamps[player.UserId] = nil
-		if joined then
-			local duration = os.clock() - joined
-			local isFirst = DataService.isFirstSession(player)
-			logCustom(player, TelemetryLogic.sessionBucket(duration, isFirst), duration)
-		end
-	end)
+	Players.PlayerRemoving:Connect(onPlayerRemoving)
 end
 
 return TelemetryService

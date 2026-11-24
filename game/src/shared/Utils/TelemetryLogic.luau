@@ -1,10 +1,24 @@
 --!strict
 --[[
 	TelemetryLogic.luau
-	Pure launch telemetry helpers (first-session bounce buckets and 30s starter hatch outcomes).
+	Pure launch telemetry helpers (first-session bounce buckets, 30s starter hatch outcomes,
+	and strict monotonic 1->4 onboarding funnel transitions).
 ]]
 
+export type FunnelStep = {
+	step: number,
+	label: string,
+}
+
 local TelemetryLogic = {}
+
+local FUNNEL_STEPS: { [string]: FunnelStep } = {
+	SessionStart = { step = 1, label = "SessionStart" },
+	StarterHatch_Within30s = { step = 2, label = "StarterHatch" },
+	StarterHatch_Over30s = { step = 2, label = "StarterHatch" },
+	CashPadSweep = { step = 3, label = "CashPadSweep" },
+	SoftAscension = { step = 4, label = "SoftAscension" },
+}
 
 local function isFiniteNonNegative(value: any): boolean
 	return type(value) == "number"
@@ -30,8 +44,11 @@ function TelemetryLogic.sessionBucket(durationSeconds: number, isFirstSession: b
 	end
 end
 
-function TelemetryLogic.starterHatchOutcome(elapsedSeconds: number?): (string?, number?)
-	if not isFiniteNonNegative(elapsedSeconds) then
+function TelemetryLogic.starterHatchOutcome(
+	elapsedSeconds: number?,
+	isFirstSession: boolean?
+): (string?, number?)
+	if isFirstSession ~= true or not isFiniteNonNegative(elapsedSeconds) then
 		return nil, nil
 	end
 	local safeSec = elapsedSeconds :: number
@@ -39,6 +56,20 @@ function TelemetryLogic.starterHatchOutcome(elapsedSeconds: number?): (string?, 
 		return "StarterHatch_Within30s", safeSec
 	end
 	return "StarterHatch_Over30s", safeSec
+end
+
+function TelemetryLogic.nextFunnelStep(eventName: string, currentStep: number?): FunnelStep?
+	local target = FUNNEL_STEPS[eventName]
+	if not target then
+		return nil
+	end
+	local prev = if type(currentStep) == "number" and isFiniteNonNegative(currentStep)
+		then math.floor(currentStep)
+		else 0
+	if target.step ~= prev + 1 then
+		return nil
+	end
+	return target
 end
 
 return TelemetryLogic

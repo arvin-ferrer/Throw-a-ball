@@ -24,6 +24,18 @@ local DataService = {}
 
 local STORE_NAME = "BallBrawl_PlayerData_v1"
 local SESSION_LOCK_TTL = 1800
+local MAX_RELEASE_RETRIES = 3
+local RELEASE_RETRY_BASE_DELAY = 1.0
+local CLOSE_RETRY_DELAY = 0.5
+local BIND_TO_CLOSE_DEADLINE_SECONDS = 25.0
+
+type PendingRelease = {
+	profile: PlayerProfile,
+	leaseToken: string,
+	attempts: number,
+	nextRetryAt: number,
+	inFlight: boolean,
+}
 
 local dataStore: DataStore? = nil
 local useMemoryFallback = false
@@ -33,8 +45,11 @@ local leaseTokens: { [number]: string } = {}
 local firstSessionByUser: { [number]: boolean } = {}
 local memoryStore: { [string]: any } = {}
 local saveInFlight: { [number]: boolean } = {}
+local pendingReleases: { [number]: PendingRelease } = {}
 local offlineSummary: { [number]: number } = {}
 local onProfileLoadedCallbacks: { (Player, PlayerProfile) -> () } = {}
+local isClosing = false
+local activeCloseTasks = 0
 
 local function getStore(): DataStore?
 	if useMemoryFallback and RunService:IsStudio() then
@@ -281,29 +296,51 @@ local function attemptStoreSave(
 	return ok, lostOwnership, result
 end
 
-local function revokeSessionOnOwnershipLoss(userId: number)
+local function clearSessionCache(userId: number, expectedToken: string?)
+	if expectedToken ~= nil and leaseTokens[userId] ~= expectedToken then
+		return
+	end
 	profiles[userId] = nil
 	leaseTokens[userId] = nil
 	offlineSummary[userId] = nil
 	firstSessionByUser[userId] = nil
+end
+
+local function clearPendingRelease(userId: number, expectedToken: string?)
+	local entry = pendingReleases[userId]
+	if not entry then
+		return
+	end
+	if expectedToken ~= nil and entry.leaseToken ~= expectedToken then
+		return
+	end
+	pendingReleases[userId] = nil
+end
+
+local function revokeSessionOnOwnershipLoss(userId: number, expectedToken: string?)
+	if expectedToken ~= nil and leaseTokens[userId] ~= expectedToken then
+		return
+	end
+	clearPendingRelease(userId, expectedToken)
+	clearSessionCache(userId, expectedToken)
 	local plr = Players:GetPlayerByUserId(userId)
 	if plr then
 		plr:Kick("Session ownership moved to another server. Please rejoin.")
 	end
 end
 
-function DataService.savePlayer(
+local function executeSave(
 	userId: number,
+	expectedToken: string,
+	profile: PlayerProfile,
 	releaseLock: boolean,
 	requiredPurchaseId: string?
-): boolean
+): (boolean, boolean)
 	while saveInFlight[userId] do
 		task.wait(0.05)
 	end
-	local profile = profiles[userId]
-	local leaseToken = leaseTokens[userId]
-	if not profile or not leaseToken then
-		return false
+	if leaseTokens[userId] ~= expectedToken or profiles[userId] ~= profile then
+		return false, false
 	end
 	saveInFlight[userId] = true
 	local now = os.time()
@@ -311,15 +348,15 @@ function DataService.savePlayer(
 	local key = `Player_{userId}`
 	local store = getStore()
 	local saved = false
+	local lostOwnership = false
 	if store then
-		local ok, lostOwnership, result =
-			attemptStoreSave(store, key, leaseToken, profile, releaseLock, now)
+		local ok, lost, result =
+			attemptStoreSave(store, key, expectedToken, profile, releaseLock, now)
 		if ok and type(result) == "table" and hasCommittedReceipt(result, requiredPurchaseId) then
 			saved = true
-		elseif lostOwnership then
-			saveInFlight[userId] = nil
-			revokeSessionOnOwnershipLoss(userId)
-			return false
+		elseif lost then
+			lostOwnership = true
+			revokeSessionOnOwnershipLoss(userId, expectedToken)
 		elseif not ok and RunService:IsStudio() then
 			useMemoryFallback = true
 			memoryStore[key] = profile
@@ -330,7 +367,106 @@ function DataService.savePlayer(
 		saved = true
 	end
 	saveInFlight[userId] = nil
+	return saved, lostOwnership
+end
+
+function DataService.savePlayer(
+	userId: number,
+	releaseLock: boolean,
+	requiredPurchaseId: string?
+): boolean
+	local profile = profiles[userId]
+	local leaseToken = leaseTokens[userId]
+	if not profile or not leaseToken then
+		return false
+	end
+	local saved = executeSave(userId, leaseToken, profile, releaseLock, requiredPurchaseId)
 	return saved
+end
+
+local function attemptReleaseEntry(userId: number, entry: PendingRelease): (boolean, boolean)
+	if pendingReleases[userId] ~= entry or leaseTokens[userId] ~= entry.leaseToken then
+		return true, true
+	end
+	entry.inFlight = true
+	local saved, lostOwnership = executeSave(userId, entry.leaseToken, entry.profile, true, nil)
+	entry.inFlight = false
+	if pendingReleases[userId] ~= entry or leaseTokens[userId] ~= entry.leaseToken then
+		return true, true
+	end
+	if saved or lostOwnership then
+		clearPendingRelease(userId, entry.leaseToken)
+		clearSessionCache(userId, entry.leaseToken)
+		return true, true
+	end
+	entry.attempts += 1
+	if entry.attempts >= MAX_RELEASE_RETRIES then
+		warn(
+			`[DataService] Departure save exhausted {MAX_RELEASE_RETRIES} retries for user {userId}`
+		)
+		clearPendingRelease(userId, entry.leaseToken)
+		clearSessionCache(userId, entry.leaseToken)
+		return true, false
+	end
+	local delaySec = if isClosing
+		then CLOSE_RETRY_DELAY
+		else RELEASE_RETRY_BASE_DELAY * (2 ^ entry.attempts)
+	entry.nextRetryAt = os.clock() + delaySec
+	return false, false
+end
+
+local function runBackgroundRetry(userId: number, entry: PendingRelease)
+	while pendingReleases[userId] == entry and not isClosing do
+		local remaining = entry.nextRetryAt - os.clock()
+		if remaining > 0 then
+			task.wait(math.min(0.1, remaining))
+		else
+			local done = attemptReleaseEntry(userId, entry)
+			if done then
+				return
+			end
+		end
+	end
+end
+
+local function schedulePendingRelease(userId: number, leaseToken: string, profile: PlayerProfile)
+	if leaseTokens[userId] ~= leaseToken or profiles[userId] ~= profile then
+		return
+	end
+	local delaySec = if isClosing then CLOSE_RETRY_DELAY else RELEASE_RETRY_BASE_DELAY
+	local entry: PendingRelease = {
+		profile = profile,
+		leaseToken = leaseToken,
+		attempts = 0,
+		nextRetryAt = os.clock() + delaySec,
+		inFlight = false,
+	}
+	pendingReleases[userId] = entry
+	if not isClosing then
+		task.spawn(runBackgroundRetry, userId, entry)
+	end
+end
+
+local function flushPendingReleaseForRejoin(player: Player, userId: number): boolean
+	while saveInFlight[userId] and player.Parent do
+		task.wait(0.05)
+	end
+	if not player.Parent then
+		return false
+	end
+	local entry = pendingReleases[userId]
+	while entry and entry.inFlight and player.Parent do
+		task.wait(0.05)
+		entry = pendingReleases[userId]
+	end
+	if not player.Parent then
+		return false
+	end
+	if not entry then
+		return true
+	end
+	local _, flushedCleanly = attemptReleaseEntry(userId, entry)
+	return flushedCleanly
 end
 
 local function releaseStoreLock(store: DataStore, key: string, leaseToken: string)
@@ -413,6 +549,12 @@ end
 
 local function loadPlayer(player: Player)
 	local userId = player.UserId
+	if not flushPendingReleaseForRejoin(player, userId) then
+		if player.Parent then
+			player:Kick("Profile storage is temporarily unavailable. Please rejoin.")
+		end
+		return
+	end
 	local now = os.time()
 	local key = `Player_{userId}`
 	local leaseToken = `{serverSessionId}:{HttpService:GenerateGUID(false)}`
@@ -462,40 +604,109 @@ function DataService.init()
 	end
 end
 
+local function saveOrQueueDeparture(userId: number, leaseToken: string, profile: PlayerProfile)
+	local saved, lostOwnership = executeSave(userId, leaseToken, profile, true, nil)
+	if saved or lostOwnership then
+		clearPendingRelease(userId, leaseToken)
+		clearSessionCache(userId, leaseToken)
+	else
+		schedulePendingRelease(userId, leaseToken, profile)
+	end
+end
+
+local function onPlayerRemoving(player: Player)
+	local uid = player.UserId
+	local departingToken = leaseTokens[uid]
+	local departingProfile = profiles[uid]
+	if not departingToken or not departingProfile then
+		return
+	end
+	saveOrQueueDeparture(uid, departingToken, departingProfile)
+end
+
+local function closeActiveSession(userId: number)
+	while saveInFlight[userId] do
+		task.wait(0.05)
+	end
+	if pendingReleases[userId] then
+		return
+	end
+	local token = leaseTokens[userId]
+	local profile = profiles[userId]
+	if not token or not profile then
+		return
+	end
+	saveOrQueueDeparture(userId, token, profile)
+end
+
+local function hasPendingSaveWork(): boolean
+	return activeCloseTasks > 0 or next(saveInFlight) ~= nil or next(pendingReleases) ~= nil
+end
+
+local function pumpPendingReleases(now: number)
+	local ready: { { uid: number, entry: PendingRelease } } = {}
+	for uid, entry in pairs(pendingReleases) do
+		if not entry.inFlight and now >= entry.nextRetryAt then
+			table.insert(ready, { uid = uid, entry = entry })
+		end
+	end
+	for _, item in ipairs(ready) do
+		item.entry.inFlight = true
+		activeCloseTasks += 1
+		task.spawn(function()
+			attemptReleaseEntry(item.uid, item.entry)
+			activeCloseTasks -= 1
+		end)
+	end
+end
+
+local function handleBindToClose()
+	isClosing = true
+	local now = os.clock()
+	local deadline = now + BIND_TO_CLOSE_DEADLINE_SECONDS
+	for _, entry in pairs(pendingReleases) do
+		if not entry.inFlight then
+			entry.nextRetryAt = math.min(entry.nextRetryAt, now)
+		end
+	end
+	local activeUids: { number } = {}
+	for uid in pairs(profiles) do
+		if not pendingReleases[uid] then
+			table.insert(activeUids, uid)
+		end
+	end
+	for _, uid in ipairs(activeUids) do
+		activeCloseTasks += 1
+		task.spawn(function()
+			closeActiveSession(uid)
+			activeCloseTasks -= 1
+		end)
+	end
+	while hasPendingSaveWork() and os.clock() < deadline do
+		pumpPendingReleases(os.clock())
+		if hasPendingSaveWork() then
+			task.wait(0.05)
+		end
+	end
+end
+
 function DataService.start()
 	Players.PlayerAdded:Connect(loadPlayer)
 	for _, player in ipairs(Players:GetPlayers()) do
 		task.spawn(loadPlayer, player)
 	end
 
-	Players.PlayerRemoving:Connect(function(player: Player)
-		local uid = player.UserId
-		DataService.savePlayer(uid, true)
-		profiles[uid] = nil
-		leaseTokens[uid] = nil
-		offlineSummary[uid] = nil
-		firstSessionByUser[uid] = nil
-	end)
-
-	game:BindToClose(function()
-		if RunService:IsStudio() then
-			for uid in pairs(profiles) do
-				DataService.savePlayer(uid, true)
-			end
-			return
-		end
-		for uid in pairs(profiles) do
-			task.spawn(DataService.savePlayer, uid, true)
-		end
-		task.wait(2)
-	end)
+	Players.PlayerRemoving:Connect(onPlayerRemoving)
+	game:BindToClose(handleBindToClose)
 
 	-- Periodic autosave every 90s
 	task.spawn(function()
 		while true do
 			task.wait(90)
 			for uid in pairs(profiles) do
-				DataService.savePlayer(uid, false)
+				if not pendingReleases[uid] then
+					DataService.savePlayer(uid, false)
+				end
 			end
 		end
 	end)
