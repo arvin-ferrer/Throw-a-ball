@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local PetConfigs = require(Shared.Configs.PetConfigs)
+local EconomyLogic = require(Shared.Utils.EconomyLogic)
 local MathUtil = require(Shared.Utils.MathUtil)
 local ProceduralModels = require(Shared.Utils.ProceduralModels)
 local AudioCatalog = require(Shared.Utils.AudioCatalog)
@@ -28,6 +29,103 @@ local function rgb(arr: { number }): Color3
 	return Color3.fromRGB(arr[1] or 255, arr[2] or 255, arr[3] or 255)
 end
 
+local function spawnSupernovaWave(baseCF: CFrame): Part
+	local nova = Instance.new("Part")
+	nova.Shape = Enum.PartType.Ball
+	nova.Material = Enum.Material.Neon
+	nova.Color = Color3.fromRGB(250, 204, 21)
+	nova.Transparency = 0.2
+	nova.Anchored = true
+	nova.CanCollide = false
+	nova.CanQuery = false
+	nova.Size = Vector3.new(3, 3, 3)
+	nova.CFrame = baseCF
+	nova.Parent = workspace
+	TweenService:Create(
+		nova,
+		TweenInfo.new(0.55, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Transparency = 1, Size = Vector3.new(20, 20, 20) }
+	):Play()
+	return nova
+end
+
+local function emitHatchBurst(baseCF: CFrame, rarityCol: Color3, hatchVfx: string?): (Part, Part?)
+	local isSupernova = hatchVfx == "SupernovaHatch"
+	local burst = Instance.new("Part")
+	burst.Anchored = true
+	burst.CanCollide = false
+	burst.CanQuery = false
+	burst.Transparency = 1
+	burst.Size = Vector3.new(1, 1, 1)
+	burst.CFrame = baseCF
+	burst.Parent = workspace
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Rate = 0
+	emitter.Speed = if isSupernova then NumberRange.new(16, 34) else NumberRange.new(12, 26)
+	emitter.Lifetime = NumberRange.new(0.5, 1.0)
+	emitter.Size = NumberSequence.new(if isSupernova then 1.45 else 1.1, 0)
+	emitter.Color = if isSupernova
+		then ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+			ColorSequenceKeypoint.new(0.45, Color3.fromRGB(250, 204, 21)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(244, 114, 182)),
+		})
+		else ColorSequence.new(rarityCol, Color3.fromRGB(255, 255, 255))
+	emitter.LightEmission = 1
+	emitter.Parent = burst
+	local count = if isSupernova
+		then math.min(36, EconomyLogic.COSMETIC_MAX_BURST_PARTICLES)
+		else 28
+	emitter:Emit(count)
+
+	local wave: Part? = if isSupernova then spawnSupernovaWave(baseCF) else nil
+	return burst, wave
+end
+
+local function runHatchWobble(
+	eggVis: Model,
+	baseCF: CFrame,
+	beamPart: Part,
+	rarityCol: Color3,
+	hatchVfx: string?
+)
+	local startTime = os.clock()
+	local nextTick = 0
+	while os.clock() - startTime < 2.85 do
+		local elapsed = os.clock() - startTime
+		local progress = elapsed / 2.85
+		local freq = 8 + progress * 24
+		local angle = math.sin(elapsed * freq) * math.rad(12 + progress * 22)
+		local hop = math.abs(math.sin(elapsed * freq)) * (0.4 + progress * 1.4)
+		if eggVis.Parent then
+			eggVis:PivotTo(baseCF * CFrame.new(0, hop, 0) * CFrame.Angles(0, elapsed * 2.5, angle))
+		end
+		if elapsed >= nextTick then
+			nextTick = elapsed + math.max(0.14, 0.45 - progress * 0.32)
+			AudioCatalog.play("HatchTick", 0.9 + progress * 0.6, 0.45)
+		end
+		RunService.Heartbeat:Wait()
+	end
+
+	AudioCatalog.play("HatchReveal", 1.0, 0.7)
+	local burst, wave = emitHatchBurst(baseCF, rarityCol, hatchVfx)
+	TweenService
+		:Create(beamPart, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+			Size = Vector3.new(180, 12, 12),
+		})
+		:Play()
+	eggVis:Destroy()
+	task.delay(1.1, function()
+		beamPart:Destroy()
+		burst:Destroy()
+		if wave then
+			wave:Destroy()
+		end
+	end)
+end
+
 local function onHatchReveal(data: any)
 	if type(data) ~= "table" or typeof(data.position) ~= "Vector3" then
 		return
@@ -36,6 +134,7 @@ local function onHatchReveal(data: any)
 	local rarity = tostring(data.rarity or "Common")
 	local rarityCol = rgb(PetConfigs.RARITY_COLORS[rarity] or { 74, 222, 128 })
 	local eggId = tostring(data.eggId or "StarterEgg")
+	local hatchVfx = if type(data.hatchVfx) == "string" then data.hatchVfx else nil
 	local eggVis = ProceduralModels.createEggVisual(
 		eggId,
 		data.mutationKey == "Overcharged" or data.mutationKey == "VoidTouched"
@@ -44,7 +143,6 @@ local function onHatchReveal(data: any)
 	eggVis:PivotTo(baseCF)
 	eggVis.Parent = workspace
 
-	-- Hub-wide skyward rarity light beam visible across the Plaza
 	local beamPart = Instance.new("Part")
 	beamPart.Name = "HatchRarityBeam"
 	beamPart.Anchored = true
@@ -58,61 +156,7 @@ local function onHatchReveal(data: any)
 	beamPart.CFrame = CFrame.new(pos + Vector3.new(0, 90, 0)) * CFrame.Angles(0, 0, math.rad(90))
 	beamPart.Parent = workspace
 
-	-- 3.0-second escalating wobble sequence
-	task.spawn(function()
-		local startTime = os.clock()
-		local nextTick = 0
-		while os.clock() - startTime < 2.85 do
-			local elapsed = os.clock() - startTime
-			local progress = elapsed / 2.85
-			local freq = 8 + progress * 24
-			local angle = math.sin(elapsed * freq) * math.rad(12 + progress * 22)
-			local hop = math.abs(math.sin(elapsed * freq)) * (0.4 + progress * 1.4)
-			if eggVis.Parent then
-				eggVis:PivotTo(
-					baseCF * CFrame.new(0, hop, 0) * CFrame.Angles(0, elapsed * 2.5, angle)
-				)
-			end
-			if elapsed >= nextTick then
-				nextTick = elapsed + math.max(0.14, 0.45 - progress * 0.32)
-				AudioCatalog.play("HatchTick", 0.9 + progress * 0.6, 0.45)
-			end
-			RunService.Heartbeat:Wait()
-		end
-
-		-- Reveal burst!
-		AudioCatalog.play("HatchReveal", 1.0, 0.7)
-		local burst = Instance.new("Part")
-		burst.Anchored = true
-		burst.CanCollide = false
-		burst.CanQuery = false
-		burst.Transparency = 1
-		burst.Size = Vector3.new(1, 1, 1)
-		burst.CFrame = baseCF
-		burst.Parent = workspace
-
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Rate = 0
-		emitter.Speed = NumberRange.new(12, 26)
-		emitter.Lifetime = NumberRange.new(0.5, 1.0)
-		emitter.Size = NumberSequence.new(1.1, 0)
-		emitter.Color = ColorSequence.new(rarityCol, Color3.fromRGB(255, 255, 255))
-		emitter.LightEmission = 1
-		emitter.Parent = burst
-		emitter:Emit(28)
-
-		TweenService
-			:Create(beamPart, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Transparency = 1,
-				Size = Vector3.new(180, 12, 12),
-			})
-			:Play()
-		eggVis:Destroy()
-		task.delay(1.1, function()
-			beamPart:Destroy()
-			burst:Destroy()
-		end)
-	end)
+	task.spawn(runHatchWobble, eggVis, baseCF, beamPart, rarityCol, hatchVfx)
 end
 
 function HatchVFXController.rebuildFollowers(profile: any)

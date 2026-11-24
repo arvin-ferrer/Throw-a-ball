@@ -98,6 +98,28 @@ local function applyPvPKnockback(victim: Player, dir: Vector3, strength: number)
 	end)
 end
 
+local function broadcastProjectile(payload: { [string]: any })
+	Remotes.ensureServer().ProjectileBroadcast:FireAllClients(payload)
+end
+
+local function getPlayerRootPosition(player: Player): Vector3?
+	local char = player.Character
+	local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+	return if hrp and hrp:IsA("BasePart") then hrp.Position else nil
+end
+
+local function broadcastPvPElimination(attacker: Player, pos: Vector3?)
+	if not pos then
+		return
+	end
+	local attackerProfile = DataService.getProfile(attacker)
+	broadcastProjectile({
+		msgKind = "Elimination",
+		pos = pos,
+		eliminationVfx = if attackerProfile then attackerProfile.equippedEliminationVfx else nil,
+	})
+end
+
 local function schedulePvpBurnTicks(
 	attacker: Player,
 	victim: Player,
@@ -117,8 +139,14 @@ local function schedulePvpBurnTicks(
 				return
 			end
 			if hum.Parent and hum.Health > 0 then
+				-- Capture KO coordinates before health=0/Died or ArenaCycleService teleports victim to PvE.
+				local koPos = getPlayerRootPosition(victim)
 				hum.Health = math.max(0, hum.Health - perTick)
-				ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, hum.Health <= 0)
+				local lethal = hum.Health <= 0
+				ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, lethal)
+				if lethal then
+					broadcastPvPElimination(attacker, koPos)
+				end
 			end
 		end)
 	end
@@ -139,6 +167,8 @@ local function applyPvPDamage(
 	if not hum or hum.Health <= 0 then
 		return
 	end
+	-- Capture KO coordinates before health=0/Died or ArenaCycleService teleports victim to PvE.
+	local koPos = getPlayerRootPosition(victim)
 	local shield = shieldByUser[victim.UserId] or 0
 	local remaining = damage
 	if shield > 0 then
@@ -158,7 +188,11 @@ local function applyPvPDamage(
 		victim:SetAttribute("MiniStunUntil", os.clock() + eval.miniStunDuration)
 	end
 	applyPvPKnockback(victim, hitDir, eval.knockbackStrength)
-	ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, hum.Health <= 0)
+	local lethal = hum.Health <= 0
+	ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, lethal)
+	if lethal then
+		broadcastPvPElimination(attacker, koPos)
+	end
 	schedulePvpBurnTicks(attacker, victim, hum, eval.burnTotalDamage)
 end
 
@@ -479,10 +513,6 @@ local function evaluateCurrentHit(profile: EconomyLogic.PlayerProfile): CombatLo
 		activePets = EconomyLogic.getActivePets(profile),
 		critRollUnit = math.random(),
 	})
-end
-
-local function broadcastProjectile(payload: { [string]: any })
-	Remotes.ensureServer().ProjectileBroadcast:FireAllClients(payload)
 end
 
 local function despawnProjectileAt(index: number)

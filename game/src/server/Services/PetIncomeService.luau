@@ -120,6 +120,7 @@ local function broadcastHatchReveal(
 		displayName = if spec then spec.displayName else newPet.speciesId,
 		rarity = if spec then spec.rarity else "Common",
 		mutationKey = newPet.mutationKey,
+		hatchVfx = profile.equippedHatchVfx,
 		position = pos,
 		duration = 3.0,
 	})

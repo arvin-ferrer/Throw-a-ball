@@ -10,8 +10,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
-local MathUtil = require(Shared.Utils.MathUtil)
-local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local Remotes = require(Shared.Net.Remotes)
 
 local DataService = require(script.Parent.DataService)
@@ -40,33 +38,30 @@ local function handleBuyCosmetic(
 	profile: EconomyLogic.PlayerProfile,
 	cosmeticId: string
 )
-	local spec = MonetizationConfigs.COSMETICS[cosmeticId]
-	if not spec then
-		notifyResult(player, false, "", "UnknownCosmetic")
+	local res = EconomyLogic.buyOrEquipCosmetic(profile, cosmeticId)
+	if not res.ok then
+		notifyResult(player, false, "", res.reason)
 		return
 	end
-	if profile.ownedCosmetics[cosmeticId] then
-		if spec.category == "BallSkin" then
-			profile.equippedBallSkin = cosmeticId
-			DataService.syncToClient(player)
-			notifyResult(player, true, `Equipped {spec.displayName}!`, nil)
-		end
+	local data = res.data or {}
+	if data.changed == false then
 		return
 	end
-	if not MathUtil.isFinite(profile.bossGems) or profile.bossGems < spec.costGems then
-		notifyResult(player, false, "", "InsufficientGems")
-		return
-	end
-	profile.bossGems -= spec.costGems
-	profile.ownedCosmetics[cosmeticId] = true
-	if spec.category == "BallSkin" then
-		profile.equippedBallSkin = cosmeticId
-	end
-	if telemetryHook then
+	local spec = data.spec
+	local label = if spec then spec.displayName else cosmeticId
+	if data.purchased == true and telemetryHook then
 		telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
 	end
+	if spec and spec.category == "PlotTheme" then
+		PlotService.applyPlotThemeForPlayer(player, profile.equippedPlotTheme)
+	end
 	DataService.syncToClient(player)
-	notifyResult(player, true, `Unlocked {spec.displayName}!`, nil)
+	notifyResult(
+		player,
+		true,
+		if data.purchased == true then `Unlocked {label}!` else `Equipped {label}!`,
+		nil
+	)
 end
 
 local function runUpgradeOperation(

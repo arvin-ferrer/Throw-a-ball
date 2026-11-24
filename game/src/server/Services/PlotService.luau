@@ -35,6 +35,7 @@ export type PlotRecord = {
 	balconyFolder: Instance?,
 	pedestals: { [number]: Model },
 	pedestalVisuals: { [number]: Model },
+	appliedTheme: string?,
 }
 
 local PlotService = {}
@@ -111,6 +112,63 @@ local function setOwnerSignText(plot: PlotRecord, text: string)
 	end
 end
 
+local function collectPlotPedestals(plotModel: Model): { [number]: Model }
+	local peds: { [number]: Model } = {}
+	local pedFolder = plotModel:FindFirstChild("Pedestals")
+	if not pedFolder then
+		return peds
+	end
+	for _, ped in ipairs(pedFolder:GetChildren()) do
+		if ped:IsA("Model") then
+			local idx = tonumber(ped:GetAttribute("PedestalIndex"))
+			if idx then
+				peds[idx] = ped
+			end
+		end
+	end
+	return peds
+end
+
+local function parsePlotRecord(plotModel: Model): PlotRecord?
+	local plotId = tonumber(plotModel:GetAttribute("PlotId"))
+	local plotSpawn = plotModel:FindFirstChild("PlotSpawn")
+	local tr = plotModel:FindFirstChild("TrainingRange")
+	local firingPad = if tr then tr:FindFirstChild("FiringPad") else nil
+	local firingStance = if tr then tr:FindFirstChild("FiringStance") else nil
+	if
+		not plotId
+		or not plotSpawn
+		or not plotSpawn:IsA("BasePart")
+		or not tr
+		or not firingPad
+		or not firingPad:IsA("BasePart")
+		or not firingStance
+		or not firingStance:IsA("BasePart")
+	then
+		return nil
+	end
+	local goldPart = tr:FindFirstChild("Target_MovingGold")
+	local isGoldBase = goldPart ~= nil and goldPart:IsA("BasePart")
+	return {
+		plotId = plotId,
+		model = plotModel,
+		ownerUserId = 0,
+		plotSpawn = plotSpawn,
+		firingPad = firingPad,
+		firingStance = firingStance,
+		trainingRange = tr,
+		movingGoldTarget = if isGoldBase then goldPart :: BasePart else nil,
+		goldOriginCF = if isGoldBase then (goldPart :: BasePart).CFrame else nil,
+		goldHalfLength = if goldPart
+			then tonumber(goldPart:GetAttribute("RailHalfLength")) or 12
+			else 12,
+		balconyFolder = plotModel:FindFirstChild("Balcony"),
+		pedestals = collectPlotPedestals(plotModel),
+		pedestalVisuals = {},
+		appliedTheme = nil,
+	}
+end
+
 local function discoverPlots()
 	local root = findMapRoot()
 	if not root then
@@ -124,57 +182,10 @@ local function discoverPlots()
 	end
 	for _, plotModel in ipairs(plotsFolder:GetChildren()) do
 		if plotModel:IsA("Model") then
-			local plotId = tonumber(plotModel:GetAttribute("PlotId"))
-			local plotSpawn = plotModel:FindFirstChild("PlotSpawn")
-			local tr = plotModel:FindFirstChild("TrainingRange")
-			local firingPad = if tr then tr:FindFirstChild("FiringPad") else nil
-			local firingStance = if tr then tr:FindFirstChild("FiringStance") else nil
-			if
-				plotId
-				and plotSpawn
-				and plotSpawn:IsA("BasePart")
-				and tr
-				and firingPad
-				and firingPad:IsA("BasePart")
-				and firingStance
-				and firingStance:IsA("BasePart")
-			then
-				local peds: { [number]: Model } = {}
-				local pedFolder = plotModel:FindFirstChild("Pedestals")
-				if pedFolder then
-					for _, ped in ipairs(pedFolder:GetChildren()) do
-						if ped:IsA("Model") then
-							local idx = tonumber(ped:GetAttribute("PedestalIndex"))
-							if idx then
-								peds[idx] = ped
-							end
-						end
-					end
-				end
-				local goldPart = tr:FindFirstChild("Target_MovingGold")
-				local rec: PlotRecord = {
-					plotId = plotId,
-					model = plotModel,
-					ownerUserId = 0,
-					plotSpawn = plotSpawn,
-					firingPad = firingPad,
-					firingStance = firingStance,
-					trainingRange = tr,
-					movingGoldTarget = if goldPart and goldPart:IsA("BasePart")
-						then goldPart
-						else nil,
-					goldOriginCF = if goldPart and goldPart:IsA("BasePart")
-						then goldPart.CFrame
-						else nil,
-					goldHalfLength = if goldPart
-						then tonumber(goldPart:GetAttribute("RailHalfLength")) or 12
-						else 12,
-					balconyFolder = plotModel:FindFirstChild("Balcony"),
-					pedestals = peds,
-					pedestalVisuals = {},
-				}
-				plotsById[plotId] = rec
-				setOwnerSignText(rec, `Plot #{plotId} — Open`)
+			local rec = parsePlotRecord(plotModel)
+			if rec then
+				plotsById[rec.plotId] = rec
+				setOwnerSignText(rec, `Plot #{rec.plotId} — Open`)
 			end
 		end
 	end
@@ -395,6 +406,210 @@ function PlotService.teleportToBiomePvE(player: Player, biomeId: string): boolea
 	return true
 end
 
+local SKIP_THEME_PARTS: { [string]: boolean } = {
+	CashPad = true,
+	StarterEgg = true,
+	OwnerSign = true,
+	PetAnchor = true,
+	PlotSpawn = true,
+}
+
+local function clearPlotPetVisuals(plot: PlotRecord)
+	for idx, rig in pairs(plot.pedestalVisuals) do
+		rig:Destroy()
+		plot.pedestalVisuals[idx] = nil
+	end
+end
+
+local function isPetVisualDescendant(plot: PlotRecord, inst: Instance): boolean
+	for _, rig in pairs(plot.pedestalVisuals) do
+		if inst == rig or inst:IsDescendantOf(rig) then
+			return true
+		end
+	end
+	return false
+end
+
+local function applySinglePartTheme(inst: BasePart, isMarble: boolean)
+	if inst:GetAttribute("OrigColor") == nil then
+		inst:SetAttribute("OrigColor", inst.Color)
+		inst:SetAttribute("OrigMat", inst.Material.Name)
+	end
+	if isMarble then
+		if string.find(inst.Name, "Trim") or string.find(inst.Name, "Ring") then
+			inst.Color = Color3.fromRGB(250, 204, 21)
+			inst.Material = Enum.Material.SmoothPlastic
+		else
+			inst.Color = Color3.fromRGB(245, 242, 235)
+			inst.Material = Enum.Material.Marble
+		end
+		return
+	end
+	local origCol = inst:GetAttribute("OrigColor")
+	if typeof(origCol) == "Color3" then
+		inst.Color = origCol
+	end
+	local origMat = inst:GetAttribute("OrigMat")
+	if type(origMat) == "string" then
+		local mat = (Enum.Material :: any)[origMat]
+		if typeof(mat) == "EnumItem" then
+			inst.Material = mat :: Enum.Material
+		end
+	end
+end
+
+local function applyPlotTheme(plot: PlotRecord, themeId: string?)
+	if plot.appliedTheme == themeId then
+		return
+	end
+	plot.appliedTheme = themeId
+	local isMarble = themeId == "RoyalMarblePlot"
+	for _, inst in ipairs(plot.model:GetDescendants()) do
+		if
+			inst:IsA("BasePart")
+			and not inst:IsDescendantOf(plot.trainingRange)
+			and not SKIP_THEME_PARTS[inst.Name]
+			and not isPetVisualDescendant(plot, inst)
+		then
+			applySinglePartTheme(inst, isMarble)
+		end
+	end
+end
+
+function PlotService.applyPlotThemeForPlayer(player: Player, themeId: string?)
+	local plot = plotByUserId[player.UserId]
+	if plot then
+		applyPlotTheme(plot, themeId)
+	end
+end
+
+local function updateEmptyPedestalPrompt(
+	prompt: ProximityPrompt,
+	idx: number,
+	profile: EconomyLogic.PlayerProfile,
+	unlocked: boolean,
+	isVipSlot: boolean
+)
+	if idx == 1 and not profile.starterEggHatched then
+		prompt.ActionText = "Hatch Starter Egg!"
+		prompt.ObjectText = "Free Minute-0 Egg"
+	elseif unlocked then
+		prompt.ActionText = "Hatch Egg"
+		prompt.ObjectText = `Pedestal #{idx} (Open)`
+	else
+		local spec = EconomyConfigs.PEDESTAL_UNLOCKS[idx]
+		prompt.ActionText = if isVipSlot then "VIP +2 Slots" else "Unlock Pedestal"
+		prompt.ObjectText = if spec and not isVipSlot
+			then `{MathUtil.formatNumber(spec.costCoins)} Coins`
+			else "Game Pass"
+	end
+end
+
+local function stylePedestalCashPad(pad: Instance?, rawStored: number?, unlocked: boolean)
+	if not pad or not pad:IsA("BasePart") then
+		return
+	end
+	local stored = math.floor(rawStored or 0)
+	pad:SetAttribute("StoredCoins", stored)
+	pad.Color = if stored > 0
+		then Color3.fromRGB(74, 222, 128)
+		elseif unlocked then Color3.fromRGB(56, 72, 92)
+		else Color3.fromRGB(45, 38, 52)
+	pad.Material = if stored > 0 then Enum.Material.Neon else Enum.Material.SmoothPlastic
+end
+
+local function updateStarterEggVisual(
+	pedModel: Model,
+	idx: number,
+	profile: EconomyLogic.PlayerProfile
+)
+	local starterEggPart = pedModel:FindFirstChild("StarterEgg")
+	if starterEggPart and starterEggPart:IsA("BasePart") then
+		local showStarter = (idx == 1)
+			and not profile.starterEggHatched
+			and (profile.eggs.StarterEgg or 0) > 0
+		starterEggPart.Transparency = if showStarter then 0 else 1
+		starterEggPart.CanCollide = false
+	end
+end
+
+local function syncPedestalPetVisual(
+	plot: PlotRecord,
+	idx: number,
+	pedModel: Model,
+	profile: EconomyLogic.PlayerProfile,
+	placed: EconomyLogic.OwnedPet?,
+	hasDouble: boolean
+)
+	local anchor = pedModel:FindFirstChild("PetAnchor")
+	local existing = plot.pedestalVisuals[idx]
+	if placed and anchor and anchor:IsA("BasePart") then
+		local rate = EconomyLogic.computePlacedPetRate(profile, placed, hasDouble)
+		local petKey =
+			`{placed.uid}:{placed.speciesId}:{placed.mutationKey}:{placed.starTier}:{placed.level}:{math.floor(
+				rate * 100
+			)}`
+		if
+			existing
+			and existing.Parent == pedModel
+			and existing:GetAttribute("PetKey") == petKey
+		then
+			pedModel:SetAttribute("PetId", placed.speciesId)
+			return
+		end
+		if existing then
+			existing:Destroy()
+			plot.pedestalVisuals[idx] = nil
+		end
+		pedModel:SetAttribute("PetId", placed.speciesId)
+		local rig = ProceduralModels.createPetModel(
+			placed.speciesId,
+			placed.mutationKey,
+			placed.starTier,
+			`{MathUtil.formatNumber(rate)}/s • Lv {placed.level}`
+		)
+		rig:SetAttribute("PetKey", petKey)
+		rig:PivotTo(anchor.CFrame)
+		rig.Parent = pedModel
+		plot.pedestalVisuals[idx] = rig
+		return
+	end
+	if existing then
+		existing:Destroy()
+		plot.pedestalVisuals[idx] = nil
+	end
+	pedModel:SetAttribute("PetId", "")
+end
+
+local function refreshSinglePedestal(
+	plot: PlotRecord,
+	idx: number,
+	pedModel: Model,
+	profile: EconomyLogic.PlayerProfile,
+	placed: EconomyLogic.OwnedPet?,
+	hasVip: boolean,
+	hasDouble: boolean
+)
+	local isVipSlot = idx == 13 or idx == 14
+	local unlocked = (not isVipSlot and idx <= profile.pedestalsUnlocked) or (isVipSlot and hasVip)
+	pedModel:SetAttribute("Locked", not unlocked)
+	local base = pedModel:FindFirstChild("Base")
+	local prompt = if base then base:FindFirstChildOfClass("ProximityPrompt") else nil
+	updateStarterEggVisual(pedModel, idx, profile)
+	syncPedestalPetVisual(plot, idx, pedModel, profile, placed, hasDouble)
+
+	if prompt then
+		if placed then
+			prompt.ActionText = "Manage Pet"
+			prompt.ObjectText = `Pedestal #{idx}`
+		else
+			updateEmptyPedestalPrompt(prompt, idx, profile, unlocked, isVipSlot)
+		end
+	end
+
+	stylePedestalCashPad(pedModel:FindFirstChild("CashPad"), profile.padStoredCoins[idx], unlocked)
+end
+
 function PlotService.refreshPlotVisuals(player: Player, profile: EconomyLogic.PlayerProfile)
 	local plot = plotByUserId[player.UserId]
 	if not plot then
@@ -402,6 +617,7 @@ function PlotService.refreshPlotVisuals(player: Player, profile: EconomyLogic.Pl
 	end
 	local hasVip = DataService.hasPass(player, "Pass_ExtraPedestals")
 	local hasDouble = DataService.hasPass(player, "Pass_DoubleCoinsExp")
+	applyPlotTheme(plot, profile.equippedPlotTheme)
 	plot.model:SetAttribute("PedestalsUnlocked", profile.pedestalsUnlocked)
 	plot.trainingRange:SetAttribute("TargetTier", profile.targetTierId)
 	ProceduralModels.styleTrainingTargets(plot.trainingRange, profile.targetTierId)
@@ -409,7 +625,6 @@ function PlotService.refreshPlotVisuals(player: Player, profile: EconomyLogic.Pl
 	local ascTag = if profile.ascensionRank > 0 then ` ★Asc {profile.ascensionRank}` else ""
 	setOwnerSignText(plot, `{player.DisplayName}'s Plot{ascTag}`)
 
-	-- Show/hide Balcony highlight for Tier 3 (Pedestals 9-12)
 	if plot.balconyFolder then
 		local unlockedBalcony = profile.pedestalsUnlocked >= 9 or hasVip
 		for _, part in ipairs(plot.balconyFolder:GetDescendants()) do
@@ -419,7 +634,6 @@ function PlotService.refreshPlotVisuals(player: Player, profile: EconomyLogic.Pl
 		end
 	end
 
-	-- Map placed pets by pedestal index
 	local petByPed: { [number]: EconomyLogic.OwnedPet } = {}
 	for _, pet in ipairs(profile.pets) do
 		if pet.pedestalIndex ~= nil then
@@ -428,77 +642,7 @@ function PlotService.refreshPlotVisuals(player: Player, profile: EconomyLogic.Pl
 	end
 
 	for idx, pedModel in pairs(plot.pedestals) do
-		local isVipSlot = idx == 13 or idx == 14
-		local unlocked = (not isVipSlot and idx <= profile.pedestalsUnlocked)
-			or (isVipSlot and hasVip)
-		pedModel:SetAttribute("Locked", not unlocked)
-
-		local base = pedModel:FindFirstChild("Base")
-		local prompt = if base then base:FindFirstChildOfClass("ProximityPrompt") else nil
-		local anchor = pedModel:FindFirstChild("PetAnchor")
-		local pad = pedModel:FindFirstChild("CashPad")
-		local starterEggPart = pedModel:FindFirstChild("StarterEgg")
-
-		-- Starter Egg visibility on Pedestal #1
-		if starterEggPart and starterEggPart:IsA("BasePart") then
-			local showStarter = (idx == 1)
-				and not profile.starterEggHatched
-				and (profile.eggs.StarterEgg or 0) > 0
-			starterEggPart.Transparency = if showStarter then 0 else 1
-			starterEggPart.CanCollide = false
-		end
-
-		-- Clear previous procedural pet rig
-		if plot.pedestalVisuals[idx] then
-			plot.pedestalVisuals[idx]:Destroy()
-			plot.pedestalVisuals[idx] = nil
-		end
-
-		local placed = petByPed[idx]
-		if placed and anchor and anchor:IsA("BasePart") then
-			local rate = EconomyLogic.computePlacedPetRate(profile, placed, hasDouble)
-			pedModel:SetAttribute("PetId", placed.speciesId)
-			local rig = ProceduralModels.createPetModel(
-				placed.speciesId,
-				placed.mutationKey,
-				placed.starTier,
-				`{MathUtil.formatNumber(rate)}/s • Lv {placed.level}`
-			)
-			rig:PivotTo(anchor.CFrame)
-			rig.Parent = pedModel
-			plot.pedestalVisuals[idx] = rig
-			if prompt then
-				prompt.ActionText = "Manage Pet"
-				prompt.ObjectText = `Pedestal #{idx}`
-			end
-		else
-			pedModel:SetAttribute("PetId", "")
-			if prompt then
-				if idx == 1 and not profile.starterEggHatched then
-					prompt.ActionText = "Hatch Starter Egg!"
-					prompt.ObjectText = "Free Minute-0 Egg"
-				elseif unlocked then
-					prompt.ActionText = "Hatch Egg"
-					prompt.ObjectText = `Pedestal #{idx} (Open)`
-				else
-					local spec = EconomyConfigs.PEDESTAL_UNLOCKS[idx]
-					prompt.ActionText = if isVipSlot then "VIP +2 Slots" else "Unlock Pedestal"
-					prompt.ObjectText = if spec and not isVipSlot
-						then `{MathUtil.formatNumber(spec.costCoins)} Coins`
-						else "Game Pass"
-				end
-			end
-		end
-
-		if pad and pad:IsA("BasePart") then
-			local stored = math.floor(profile.padStoredCoins[idx] or 0)
-			pad:SetAttribute("StoredCoins", stored)
-			pad.Color = if stored > 0
-				then Color3.fromRGB(74, 222, 128)
-				elseif unlocked then Color3.fromRGB(56, 72, 92)
-				else Color3.fromRGB(45, 38, 52)
-			pad.Material = if stored > 0 then Enum.Material.Neon else Enum.Material.SmoothPlastic
-		end
+		refreshSinglePedestal(plot, idx, pedModel, profile, petByPed[idx], hasVip, hasDouble)
 	end
 end
 
@@ -528,10 +672,8 @@ local function releasePlot(player: Player)
 	if not rec then
 		return
 	end
-	for idx, rig in pairs(rec.pedestalVisuals) do
-		rig:Destroy()
-		rec.pedestalVisuals[idx] = nil
-	end
+	clearPlotPetVisuals(rec)
+	applyPlotTheme(rec, nil)
 	rec.ownerUserId = 0
 	rec.model:SetAttribute("OwnerUserId", 0)
 	setOwnerSignText(rec, `Plot #{rec.plotId} — Open`)
