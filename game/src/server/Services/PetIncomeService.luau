@@ -44,20 +44,23 @@ end
 
 function PetIncomeService.collectPad(player: Player, pedestalIndex: number)
 	local profile = DataService.getProfile(player)
-	if not profile or not MathUtil.isPositiveFinite(pedestalIndex) then
+	if
+		not profile
+		or not MathUtil.isPositiveFinite(pedestalIndex)
+		or math.floor(pedestalIndex) ~= pedestalIndex
+	then
 		return
 	end
-	local idx = math.floor(pedestalIndex)
-	if idx < 1 or idx > 14 or not canReachPad(player, idx) then
+	if pedestalIndex < 1 or pedestalIndex > 14 or not canReachPad(player, pedestalIndex) then
 		return
 	end
-	local gained = EconomyLogic.collectCashPad(profile, idx)
+	local gained = EconomyLogic.collectCashPad(profile, pedestalIndex)
 	if gained <= 0 then
 		return
 	end
 	local plot = PlotService.getPlotForPlayer(player)
-	if plot and plot.pedestals[idx] then
-		local pad = plot.pedestals[idx]:FindFirstChild("CashPad")
+	if plot and plot.pedestals[pedestalIndex] then
+		local pad = plot.pedestals[pedestalIndex]:FindFirstChild("CashPad")
 		if pad and pad:IsA("BasePart") then
 			pad:SetAttribute("StoredCoins", 0)
 			pad.Color = Color3.fromRGB(56, 72, 92)
@@ -68,7 +71,7 @@ function PetIncomeService.collectPad(player: Player, pedestalIndex: number)
 	if telemetryHook then
 		telemetryHook(
 			"CashPadSweep",
-			{ userId = player.UserId, pedestalIndex = idx, coins = gained }
+			{ userId = player.UserId, pedestalIndex = pedestalIndex, coins = gained }
 		)
 	end
 end
@@ -88,7 +91,51 @@ function PetIncomeService.collectAllPadsMagnet(player: Player)
 	if total > 0 then
 		PlotService.refreshPlotVisuals(player, profile)
 		DataService.syncToClient(player)
+		if telemetryHook then
+			telemetryHook("CashPadSweep", { userId = player.UserId, coins = total })
+		end
 	end
+end
+
+local function broadcastHatchReveal(
+	player: Player,
+	profile: EconomyLogic.PlayerProfile,
+	plot: PlotService.PlotRecord,
+	eggId: string,
+	pedestalIndex: number,
+	newPet: EconomyLogic.OwnedPet
+)
+	local remotes = Remotes.ensureServer()
+	local spec = PetConfigs.getSpecies(newPet.speciesId)
+	local ped = plot.pedestals[pedestalIndex]
+	local anchor = if ped then ped:FindFirstChild("PetAnchor") else nil
+	local pos = if anchor and anchor:IsA("BasePart")
+		then anchor.Position
+		else plot.plotSpawn.Position
+	remotes.HatchReveal:FireAllClients({
+		ownerUserId = player.UserId,
+		ownerName = player.DisplayName,
+		eggId = eggId,
+		speciesId = newPet.speciesId,
+		displayName = if spec then spec.displayName else newPet.speciesId,
+		rarity = if spec then spec.rarity else "Common",
+		mutationKey = newPet.mutationKey,
+		position = pos,
+		duration = 3.0,
+	})
+	task.delay(3.0, function()
+		activeHatchLock[player.UserId] = nil
+		if player.Parent then
+			PlotService.refreshPlotVisuals(player, profile)
+			DataService.syncToClient(player)
+			local label = if spec then spec.displayName else newPet.speciesId
+			remotes.ToastNotify:FireClient(
+				player,
+				`HATCHED [{newPet.mutationKey}] {label}!`,
+				{ 74, 222, 128 }
+			)
+		end
+	end)
 end
 
 function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pedestalIndex: number)
@@ -109,49 +156,14 @@ function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pede
 		math.random(),
 		math.random()
 	)
-	local remotes = Remotes.ensureServer()
 	if not res.ok or not res.data then
-		remotes.ToastNotify:FireClient(
-			player,
-			`Cannot hatch: {res.reason or "Error"}`,
-			{ 239, 68, 68 }
-		)
+		Remotes.ensureServer().ToastNotify
+			:FireClient(player, `Cannot hatch: {res.reason or "Error"}`, { 239, 68, 68 })
 		return
 	end
 	activeHatchLock[player.UserId] = true
 	local newPet = res.data.pet :: EconomyLogic.OwnedPet
-	local spec = PetConfigs.getSpecies(newPet.speciesId)
-	local ped = plot.pedestals[pedestalIndex]
-	local anchor = if ped then ped:FindFirstChild("PetAnchor") else nil
-	local pos = if anchor and anchor:IsA("BasePart")
-		then anchor.Position
-		else plot.plotSpawn.Position
-
-	-- Broadcast 3.0-second wobble + Hub-wide rarity light beam to all players
-	remotes.HatchReveal:FireAllClients({
-		ownerUserId = player.UserId,
-		ownerName = player.DisplayName,
-		eggId = eggId,
-		speciesId = newPet.speciesId,
-		displayName = if spec then spec.displayName else newPet.speciesId,
-		rarity = if spec then spec.rarity else "Common",
-		mutationKey = newPet.mutationKey,
-		position = pos,
-		duration = 3.0,
-	})
-
-	task.delay(3.0, function()
-		activeHatchLock[player.UserId] = nil
-		if player.Parent then
-			PlotService.refreshPlotVisuals(player, profile)
-			DataService.syncToClient(player)
-			remotes.ToastNotify:FireClient(
-				player,
-				`HATCHED [{newPet.mutationKey}] {if spec then spec.displayName else newPet.speciesId}!`,
-				{ 74, 222, 128 }
-			)
-		end
-	end)
+	broadcastHatchReveal(player, profile, plot, eggId, pedestalIndex, newPet)
 	if telemetryHook then
 		telemetryHook("EggHatched", {
 			userId = player.UserId,
@@ -159,6 +171,9 @@ function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pede
 			speciesId = newPet.speciesId,
 			mutationKey = newPet.mutationKey,
 		})
+		if eggId == "StarterEgg" then
+			telemetryHook("StarterHatch", { userId = player.UserId })
+		end
 	end
 end
 
@@ -184,6 +199,44 @@ function PetIncomeService.pickDefaultEggForPlayer(profile: EconomyLogic.PlayerPr
 	return nil
 end
 
+local function executePetAction(
+	player: Player,
+	profile: EconomyLogic.PlayerProfile,
+	action: string,
+	payload: any
+): (boolean, EconomyLogic.TxResult)
+	if action == "LevelUp" and type(payload) == "string" then
+		return true, EconomyLogic.levelUpPet(profile, payload)
+	elseif action == "Fuse" and type(payload) == "table" then
+		return true, EconomyLogic.fusePets(profile, payload)
+	elseif action == "RerollTrait" and type(payload) == "string" then
+		return true, EconomyLogic.rerollPetTrait(profile, payload, math.random())
+	elseif action == "ToggleActive" and type(payload) == "string" then
+		return true, EconomyLogic.toggleActiveFollower(profile, payload)
+	elseif action == "PlacePet" and type(payload) == "table" and type(payload.uid) == "string" then
+		local rawIdx = payload.pedestalIndex
+		if rawIdx ~= nil then
+			if
+				type(rawIdx) ~= "number"
+				or not MathUtil.isFinite(rawIdx)
+				or math.floor(rawIdx) ~= rawIdx
+			then
+				return false, { ok = false, reason = "InvalidPedestal" }
+			end
+		end
+		return true,
+			EconomyLogic.placeOrMovePet(
+				profile,
+				payload.uid,
+				rawIdx,
+				DataService.hasPass(player, "Pass_ExtraPedestals")
+			)
+	elseif action == "SellPet" and type(payload) == "string" then
+		return true, EconomyLogic.sellPet(profile, payload)
+	end
+	return true, { ok = false, reason = "UnknownAction" }
+end
+
 local function handlePetAction(player: Player, action: any, payload: any)
 	if type(action) ~= "string" then
 		return
@@ -192,27 +245,10 @@ local function handlePetAction(player: Player, action: any, payload: any)
 	if not profile then
 		return
 	end
-	local res: EconomyLogic.TxResult = { ok = false, reason = "UnknownAction" }
-	if action == "LevelUp" and type(payload) == "string" then
-		res = EconomyLogic.levelUpPet(profile, payload)
-	elseif action == "Fuse" and type(payload) == "table" then
-		res = EconomyLogic.fusePets(profile, payload)
-	elseif action == "RerollTrait" and type(payload) == "string" then
-		res = EconomyLogic.rerollPetTrait(profile, payload, math.random())
-	elseif action == "ToggleActive" and type(payload) == "string" then
-		res = EconomyLogic.toggleActiveFollower(profile, payload)
-	elseif action == "PlacePet" and type(payload) == "table" and type(payload.uid) == "string" then
-		local pedIdx = if payload.pedestalIndex ~= nil then tonumber(payload.pedestalIndex) else nil
-		res = EconomyLogic.placeOrMovePet(
-			profile,
-			payload.uid,
-			pedIdx,
-			DataService.hasPass(player, "Pass_ExtraPedestals")
-		)
-	elseif action == "SellPet" and type(payload) == "string" then
-		res = EconomyLogic.sellPet(profile, payload)
+	local accepted, res = executePetAction(player, profile, action, payload)
+	if not accepted then
+		return
 	end
-
 	local remotes = Remotes.ensureServer()
 	if res.ok then
 		PlotService.refreshPlotVisuals(player, profile)
@@ -245,9 +281,36 @@ end
 
 function PetIncomeService.init() end
 
+local function runCashPadAccrualTick()
+	for _, player in ipairs(Players:GetPlayers()) do
+		local profile = DataService.getProfile(player)
+		local plot = PlotService.getPlotForPlayer(player)
+		if profile and plot then
+			local added = EconomyLogic.accruePedestalCoins(
+				profile,
+				1.0,
+				false,
+				DataService.hasPass(player, "Pass_DoubleCoinsExp")
+			)
+			if added > 0 then
+				for idx, pedModel in pairs(plot.pedestals) do
+					local pad = pedModel:FindFirstChild("CashPad")
+					if pad and pad:IsA("BasePart") then
+						local stored = math.floor(profile.padStoredCoins[idx] or 0)
+						if stored > 0 then
+							pad:SetAttribute("StoredCoins", stored)
+							pad.Color = Color3.fromRGB(74, 222, 128)
+							pad.Material = Enum.Material.Neon
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
 function PetIncomeService.start()
 	local remotes = Remotes.ensureServer()
-
 	remotes.CollectCashPad.OnServerEvent:Connect(function(player: Player, pedestalIndex: any)
 		if pedestalIndex == "AllMagnet" then
 			PetIncomeService.collectAllPadsMagnet(player)
@@ -255,49 +318,24 @@ function PetIncomeService.start()
 			PetIncomeService.collectPad(player, pedestalIndex)
 		end
 	end)
-
 	remotes.HatchEgg.OnServerEvent:Connect(function(player: Player, eggId: any, pedestalIndex: any)
-		if type(eggId) ~= "string" or type(pedestalIndex) ~= "number" then
+		if
+			type(eggId) ~= "string"
+			or not MathUtil.isPositiveFinite(pedestalIndex)
+			or math.floor(pedestalIndex) ~= pedestalIndex
+		then
 			return
 		end
-		PetIncomeService.hatchEggOnPedestal(player, eggId, math.floor(pedestalIndex))
+		PetIncomeService.hatchEggOnPedestal(player, eggId, pedestalIndex)
 	end)
-
 	remotes.PetAction.OnServerEvent:Connect(handlePetAction)
-
 	Players.PlayerRemoving:Connect(function(player: Player)
 		activeHatchLock[player.UserId] = nil
 	end)
-
-	-- 1 Hz Server-Authoritative Pedestal Cash Pad Accrual
 	task.spawn(function()
 		while true do
 			task.wait(1.0)
-			for _, player in ipairs(Players:GetPlayers()) do
-				local profile = DataService.getProfile(player)
-				local plot = PlotService.getPlotForPlayer(player)
-				if profile and plot then
-					local added = EconomyLogic.accruePedestalCoins(
-						profile,
-						1.0,
-						false,
-						DataService.hasPass(player, "Pass_DoubleCoinsExp")
-					)
-					if added > 0 then
-						for idx, pedModel in pairs(plot.pedestals) do
-							local pad = pedModel:FindFirstChild("CashPad")
-							if pad and pad:IsA("BasePart") then
-								local stored = math.floor(profile.padStoredCoins[idx] or 0)
-								if stored > 0 then
-									pad:SetAttribute("StoredCoins", stored)
-									pad.Color = Color3.fromRGB(74, 222, 128)
-									pad.Material = Enum.Material.Neon
-								end
-							end
-						end
-					end
-				end
-			end
+			runCashPadAccrualTick()
 		end
 	end)
 end

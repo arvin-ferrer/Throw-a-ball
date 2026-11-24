@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local MathUtil = require(Shared.Utils.MathUtil)
 local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local Remotes = require(Shared.Net.Remotes)
 
@@ -52,7 +53,7 @@ local function handleBuyCosmetic(
 		end
 		return
 	end
-	if profile.bossGems < spec.costGems then
+	if not MathUtil.isFinite(profile.bossGems) or profile.bossGems < spec.costGems then
 		notifyResult(player, false, "", "InsufficientGems")
 		return
 	end
@@ -61,8 +62,52 @@ local function handleBuyCosmetic(
 	if spec.category == "BallSkin" then
 		profile.equippedBallSkin = cosmeticId
 	end
+	if telemetryHook then
+		telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
+	end
 	DataService.syncToClient(player)
 	notifyResult(player, true, `Unlocked {spec.displayName}!`, nil)
+end
+
+local function runUpgradeOperation(
+	player: Player,
+	profile: EconomyLogic.PlayerProfile,
+	action: string,
+	arg: any
+): (EconomyLogic.TxResult, string)
+	if action == "UpgradeTarget" then
+		local res = EconomyLogic.buyNextTargetTier(profile)
+		local id = if res.data then res.data.targetTierId else ""
+		return res, `Training Targets upgraded to {id}!`
+	elseif action == "UpgradeBall" then
+		local res = EconomyLogic.buyNextBallTier(profile)
+		local id = if res.data then res.data.ballTierId else ""
+		return res, `Throwable Ball upgraded to {id}!`
+	elseif action == "UnlockPedestal" then
+		local res = EconomyLogic.unlockNextPedestal(profile)
+		local n = if res.data then res.data.pedestalsUnlocked else 0
+		return res, `Pedestal #{n} unlocked!`
+	elseif action == "UpgradeOfflineVault" then
+		local res = EconomyLogic.upgradeOfflineVault(profile)
+		local pct = if res.data then math.floor((res.data.efficiency or 0.5) * 100) else 50
+		return res, `Offline Vault upgraded to {pct}% efficiency!`
+	elseif action == "UnlockActiveSlot" then
+		local res = EconomyLogic.unlockNextActiveSlot(profile)
+		local slot = if res.data then res.data.activeSlotsUnlocked else 1
+		return res, `Active Combat Slot #{slot} unlocked!`
+	elseif action == "CraftBiomeEgg" and type(arg) == "string" then
+		local res = EconomyLogic.craftStandardBiomeEgg(profile, arg)
+		local eggId = if res.data then res.data.eggId else "Biome Egg"
+		return res, `Crafted {eggId}!`
+	elseif action == "SoftAscend" then
+		local res = EconomyLogic.performSoftAscension(profile)
+		local rank = if res.data then res.data.ascensionRank else 1
+		if res.ok and telemetryHook then
+			telemetryHook("SoftAscension", { userId = player.UserId, rank = profile.ascensionRank })
+		end
+		return res, `ASCENSION RANK {rank}! +25% Coins & +5% Training!`
+	end
+	return { ok = false, reason = "UnknownAction" }, "Upgraded!"
 end
 
 local function handleUpgradeAction(player: Player, action: any, arg: any)
@@ -73,44 +118,15 @@ local function handleUpgradeAction(player: Player, action: any, arg: any)
 	if not profile then
 		return
 	end
-
-	local res: EconomyLogic.TxResult = { ok = false, reason = "UnknownAction" }
-	local successMsg = "Upgraded!"
-
-	if action == "UpgradeTarget" then
-		res = EconomyLogic.buyNextTargetTier(profile)
-		successMsg =
-			`Training Targets upgraded to {if res.data then res.data.targetTierId else ""}!`
-	elseif action == "UpgradeBall" then
-		res = EconomyLogic.buyNextBallTier(profile)
-		successMsg = `Throwable Ball upgraded to {if res.data then res.data.ballTierId else ""}!`
-	elseif action == "UnlockPedestal" then
-		res = EconomyLogic.unlockNextPedestal(profile)
-		successMsg = `Pedestal #{if res.data then res.data.pedestalsUnlocked else 0} unlocked!`
-	elseif action == "UpgradeOfflineVault" then
-		res = EconomyLogic.upgradeOfflineVault(profile)
-		local pct = if res.data then math.floor((res.data.efficiency or 0.5) * 100) else 50
-		successMsg = `Offline Vault upgraded to {pct}% efficiency!`
-	elseif action == "UnlockActiveSlot" then
-		res = EconomyLogic.unlockNextActiveSlot(profile)
-		successMsg =
-			`Active Combat Slot #{if res.data then res.data.activeSlotsUnlocked else 1} unlocked!`
-	elseif action == "CraftBiomeEgg" and type(arg) == "string" then
-		res = EconomyLogic.craftStandardBiomeEgg(profile, arg)
-		successMsg = `Crafted {if res.data then res.data.eggId else "Biome Egg"}!`
-	elseif action == "SoftAscend" then
-		res = EconomyLogic.performSoftAscension(profile)
-		successMsg =
-			`ASCENSION RANK {if res.data then res.data.ascensionRank else 1}! +25% Coins & +5% Training!`
-		if res.ok and telemetryHook then
-			telemetryHook("SoftAscension", { userId = player.UserId, rank = profile.ascensionRank })
-		end
-	elseif action == "BuyCosmetic" and type(arg) == "string" then
+	if action == "BuyCosmetic" and type(arg) == "string" then
 		handleBuyCosmetic(player, profile, arg)
 		return
 	end
-
+	local res, successMsg = runUpgradeOperation(player, profile, action, arg)
 	if res.ok then
+		if action ~= "SoftAscend" and telemetryHook then
+			telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
+		end
 		PlotService.refreshPlotVisuals(player, profile)
 		DataService.syncToClient(player)
 		notifyResult(player, true, successMsg, nil)

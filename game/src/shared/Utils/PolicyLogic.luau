@@ -14,6 +14,7 @@ local EggConfigs = if isRoblox
 local MonetizationConfigs = if isRoblox
 	then req(scriptRef.Parent.Parent.Configs.MonetizationConfigs)
 	else req("../Configs/MonetizationConfigs")
+local MathUtil = if isRoblox then req(scriptRef.Parent.MathUtil) else req("./MathUtil")
 
 export type DisclosedOdd = {
 	id: string,
@@ -99,12 +100,56 @@ function PolicyLogic.canPromptProduct(
 end
 
 function PolicyLogic.hasRecordedPurchase(profile: any, purchaseId: string): boolean
-	for _, id in ipairs(profile.purchaseIds) do
-		if id == purchaseId then
-			return true
+	if type(profile) ~= "table" or type(purchaseId) ~= "string" then
+		return false
+	end
+	if
+		type(profile.processedPurchases) == "table"
+		and profile.processedPurchases[purchaseId] == true
+	then
+		return true
+	end
+	if type(profile.purchaseIds) == "table" then
+		for _, id in ipairs(profile.purchaseIds) do
+			if id == purchaseId then
+				return true
+			end
 		end
 	end
 	return false
+end
+
+local function grantDirectBundle(profile: any, itemId: string): boolean
+	local bundle = MonetizationConfigs.DIRECT_BUNDLES[itemId]
+	if not bundle then
+		return false
+	end
+	local uid = `pet_{profile.nextPetSeq}`
+	profile.nextPetSeq += 1
+	table.insert(profile.pets, {
+		uid = uid,
+		speciesId = bundle.guaranteedPetId,
+		mutationKey = bundle.guaranteedMutation,
+		starTier = 1,
+		level = 1,
+		traitKey = nil,
+		pedestalIndex = nil,
+	})
+	profile.codexUnlocked[bundle.guaranteedPetId] = true
+	profile.ownedCosmetics[bundle.guaranteedBallSkin] = true
+	profile.equippedBallSkin = bundle.guaranteedBallSkin
+	return true
+end
+
+local function recordPurchase(profile: any, purchaseId: string)
+	if type(profile.processedPurchases) ~= "table" then
+		profile.processedPurchases = {}
+	end
+	profile.processedPurchases[purchaseId] = true
+	table.insert(profile.purchaseIds, purchaseId)
+	while #profile.purchaseIds > PolicyLogic.MAX_PURCHASE_LOG do
+		table.remove(profile.purchaseIds, 1)
+	end
 end
 
 function PolicyLogic.applyProductReceipt(
@@ -113,6 +158,14 @@ function PolicyLogic.applyProductReceipt(
 	productId: number,
 	arePaidRandomItemsRestricted: boolean
 ): ReceiptResult
+	if
+		type(profile) ~= "table"
+		or type(purchaseId) ~= "string"
+		or purchaseId == ""
+		or not MathUtil.isFinite(productId)
+	then
+		return { granted = false, duplicate = false, reason = "InvalidReceiptArgs" }
+	end
 	if PolicyLogic.hasRecordedPurchase(profile, purchaseId) then
 		return { granted = true, duplicate = true, reason = "AlreadyProcessed" }
 	end
@@ -126,29 +179,11 @@ function PolicyLogic.applyProductReceipt(
 		end
 		profile.eggs[itemId] = (profile.eggs[itemId] or 0) + 1
 	elseif kind == "DirectBundle" then
-		local bundle = MonetizationConfigs.DIRECT_BUNDLES[itemId]
-		if not bundle then
+		if not grantDirectBundle(profile, itemId) then
 			return { granted = false, duplicate = false, reason = "UnknownBundle" }
 		end
-		local uid = `pet_{profile.nextPetSeq}`
-		profile.nextPetSeq += 1
-		table.insert(profile.pets, {
-			uid = uid,
-			speciesId = bundle.guaranteedPetId,
-			mutationKey = bundle.guaranteedMutation,
-			starTier = 1,
-			level = 1,
-			traitKey = nil,
-			pedestalIndex = nil,
-		})
-		profile.codexUnlocked[bundle.guaranteedPetId] = true
-		profile.ownedCosmetics[bundle.guaranteedBallSkin] = true
-		profile.equippedBallSkin = bundle.guaranteedBallSkin
 	end
-	table.insert(profile.purchaseIds, purchaseId)
-	while #profile.purchaseIds > PolicyLogic.MAX_PURCHASE_LOG do
-		table.remove(profile.purchaseIds, 1)
-	end
+	recordPurchase(profile, purchaseId)
 	return { granted = true, duplicate = false, reason = nil }
 end
 

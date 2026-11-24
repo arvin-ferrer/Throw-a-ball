@@ -60,6 +60,7 @@ export type PlayerProfile = {
 	ownedCosmetics: { [string]: boolean },
 	equippedBallSkin: string?,
 	purchaseIds: { string },
+	processedPurchases: { [string]: boolean }?,
 	lastLogoutTime: number,
 	nextPetSeq: number,
 }
@@ -73,6 +74,18 @@ export type TxResult = {
 local EconomyLogic = {}
 
 EconomyLogic.CURRENT_SCHEMA_VERSION = 1
+
+local function isValidBalance(value: any, cost: number): boolean
+	return MathUtil.isFinite(value)
+		and MathUtil.isFinite(cost)
+		and cost >= 0
+		and (value :: number) >= 0
+		and (value :: number) >= cost
+end
+
+local function isValidIntegerSlot(value: any): boolean
+	return MathUtil.isFinite(value) and math.floor(value :: number) == (value :: number)
+end
 
 function EconomyLogic.createDefaultProfile(now: number): PlayerProfile
 	return {
@@ -98,6 +111,7 @@ function EconomyLogic.createDefaultProfile(now: number): PlayerProfile
 		ownedCosmetics = {},
 		equippedBallSkin = nil,
 		purchaseIds = {},
+		processedPurchases = {},
 		lastLogoutTime = now,
 		nextPetSeq = 1,
 	}
@@ -204,13 +218,63 @@ function EconomyLogic.accruePedestalCoins(
 end
 
 function EconomyLogic.collectCashPad(profile: PlayerProfile, pedestalIndex: number): number
-	local stored = math.floor(profile.padStoredCoins[pedestalIndex] or 0)
+	if not isValidIntegerSlot(pedestalIndex) or not isValidBalance(profile.coins, 0) then
+		return 0
+	end
+	local rawStored = profile.padStoredCoins[pedestalIndex]
+	if not MathUtil.isPositiveFinite(rawStored) then
+		return 0
+	end
+	local stored = math.floor(rawStored :: number)
 	if stored <= 0 then
 		return 0
 	end
-	profile.padStoredCoins[pedestalIndex] = (profile.padStoredCoins[pedestalIndex] or 0) - stored
-	profile.coins += stored
+	local nextCoins = (profile.coins :: number) + stored
+	if not MathUtil.isFinite(nextCoins) then
+		return 0
+	end
+	profile.padStoredCoins[pedestalIndex] = (rawStored :: number) - stored
+	profile.coins = nextCoins
 	return stored
+end
+
+local function validateHatchArgs(
+	profile: PlayerProfile,
+	eggId: string,
+	pedestalIndex: number,
+	hasVipPass: boolean,
+	petRollUnit: number,
+	mutRollUnit: number
+): string?
+	if
+		type(eggId) ~= "string"
+		or not MathUtil.isFinite(petRollUnit)
+		or not MathUtil.isFinite(mutRollUnit)
+	then
+		return "InvalidArgs"
+	end
+	if not EggConfigs.getEgg(eggId) then
+		return "UnknownEgg"
+	end
+	if (profile.eggs[eggId] or 0) < 1 then
+		return "NoEggInInventory"
+	end
+	if not isValidIntegerSlot(pedestalIndex) then
+		return "InvalidPedestal"
+	end
+	local maxUnlocked = if hasVipPass then 14 else profile.pedestalsUnlocked
+	if pedestalIndex < 1 or pedestalIndex > maxUnlocked then
+		return "PedestalLocked"
+	end
+	if pedestalIndex > profile.pedestalsUnlocked and pedestalIndex <= 12 then
+		return "PedestalLocked"
+	end
+	for _, pet in ipairs(profile.pets) do
+		if pet.pedestalIndex == pedestalIndex then
+			return "PedestalOccupied"
+		end
+	end
+	return nil
 end
 
 function EconomyLogic.hatchEggOnPedestal(
@@ -221,26 +285,11 @@ function EconomyLogic.hatchEggOnPedestal(
 	petRollUnit: number,
 	mutRollUnit: number
 ): TxResult
-	local egg = EggConfigs.getEgg(eggId)
-	if not egg then
-		return { ok = false, reason = "UnknownEgg" }
+	local errReason =
+		validateHatchArgs(profile, eggId, pedestalIndex, hasVipPass, petRollUnit, mutRollUnit)
+	if errReason then
+		return { ok = false, reason = errReason }
 	end
-	if (profile.eggs[eggId] or 0) < 1 then
-		return { ok = false, reason = "NoEggInInventory" }
-	end
-	local maxUnlocked = if hasVipPass then 14 else profile.pedestalsUnlocked
-	if pedestalIndex < 1 or pedestalIndex > maxUnlocked then
-		return { ok = false, reason = "PedestalLocked" }
-	end
-	if pedestalIndex > profile.pedestalsUnlocked and pedestalIndex <= 12 then
-		return { ok = false, reason = "PedestalLocked" }
-	end
-	for _, pet in ipairs(profile.pets) do
-		if pet.pedestalIndex == pedestalIndex then
-			return { ok = false, reason = "PedestalOccupied" }
-		end
-	end
-
 	local speciesId, mutationKey = EggConfigs.rollHatch(eggId, petRollUnit, mutRollUnit)
 	profile.eggs[eggId] = (profile.eggs[eggId] or 1) - 1
 	if profile.eggs[eggId] <= 0 then
@@ -262,7 +311,6 @@ function EconomyLogic.hatchEggOnPedestal(
 	}
 	table.insert(profile.pets, newPet)
 	profile.codexUnlocked[speciesId] = true
-	-- Auto-equip first starter pet as Active Follower #1 without pausing pedestal income
 	if #profile.activeFollowerUids < profile.activeSlotsUnlocked then
 		table.insert(profile.activeFollowerUids, uid)
 	end
@@ -282,7 +330,7 @@ function EconomyLogic.levelUpPet(profile: PlayerProfile, petUid: string): TxResu
 		return { ok = false, reason = "UnknownSpecies" }
 	end
 	local cost = EconomyConfigs.getPetLevelUpCost(pet.level, species.baseRate)
-	if profile.coins < cost then
+	if not isValidBalance(profile.coins, cost) then
 		return { ok = false, reason = "InsufficientCoins" }
 	end
 	profile.coins -= cost
@@ -292,8 +340,13 @@ end
 
 -- Atomic 3-to-1 Duplicate Star Fusion (1★ -> 2★ -> 3★)
 function EconomyLogic.fusePets(profile: PlayerProfile, uids: { string }): TxResult
-	if #uids ~= 3 then
+	if type(uids) ~= "table" or #uids ~= 3 then
 		return { ok = false, reason = "MustProvideThreePets" }
+	end
+	for i = 1, 3 do
+		if type(uids[i]) ~= "string" then
+			return { ok = false, reason = "InvalidPetUid" }
+		end
 	end
 	if uids[1] == uids[2] or uids[1] == uids[3] or uids[2] == uids[3] then
 		return { ok = false, reason = "DuplicateUidInRequest" }
@@ -340,12 +393,15 @@ function EconomyLogic.rerollPetTrait(
 	petUid: string,
 	rollUnit: number
 ): TxResult
+	if type(petUid) ~= "string" or not MathUtil.isFinite(rollUnit) then
+		return { ok = false, reason = "InvalidArgs" }
+	end
 	local pet = EconomyLogic.findPetByUid(profile, petUid)
 	if not pet then
 		return { ok = false, reason = "PetNotFound" }
 	end
 	local cost = EconomyConfigs.TRAIT_REROLL_GEM_COST
-	if profile.bossGems < cost then
+	if not isValidBalance(profile.bossGems, cost) then
 		return { ok = false, reason = "InsufficientGems" }
 	end
 	profile.bossGems -= cost
@@ -386,6 +442,9 @@ function EconomyLogic.placeOrMovePet(
 		pet.pedestalIndex = nil
 		return { ok = true, data = { pedestalIndex = nil } }
 	end
+	if not isValidIntegerSlot(pedestalIndex) then
+		return { ok = false, reason = "InvalidPedestal" }
+	end
 	local isVipSlot = pedestalIndex == 13 or pedestalIndex == 14
 	if pedestalIndex < 1 or pedestalIndex > 14 then
 		return { ok = false, reason = "InvalidPedestal" }
@@ -407,6 +466,9 @@ function EconomyLogic.placeOrMovePet(
 end
 
 function EconomyLogic.sellPet(profile: PlayerProfile, petUid: string): TxResult
+	if not isValidBalance(profile.coins, 0) then
+		return { ok = false, reason = "InvalidBalance" }
+	end
 	local pet, idx = EconomyLogic.findPetByUid(profile, petUid)
 	if not pet or not idx then
 		return { ok = false, reason = "PetNotFound" }
@@ -417,6 +479,10 @@ function EconomyLogic.sellPet(profile: PlayerProfile, petUid: string): TxResult
 	local species = PetConfigs.getSpecies(pet.speciesId)
 	local baseRate = if species then species.baseRate else 5
 	local value = EconomyConfigs.getPetSellValue(baseRate, pet.starTier, pet.level)
+	local nextCoins = (profile.coins :: number) + value
+	if not MathUtil.isFinite(nextCoins) then
+		return { ok = false, reason = "BalanceOverflow" }
+	end
 	table.remove(profile.pets, idx)
 	for i, aUid in ipairs(profile.activeFollowerUids) do
 		if aUid == petUid then
@@ -424,7 +490,7 @@ function EconomyLogic.sellPet(profile: PlayerProfile, petUid: string): TxResult
 			break
 		end
 	end
-	profile.coins += value
+	profile.coins = nextCoins
 	return { ok = true, data = { coinsGained = value } }
 end
 
@@ -434,7 +500,7 @@ function EconomyLogic.buyNextTargetTier(profile: PlayerProfile): TxResult
 	if not nextTier then
 		return { ok = false, reason = "MaxTargetTier" }
 	end
-	if profile.coins < nextTier.costCoins then
+	if not isValidBalance(profile.coins, nextTier.costCoins) then
 		return { ok = false, reason = "InsufficientCoins" }
 	end
 	profile.coins -= nextTier.costCoins
@@ -448,7 +514,7 @@ function EconomyLogic.buyNextBallTier(profile: PlayerProfile): TxResult
 	if not nextTier then
 		return { ok = false, reason = "MaxBallTier" }
 	end
-	if profile.coins < nextTier.costCoins then
+	if not isValidBalance(profile.coins, nextTier.costCoins) then
 		return { ok = false, reason = "InsufficientCoins" }
 	end
 	profile.coins -= nextTier.costCoins
@@ -464,10 +530,10 @@ function EconomyLogic.unlockNextPedestal(profile: PlayerProfile): TxResult
 	if not spec or spec.requiresVipPass then
 		return { ok = false, reason = "RequiresVipPass" }
 	end
-	if profile.coins < spec.costCoins then
+	if not isValidBalance(profile.coins, spec.costCoins) then
 		return { ok = false, reason = "InsufficientCoins" }
 	end
-	if profile.bossGems < spec.costGems then
+	if not isValidBalance(profile.bossGems, spec.costGems) then
 		return { ok = false, reason = "InsufficientGems" }
 	end
 	profile.coins -= spec.costCoins
@@ -481,7 +547,7 @@ function EconomyLogic.upgradeOfflineVault(profile: PlayerProfile): TxResult
 	if not nextTier then
 		return { ok = false, reason = "MaxVaultTier" }
 	end
-	if profile.bossGems < nextTier.costGems then
+	if not isValidBalance(profile.bossGems, nextTier.costGems) then
 		return { ok = false, reason = "InsufficientGems" }
 	end
 	profile.bossGems -= nextTier.costGems
@@ -494,10 +560,10 @@ function EconomyLogic.unlockNextActiveSlot(profile: PlayerProfile): TxResult
 	if not nextSlot then
 		return { ok = false, reason = "MaxActiveSlots" }
 	end
-	if profile.level < nextSlot.requiredLevel then
+	if not MathUtil.isFinite(profile.level) or profile.level < nextSlot.requiredLevel then
 		return { ok = false, reason = "LevelTooLow" }
 	end
-	if profile.bossGems < nextSlot.costGems then
+	if not isValidBalance(profile.bossGems, nextSlot.costGems) then
 		return { ok = false, reason = "InsufficientGems" }
 	end
 	profile.bossGems -= nextSlot.costGems
@@ -506,11 +572,14 @@ function EconomyLogic.unlockNextActiveSlot(profile: PlayerProfile): TxResult
 end
 
 function EconomyLogic.craftStandardBiomeEgg(profile: PlayerProfile, biomeId: string): TxResult
+	if type(biomeId) ~= "string" then
+		return { ok = false, reason = "InvalidBiome" }
+	end
 	local costGems = EconomyConfigs.GEM_CRAFT_EGG_COSTS[biomeId]
 	if not costGems then
 		return { ok = false, reason = "InvalidBiome" }
 	end
-	if profile.bossGems < costGems then
+	if not isValidBalance(profile.bossGems, costGems) then
 		return { ok = false, reason = "InsufficientGems" }
 	end
 	local eggId = biomeId .. "_BossEgg"
@@ -525,7 +594,7 @@ end
 -- Soft Ascension: Resets Coins ONLY — keeps 100% pets, levels, stars, traits, damage, level, ball tiers & gems!
 function EconomyLogic.performSoftAscension(profile: PlayerProfile): TxResult
 	local threshold = EconomyConfigs.getAscensionCoinThreshold(profile.ascensionRank)
-	if profile.coins < threshold then
+	if not isValidBalance(profile.coins, threshold) then
 		return { ok = false, reason = "BelowAscensionThreshold" }
 	end
 	profile.coins = 0
@@ -542,7 +611,7 @@ function EconomyLogic.performSoftAscension(profile: PlayerProfile): TxResult
 end
 
 function EconomyLogic.addExp(profile: PlayerProfile, amount: number): number
-	if not MathUtil.isPositiveFinite(amount) then
+	if not MathUtil.isPositiveFinite(amount) or not isValidBalance(profile.exp, 0) then
 		return 0
 	end
 	profile.exp += math.floor(amount)

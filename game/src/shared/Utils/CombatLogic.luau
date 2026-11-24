@@ -120,8 +120,14 @@ function CombatLogic.getActiveTraitBonuses(activePets: { OwnedPetSnapshot }): (n
 end
 
 function CombatLogic.validateThrowRequest(input: ThrowValidationInput): (boolean, string?, number)
+	if type(input) ~= "table" then
+		return false, "InvalidPayload", 0
+	end
 	if
-		not MathUtil.isFinite(input.originX)
+		not MathUtil.isFinite(input.lastThrowAt)
+		or not MathUtil.isFinite(input.now)
+		or not MathUtil.isFinite(input.throwSpeedStat)
+		or not MathUtil.isFinite(input.originX)
 		or not MathUtil.isFinite(input.originY)
 		or not MathUtil.isFinite(input.originZ)
 		or not MathUtil.isFinite(input.dirX)
@@ -429,6 +435,30 @@ function CombatLogic.shouldDespawnOnHitKind(hitKind: string): boolean
 		or hitKind == "PvP"
 		or hitKind == "Target"
 		or hitKind == "GoldTarget"
+end
+
+function CombatLogic.isWithinPadFootprint(
+	dx: number,
+	dy: number,
+	dz: number,
+	halfX: number,
+	halfY: number,
+	halfZ: number
+): boolean
+	if
+		not MathUtil.isFinite(dx)
+		or not MathUtil.isFinite(dy)
+		or not MathUtil.isFinite(dz)
+		or not MathUtil.isPositiveFinite(halfX)
+		or not MathUtil.isPositiveFinite(halfY)
+		or not MathUtil.isPositiveFinite(halfZ)
+	then
+		return false
+	end
+	if math.abs(dx) > halfX + 1.25 or math.abs(dz) > halfZ + 1.25 then
+		return false
+	end
+	return dy >= (halfY - 0.35) and dy <= (halfY + 6.5)
 end
 
 return CombatLogic
