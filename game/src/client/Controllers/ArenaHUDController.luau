@@ -493,6 +493,10 @@ function ArenaHUDController.setServiceModalHandler(handler: (string) -> ())
 	serviceModalHandler = handler
 end
 
+function ArenaHUDController.isModalOpen(): boolean
+	return optInModal ~= nil and optInModal.Visible
+end
+
 local function updatePhaseBanner(st: any, activeBiome: string)
 	if not phaseTitle or not phaseSubtitle then
 		return

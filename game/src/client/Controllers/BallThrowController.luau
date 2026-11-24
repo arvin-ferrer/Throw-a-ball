@@ -22,7 +22,11 @@ local AudioCatalog = require(Shared.Utils.AudioCatalog)
 local Remotes = require(Shared.Net.Remotes)
 
 local HudGui = require(script.Parent.Parent.UI.HudGui)
+local CrosshairGui = require(script.Parent.Parent.UI.CrosshairGui)
+local HubModalsGui = require(script.Parent.Parent.UI.HubModalsGui)
+local ShopCodexGui = require(script.Parent.Parent.UI.ShopCodexGui)
 local AnimationController = require(script.Parent.AnimationController)
+local ArenaHUDController = require(script.Parent.ArenaHUDController)
 
 local BallThrowController = {}
 
@@ -36,6 +40,7 @@ local DASH_COOLDOWN = 2.5
 type VisualBall = {
 	id: number,
 	ball: Model,
+	isLocalShooter: boolean,
 	mode: "Homing" | "Ballistic",
 	pos: Vector3,
 	vel: Vector3,
@@ -64,6 +69,9 @@ local autoAimEnabled = UserInputService.PreferredInput == Enum.PreferredInput.To
 local currentLockedPart: BasePart? = nil
 local lockReticleGui: BillboardGui? = nil
 local activeVisualBalls: { [number]: VisualBall } = {}
+local crosshairRayParams = RaycastParams.new()
+crosshairRayParams.FilterType = Enum.RaycastFilterType.Exclude
+crosshairRayParams.IgnoreWater = true
 
 local function getRootAndHum(): (BasePart?, Humanoid?)
 	local char = localPlayer.Character
@@ -276,10 +284,81 @@ local function findAutoAimTarget(origin: Vector3): BasePart?
 	return if chosen then partById[chosen.id] else nil
 end
 
-local function computeManualAim(cam: Camera): Vector3
-	local look = cam.CFrame.LookVector
-	local dx, dy, dz = CombatLogic.computeCameraAimDirection(look.X, look.Y, look.Z)
-	return Vector3.new(dx, dy, dz)
+local function isSightlineTargetPart(part: BasePart): boolean
+	local tk = part:GetAttribute("TargetKind")
+	if tk == "Static" or tk == "MovingGold" then
+		return true
+	end
+	local mdl = part:FindFirstAncestorOfClass("Model")
+	if not mdl then
+		return false
+	end
+	local entityKind = mdl:GetAttribute("EntityKind")
+	if entityKind == "PvEMob" or entityKind == "BiomeBoss" then
+		local hum = mdl:FindFirstChildOfClass("Humanoid")
+		return not hum or hum.Health > 0
+	end
+	local hitPlr = Players:GetPlayerFromCharacter(mdl)
+	if
+		hitPlr
+		and hitPlr ~= localPlayer
+		and localPlayer:GetAttribute("Zone") == "LockedBossPvP"
+		and hitPlr:GetAttribute("Zone") == "LockedBossPvP"
+	then
+		local hum = mdl:FindFirstChildOfClass("Humanoid")
+		return hum ~= nil and hum.Health > 0
+	end
+	return false
+end
+
+local function isCrosshairIgnorablePart(part: BasePart): boolean
+	if isSightlineTargetPart(part) then
+		return false
+	end
+	return not part.CanCollide and part.Transparency >= 0.85
+end
+
+local function castCrosshairSightline(cam: Camera, origin: Vector3): (Vector3, boolean)
+	local vp = cam.ViewportSize
+	local ray = cam:ViewportPointToRay(vp.X * 0.5, vp.Y * 0.5)
+	local excluded: { Instance } = {}
+	if localPlayer.Character then
+		table.insert(excluded, localPlayer.Character)
+	end
+	local followers = workspace:FindFirstChild("LocalActiveFollowers")
+	if followers then
+		table.insert(excluded, followers)
+	end
+	local hitDist: number? = nil
+	local onTarget = false
+	for _ = 1, 5 do
+		crosshairRayParams.FilterDescendantsInstances = excluded
+		local res = workspace:Raycast(ray.Origin, ray.Direction * 240, crosshairRayParams)
+		if not res or not res.Instance or not res.Instance:IsA("BasePart") then
+			break
+		end
+		local part = res.Instance
+		if isCrosshairIgnorablePart(part) then
+			table.insert(excluded, part)
+		else
+			hitDist = res.Distance
+			onTarget = isSightlineTargetPart(part)
+			break
+		end
+	end
+	local dx, dy, dz = CombatLogic.computeCrosshairAimDirection(
+		origin.X,
+		origin.Y,
+		origin.Z,
+		ray.Origin.X,
+		ray.Origin.Y,
+		ray.Origin.Z,
+		ray.Direction.X,
+		ray.Direction.Y,
+		ray.Direction.Z,
+		hitDist
+	)
+	return Vector3.new(dx, dy, dz), onTarget
 end
 
 local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
@@ -320,11 +399,14 @@ local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
 			end
 		end
 	else
-		aimDir = computeManualAim(cam)
+		aimDir = castCrosshairSightline(cam, origin)
 	end
 
 	AnimationController.playThrowAnim(localPlayer)
 	Remotes.waitClient().ThrowBall:FireServer(aimDir, useHoming, lockedPart)
+	if not isAfkShot then
+		CrosshairGui.pulseRecoil()
+	end
 	AudioCatalog.play("Throw", 1.0 + math.random() * 0.14, if isAfkShot then 0.12 else 0.28)
 end
 
@@ -454,8 +536,21 @@ local function triggerImpactFeedback(
 	hitKind: string,
 	isCrit: boolean,
 	damage: number,
-	hitInst: Instance?
+	hitInst: Instance?,
+	isLocalBall: boolean
 )
+	if
+		isLocalBall
+		and (
+			hitKind == "GoldTarget"
+			or hitKind == "Target"
+			or hitKind == "Mob"
+			or hitKind == "Boss"
+			or hitKind == "PvP"
+		)
+	then
+		CrosshairGui.flashHit(isCrit or hitKind == "GoldTarget")
+	end
 	if hitKind == "GoldTarget" then
 		local col = Color3.fromRGB(250, 204, 21)
 		AudioCatalog.play("GoldCombo", 1.25, 0.45)
@@ -506,6 +601,7 @@ end
 local function registerVisualBall(
 	ballId: number,
 	ball: Model,
+	isLocalShooter: boolean,
 	startPos: Vector3,
 	serverOrigin: Vector3,
 	staticEnd: Vector3,
@@ -517,6 +613,7 @@ local function registerVisualBall(
 	activeVisualBalls[ballId] = {
 		id = ballId,
 		ball = ball,
+		isLocalShooter = isLocalShooter,
 		mode = if homingPart then "Homing" else "Ballistic",
 		pos = serverOrigin,
 		vel = launchVel,
@@ -551,8 +648,12 @@ local function handleLaunchPacket(data: any)
 		tostring(data.ballTierId or "RubberBall"),
 		resolveBallSkinColor(data.ballSkin)
 	)
-	local startPos = getThrowHandOrigin(shooterPlr, data.origin)
+	local isLocalShooter = shooterPlr == localPlayer
+	local handOrigin = getThrowHandOrigin(shooterPlr, data.origin)
 	local serverOrigin: Vector3 = data.origin
+	local startPos = if isLocalShooter and data.isHoming ~= true
+		then serverOrigin:Lerp(handOrigin, 0.25)
+		else handOrigin
 	local staticEnd: Vector3 = data.endPos
 	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
 	local homingPart = if data.isHoming == true
@@ -567,7 +668,17 @@ local function handleLaunchPacket(data: any)
 
 	ball:PivotTo(CFrame.lookAt(startPos, staticEnd))
 	ball.Parent = workspace
-	registerVisualBall(ballId, ball, startPos, serverOrigin, staticEnd, launchVel, dur, homingPart)
+	registerVisualBall(
+		ballId,
+		ball,
+		isLocalShooter,
+		startPos,
+		serverOrigin,
+		staticEnd,
+		launchVel,
+		dur,
+		homingPart
+	)
 end
 
 local function handleBouncePacket(data: any)
@@ -576,6 +687,7 @@ local function handleBouncePacket(data: any)
 		return
 	end
 	local entry = activeVisualBalls[ballId]
+	local isLocalBall = if entry then entry.isLocalShooter else false
 	local hitKind = tostring(data.hitKind or "Surface")
 	local hitInst = if typeof(data.hitTarget) == "Instance" then data.hitTarget else nil
 	if entry then
@@ -597,13 +709,16 @@ local function handleBouncePacket(data: any)
 			hitKind,
 			data.isCrit == true,
 			tonumber(data.damage) or 0,
-			hitInst
+			hitInst,
+			isLocalBall
 		)
 	end
 end
 
 local function handleImpactDespawnPacket(data: any)
 	local ballId = tonumber(data.ballId)
+	local entry = if ballId then activeVisualBalls[ballId] else nil
+	local isLocalBall = if entry then entry.isLocalShooter else false
 	if ballId then
 		destroyVisualBall(ballId)
 	end
@@ -614,7 +729,8 @@ local function handleImpactDespawnPacket(data: any)
 			tostring(data.hitKind or "Surface"),
 			data.isCrit == true,
 			tonumber(data.damage) or 0,
-			hitInst
+			hitInst,
+			isLocalBall
 		)
 	end
 end
@@ -775,9 +891,39 @@ local function onBossTelegraph(data: any)
 	end)
 end
 
+local function updateCrosshairFrame(dt: number)
+	if HubModalsGui.isOpen() or ShopCodexGui.isOpen() or ArenaHUDController.isModalOpen() then
+		isHoldingFire = false
+		CrosshairGui.setState(false, false, dt)
+		return
+	end
+	local hrp, hum = getRootAndHum()
+	local cam = workspace.CurrentCamera
+	if not hrp or not hum or hum.Health <= 0 or not cam then
+		CrosshairGui.setState(false, false, dt)
+		return
+	end
+	local origin = hrp.Position + Vector3.new(0, 1.4, 0)
+	local _, onTarget = castCrosshairSightline(cam, origin)
+	if
+		autoAimEnabled
+		and not padLocked
+		and currentLockedPart ~= nil
+		and currentLockedPart.Parent ~= nil
+	then
+		onTarget = true
+	end
+	CrosshairGui.setState(true, onTarget, dt)
+end
+
+local function onRenderStepped(dt: number)
+	stepVisualBalls(dt)
+	updateCrosshairFrame(dt)
+end
+
 function BallThrowController.start()
 	BallThrowController.setAutoAimEnabled(autoAimEnabled)
-	RunService.RenderStepped:Connect(stepVisualBalls)
+	RunService.RenderStepped:Connect(onRenderStepped)
 	local remotes = Remotes.waitClient()
 	remotes.ProjectileBroadcast.OnClientEvent:Connect(onProjectileBroadcast)
 	remotes.BossTelegraph.OnClientEvent:Connect(onBossTelegraph)
@@ -803,7 +949,12 @@ function BallThrowController.start()
 		end
 		if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.ButtonL3 then
 			isSprinting = true
-		elseif input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.ButtonB then
+		elseif
+			input.KeyCode == Enum.KeyCode.Q
+			or input.KeyCode == Enum.KeyCode.LeftControl
+			or input.KeyCode == Enum.KeyCode.ButtonB
+			or input.KeyCode == Enum.KeyCode.ButtonR1
+		then
 			BallThrowController.triggerDash()
 		elseif input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonY then
 			BallThrowController.toggleAutoAim()

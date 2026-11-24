@@ -73,16 +73,25 @@ local afkBadgeFrame: Frame? = nil
 local actionHolder: Frame? = nil
 local autoAimBtn: TextButton? = nil
 local autoAimReticle: Frame? = nil
+local autoAimTitleLbl: TextLabel? = nil
 local autoAimStateLbl: TextLabel? = nil
 local dashBtn: TextButton? = nil
+local dashIconFrame: Frame? = nil
 local dashTextLbl: TextLabel? = nil
 local dashSubLbl: TextLabel? = nil
 local throwBtn: TextButton? = nil
+local shootIconFrame: Frame? = nil
 local throwTextLbl: TextLabel? = nil
+local throwHintLbl: TextLabel? = nil
 local jumpActionBtn: TextButton? = nil
+local jumpIconFrame: Frame? = nil
+local jumpTextLbl: TextLabel? = nil
 local isAutoAimOn = false
 local isJumpHeld = false
 local jumpPulseUntil = 0
+local lastIsTouch = UserInputService.PreferredInput == Enum.PreferredInput.Touch
+local lastIsCompact = false
+local isDashOnCooldown = false
 
 -- Callbacks
 local throwCallback: (() -> ())? = nil
@@ -579,22 +588,12 @@ local function buildHeroStatusDock(gui: ScreenGui)
 	)
 end
 
-local function buildCombatButtons(gui: ScreenGui)
-	local holder = Instance.new("Frame")
-	holder.Name = "ActionButtons"
-	holder.BackgroundTransparency = 1
-	holder.AnchorPoint = Vector2.new(1, 1)
-	holder.Position = UDim2.new(1, -14, 1, -14)
-	holder.Size = UDim2.fromOffset(308, 176)
-	holder.Parent = gui
-	actionHolder = holder
-
-	-- AUTO AIM toggle pill (left of DASH)
+local function buildAutoAimButton(holder: Frame)
 	local aimBtn = Instance.new("TextButton")
 	aimBtn.Name = "AutoAimBtn"
 	aimBtn.AnchorPoint = Vector2.new(1, 1)
-	aimBtn.Position = UDim2.new(1, -174, 1, -10)
-	aimBtn.Size = UDim2.fromOffset(118, 48)
+	aimBtn.Position = UDim2.new(1, -64, 1, -106)
+	aimBtn.Size = UDim2.fromOffset(88, 44)
 	aimBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	aimBtn.BackgroundTransparency = 0.05
 	aimBtn.Text = ""
@@ -605,28 +604,29 @@ local function buildCombatButtons(gui: ScreenGui)
 	Theme.addGradient(aimBtn, Theme.Colors.PanelTop, Theme.Colors.PanelBottom, 90)
 	Theme.addStroke(aimBtn, Theme.Colors.Stroke, 1.5, 0.1)
 
-	local reticle = HudIcons.createReticleIcon(aimBtn, 26, Theme.Colors.Danger)
+	local reticle = HudIcons.createReticleIcon(aimBtn, 24, Theme.Colors.Danger)
 	reticle.AnchorPoint = Vector2.new(0, 0.5)
-	reticle.Position = UDim2.new(0, 9, 0.5, 0)
+	reticle.Position = UDim2.new(0, 8, 0.5, 0)
 	autoAimReticle = reticle
 
 	local aimTitle = Theme.makeLabel(
 		aimBtn,
 		"AimTitle",
 		"AUTO AIM",
-		UDim2.new(1, -42, 0, 18),
-		UDim2.fromOffset(40, 6),
-		11,
+		UDim2.new(1, -38, 0, 17),
+		UDim2.fromOffset(36, 5),
+		10,
 		Theme.Colors.Text,
 		true
 	)
 	aimTitle.TextXAlignment = Enum.TextXAlignment.Center
+	autoAimTitleLbl = aimTitle
 	local aimState = Theme.makeLabel(
 		aimBtn,
 		"AimState",
 		"OFF",
-		UDim2.new(1, -42, 0, 18),
-		UDim2.fromOffset(40, 23),
+		UDim2.new(1, -38, 0, 17),
+		UDim2.fromOffset(36, 22),
 		12,
 		Theme.Colors.Danger,
 		true
@@ -634,19 +634,19 @@ local function buildCombatButtons(gui: ScreenGui)
 	aimState.TextXAlignment = Enum.TextXAlignment.Center
 	autoAimStateLbl = aimState
 	autoAimBtn = aimBtn
-
 	aimBtn.Activated:Connect(function()
 		if toggleAutoAimCallback then
 			toggleAutoAimCallback()
 		end
 	end)
+end
 
-	-- DASH circle (sky-blue glossy; child TextLabel avoids UIGradient tinting white text)
+local function buildDashButton(holder: Frame)
 	local dBtn = Instance.new("TextButton")
 	dBtn.Name = "DashBtn"
 	dBtn.AnchorPoint = Vector2.new(1, 1)
-	dBtn.Position = UDim2.new(1, -94, 1, -4)
-	dBtn.Size = UDim2.fromOffset(70, 70)
+	dBtn.Position = UDim2.new(1, 0, 1, -8)
+	dBtn.Size = UDim2.fromOffset(66, 66)
 	dBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	dBtn.Text = ""
 	dBtn.BorderSizePixel = 0
@@ -657,13 +657,18 @@ local function buildCombatButtons(gui: ScreenGui)
 	Theme.addGradient(dBtn, Color3.fromRGB(122, 206, 255), Color3.fromRGB(58, 146, 228), 90)
 	Theme.addStroke(dBtn, Color3.fromRGB(196, 238, 255), 2.2, 0.1)
 
+	local dIcon = HudIcons.createDashIcon(dBtn, 22)
+	dIcon.AnchorPoint = Vector2.new(0.5, 0)
+	dIcon.Position = UDim2.new(0.5, 0, 0, 6)
+	dashIconFrame = dIcon
+
 	local dLbl = Theme.makeLabel(
 		dBtn,
 		"DashText",
 		"DASH",
-		UDim2.fromScale(1, 1),
-		UDim2.fromOffset(0, -2),
-		17,
+		UDim2.new(1, -6, 0, 15),
+		UDim2.new(0, 3, 1, -21),
+		11,
 		Theme.Colors.Text,
 		true
 	)
@@ -679,7 +684,7 @@ local function buildCombatButtons(gui: ScreenGui)
 		dBtn,
 		"KeyHint",
 		"[Q]",
-		UDim2.new(1, 0, 0, 14),
+		UDim2.new(1, 0, 0, 13),
 		UDim2.new(0, 0, 1, -15),
 		10,
 		Color3.fromRGB(232, 248, 255),
@@ -688,19 +693,19 @@ local function buildCombatButtons(gui: ScreenGui)
 	qHint.TextXAlignment = Enum.TextXAlignment.Center
 	dashSubLbl = qHint
 	dashBtn = dBtn
-
 	dBtn.Activated:Connect(function()
 		if dashCallback then
 			dashCallback()
 		end
 	end)
+end
 
-	-- THROW hero circle (largest fiery-orange button; child TextLabel keeps pure white text)
+local function buildShootButton(holder: Frame)
 	local tBtn = Instance.new("TextButton")
 	tBtn.Name = "ThrowBtn"
 	tBtn.AnchorPoint = Vector2.new(1, 1)
-	tBtn.Position = UDim2.fromScale(1, 1)
-	tBtn.Size = UDim2.fromOffset(86, 86)
+	tBtn.Position = UDim2.new(1, -68, 1, -22)
+	tBtn.Size = UDim2.fromOffset(78, 78)
 	tBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	tBtn.Text = ""
 	tBtn.BorderSizePixel = 0
@@ -711,13 +716,18 @@ local function buildCombatButtons(gui: ScreenGui)
 	Theme.addGradient(tBtn, Color3.fromRGB(248, 138, 48), Color3.fromRGB(206, 82, 18), 90)
 	Theme.addStroke(tBtn, Color3.fromRGB(255, 204, 134), 2.5, 0.08)
 
+	local sIcon = HudIcons.createShootIcon(tBtn, 28)
+	sIcon.AnchorPoint = Vector2.new(0.5, 0)
+	sIcon.Position = UDim2.new(0.5, 0, 0, 9)
+	shootIconFrame = sIcon
+
 	local tLbl = Theme.makeLabel(
 		tBtn,
 		"ThrowText",
-		"THROW",
-		UDim2.fromScale(1, 1),
-		UDim2.fromOffset(0, 0),
-		19,
+		"SHOOT",
+		UDim2.new(1, -8, 0, 18),
+		UDim2.new(0, 4, 1, -26),
+		13,
 		Theme.Colors.Text,
 		true
 	)
@@ -728,8 +738,22 @@ local function buildCombatButtons(gui: ScreenGui)
 	tStroke.Transparency = 0.22
 	tStroke.Parent = tLbl
 	throwTextLbl = tLbl
+
+	local hint = Theme.makeLabel(
+		tBtn,
+		"KeyHint",
+		"[LMB]",
+		UDim2.new(1, 0, 0, 13),
+		UDim2.new(0, 0, 1, -15),
+		10,
+		Color3.fromRGB(255, 236, 208),
+		true
+	)
+	hint.TextXAlignment = Enum.TextXAlignment.Center
+	throwHintLbl = hint
 	throwBtn = tBtn
 
+	local activeInput: InputObject? = nil
 	tBtn.Activated:Connect(function()
 		if throwCallback then
 			throwCallback()
@@ -740,28 +764,48 @@ local function buildCombatButtons(gui: ScreenGui)
 			inp.UserInputType == Enum.UserInputType.Touch
 			or inp.UserInputType == Enum.UserInputType.MouseButton1
 		then
+			activeInput = inp
 			if throwHoldCallback then
 				throwHoldCallback(true)
 			end
 		end
 	end)
-	tBtn.InputEnded:Connect(function(inp: InputObject)
-		if
-			inp.UserInputType == Enum.UserInputType.Touch
-			or inp.UserInputType == Enum.UserInputType.MouseButton1
-		then
+	UserInputService.InputEnded:Connect(function(inp: InputObject)
+		if activeInput ~= nil and inp == activeInput then
+			activeInput = nil
 			if throwHoldCallback then
 				throwHoldCallback(false)
 			end
 		end
 	end)
+end
 
-	-- Upper-right Jump circle directly above THROW
+local function triggerJumpNow()
+	jumpPulseUntil = os.clock() + 0.16
+	local char = localPlayer.Character
+	local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+	if hum and hum.Health > 0 then
+		hum.Jump = true
+		local st = hum:GetState()
+		if
+			hum.FloorMaterial ~= Enum.Material.Air
+			or st == Enum.HumanoidStateType.Running
+			or st == Enum.HumanoidStateType.Landed
+			or st == Enum.HumanoidStateType.Climbing
+			or st == Enum.HumanoidStateType.Swimming
+			or st == Enum.HumanoidStateType.Seated
+		then
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+end
+
+local function buildJumpButton(holder: Frame)
 	local jBtn = Instance.new("TextButton")
 	jBtn.Name = "JumpActionBtn"
 	jBtn.AnchorPoint = Vector2.new(1, 1)
-	jBtn.Position = UDim2.new(1, -11, 1, -96)
-	jBtn.Size = UDim2.fromOffset(64, 64)
+	jBtn.Position = UDim2.new(1, 0, 1, -76)
+	jBtn.Size = UDim2.fromOffset(54, 54)
 	jBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	jBtn.Text = ""
 	jBtn.BorderSizePixel = 0
@@ -771,49 +815,59 @@ local function buildCombatButtons(gui: ScreenGui)
 	Theme.addGradient(jBtn, Color3.fromRGB(248, 138, 48), Color3.fromRGB(202, 78, 18), 90)
 	Theme.addStroke(jBtn, Color3.fromRGB(255, 204, 134), 2.2, 0.1)
 
-	local jIcon = HudIcons.createJumpIcon(jBtn, 36)
-	jIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	jIcon.Position = UDim2.fromScale(0.5, 0.5)
+	local jIcon = HudIcons.createJumpIcon(jBtn, 24)
+	jIcon.AnchorPoint = Vector2.new(0.5, 0)
+	jIcon.Position = UDim2.new(0.5, 0, 0, 6)
+	jumpIconFrame = jIcon
+
+	local jLbl = Theme.makeLabel(
+		jBtn,
+		"JumpText",
+		"JUMP",
+		UDim2.new(1, -6, 0, 13),
+		UDim2.new(0, 3, 1, -17),
+		10,
+		Theme.Colors.Text,
+		true
+	)
+	jLbl.TextXAlignment = Enum.TextXAlignment.Center
+	jumpTextLbl = jLbl
 	jumpActionBtn = jBtn
 
-	local function triggerJumpNow()
-		jumpPulseUntil = os.clock() + 0.16
-		local char = localPlayer.Character
-		local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
-		if hum and hum.Health > 0 then
-			hum.Jump = true
-			local st = hum:GetState()
-			if
-				hum.FloorMaterial ~= Enum.Material.Air
-				or st == Enum.HumanoidStateType.Running
-				or st == Enum.HumanoidStateType.Landed
-				or st == Enum.HumanoidStateType.Climbing
-				or st == Enum.HumanoidStateType.Swimming
-				or st == Enum.HumanoidStateType.Seated
-			then
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-		end
-	end
-
+	local activeJumpInput: InputObject? = nil
 	jBtn.Activated:Connect(triggerJumpNow)
 	jBtn.InputBegan:Connect(function(inp: InputObject)
 		if
 			inp.UserInputType == Enum.UserInputType.Touch
 			or inp.UserInputType == Enum.UserInputType.MouseButton1
 		then
+			activeJumpInput = inp
 			isJumpHeld = true
 			triggerJumpNow()
 		end
 	end)
-	jBtn.InputEnded:Connect(function(inp: InputObject)
-		if
-			inp.UserInputType == Enum.UserInputType.Touch
-			or inp.UserInputType == Enum.UserInputType.MouseButton1
-		then
+	UserInputService.InputEnded:Connect(function(inp: InputObject)
+		if activeJumpInput ~= nil and inp == activeJumpInput then
+			activeJumpInput = nil
 			isJumpHeld = false
 		end
 	end)
+end
+
+local function buildCombatButtons(gui: ScreenGui)
+	local holder = Instance.new("Frame")
+	holder.Name = "ActionButtons"
+	holder.BackgroundTransparency = 1
+	holder.AnchorPoint = Vector2.new(1, 1)
+	holder.Position = UDim2.new(1, -16, 1, -14)
+	holder.Size = UDim2.fromOffset(260, 210)
+	holder.Parent = gui
+	actionHolder = holder
+
+	buildAutoAimButton(holder)
+	buildDashButton(holder)
+	buildShootButton(holder)
+	buildJumpButton(holder)
 end
 
 local function syncNativeTouchJump()
@@ -867,11 +921,139 @@ local function applyDrawerResponsive(compact: boolean)
 	end
 end
 
+local function applyDashReadyLayout()
+	if dashIconFrame then
+		local icS = if lastIsTouch
+			then (if lastIsCompact then 20 else 24)
+			else (if lastIsCompact then 18 else 22)
+		dashIconFrame.Size = UDim2.fromOffset(icS, icS)
+		dashIconFrame.Position = UDim2.new(0.5, 0, 0, if lastIsCompact then 5 else 6)
+		dashIconFrame.Visible = true
+	end
+	if dashTextLbl then
+		dashTextLbl.Text = "DASH"
+		dashTextLbl.TextSize = if lastIsCompact then 11 else 13
+		if lastIsTouch then
+			dashTextLbl.Size = UDim2.new(1, -6, 0, 15)
+			dashTextLbl.Position = UDim2.new(0, 3, 1, if lastIsCompact then -21 else -24)
+		else
+			dashTextLbl.Size = UDim2.new(1, -6, 0, 15)
+			dashTextLbl.Position = UDim2.fromOffset(3, if lastIsCompact then 23 else 27)
+		end
+	end
+	if dashSubLbl then
+		dashSubLbl.Visible = not lastIsTouch
+		dashSubLbl.Position = UDim2.new(0, 0, 1, if lastIsCompact then -16 else -19)
+	end
+end
+
+local function applyCombatButtonTypography(compact: boolean, isTouch: boolean)
+	if autoAimTitleLbl then
+		autoAimTitleLbl.Text = if isTouch then "AUTO AIM" else "AUTO [F]"
+	end
+	if shootIconFrame then
+		local sIc = if compact then 24 else 28
+		shootIconFrame.Size = UDim2.fromOffset(sIc, sIc)
+		shootIconFrame.Position =
+			UDim2.new(0.5, 0, 0, if isTouch then (if compact then 10 else 13) else 6)
+	end
+	if throwTextLbl then
+		throwTextLbl.TextSize = if compact then 12 else 14
+		throwTextLbl.Position = if isTouch
+			then UDim2.new(0, 4, 1, if compact then -26 else -30)
+			else UDim2.fromOffset(4, if compact then 30 else 34)
+	end
+	if throwHintLbl then
+		throwHintLbl.Visible = not isTouch
+		throwHintLbl.Position = UDim2.new(0, 0, 1, if compact then -17 else -20)
+	end
+	if jumpIconFrame then
+		local jIc = if compact then 22 else 28
+		jumpIconFrame.Size = UDim2.fromOffset(jIc, jIc)
+		jumpIconFrame.Position = UDim2.new(0.5, 0, 0, if compact then 6 else 8)
+	end
+	if jumpTextLbl then
+		jumpTextLbl.TextSize = if compact then 10 else 11
+	end
+	if not isDashOnCooldown then
+		applyDashReadyLayout()
+	end
+end
+
+local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
+	if not (actionHolder and throwBtn and dashBtn and autoAimBtn and jumpActionBtn) then
+		return
+	end
+	local compact = m.isCompact
+	actionHolder.Position =
+		UDim2.new(1, if compact then -12 else -18, 1, if compact then -10 else -16)
+	jumpActionBtn.Visible = m.isTouch
+	if m.isTouch then
+		local dS = if compact then 54 else 66
+		local tS = if compact then 72 else 88
+		dashBtn.Size = UDim2.fromOffset(dS, dS)
+		dashBtn.Position = UDim2.new(1, 0, 1, if compact then -8 else -12)
+		jumpActionBtn.Size = UDim2.fromOffset(dS, dS)
+		jumpActionBtn.Position = UDim2.new(1, 0, 1, if compact then -76 else -96)
+		throwBtn.Size = UDim2.fromOffset(tS, tS)
+		throwBtn.Position =
+			UDim2.new(1, if compact then -68 else -84, 1, if compact then -22 else -28)
+		autoAimBtn.Size = UDim2.fromOffset(if compact then 88 else 112, if compact then 44 else 48)
+		autoAimBtn.Position =
+			UDim2.new(1, if compact then -64 else -80, 1, if compact then -106 else -132)
+	else
+		local dS = if compact then 56 else 68
+		local tS = if compact then 66 else 78
+		dashBtn.Size = UDim2.fromOffset(dS, dS)
+		dashBtn.Position = UDim2.new(1, 0, 1, if compact then -8 else -12)
+		throwBtn.Size = UDim2.fromOffset(tS, tS)
+		throwBtn.Position =
+			UDim2.new(1, if compact then -66 else -80, 1, if compact then -8 else -12)
+		autoAimBtn.Size = UDim2.fromOffset(if compact then 104 else 122, if compact then 44 else 48)
+		autoAimBtn.Position =
+			UDim2.new(1, if compact then -14 else -16, 1, if compact then -82 else -100)
+	end
+	applyCombatButtonTypography(compact, m.isTouch)
+end
+
+local function applyDockAndBannersResponsive(m: Theme.LayoutMetrics)
+	local compact = m.isCompact
+	if statusDock and levelLabel then
+		if m.isPortrait then
+			local dockW = math.clamp(math.floor(m.viewport.X - 24), 256, 360)
+			statusDock.Size = UDim2.fromOffset(dockW, 68)
+			statusDock.Position = UDim2.new(0.5, 0, 1, -174)
+			levelLabel.TextSize = 16
+		elseif compact then
+			local dockW = math.clamp(math.floor(m.viewport.X * 0.38), 236, 290)
+			statusDock.Size = UDim2.fromOffset(dockW, 68)
+			statusDock.Position = UDim2.new(0.5, 0, 1, -8)
+			levelLabel.TextSize = 16
+		else
+			statusDock.Size = UDim2.fromOffset(420, 84)
+			statusDock.Position = UDim2.new(0.5, 0, 1, -14)
+			levelLabel.TextSize = 21
+		end
+	end
+	local dockTopOffset = if m.isPortrait then -250 elseif compact then -82 else -106
+	if guideFrame then
+		local gw = if compact then math.min(340, m.viewport.X - 28) else 440
+		guideFrame.Size = UDim2.fromOffset(gw, if compact then 28 else 32)
+		guideFrame.Position = UDim2.new(0.5, 0, 1, dockTopOffset)
+	end
+	if afkBadgeFrame then
+		local aw = if compact then 260 else 320
+		afkBadgeFrame.Size = UDim2.fromOffset(aw, if compact then 28 else 32)
+		afkBadgeFrame.Position = UDim2.new(0.5, 0, 1, dockTopOffset - 36)
+	end
+end
+
 local function applyResponsiveLayout()
 	local m = Theme.getLayoutMetrics()
 	local compact = m.isCompact
+	lastIsTouch = m.isTouch
+	lastIsCompact = compact
 
-	-- Currencies
 	if currencyStack then
 		currencyStack.Position =
 			UDim2.fromOffset(if compact then 10 else 14, if compact then 6 else 8)
@@ -889,8 +1071,6 @@ local function applyResponsiveLayout()
 	if gemsValLabel then
 		gemsValLabel.TextSize = if compact then 14 else 17
 	end
-
-	-- Top-Right Audio
 	if topRightStack then
 		topRightStack.Position =
 			UDim2.new(1, if compact then -10 else -14, 0, if compact then 6 else 8)
@@ -906,68 +1086,9 @@ local function applyResponsiveLayout()
 			UDim2.fromOffset(if compact then 102 else 124, if compact then 28 else 34)
 	end
 
-	-- Collapsible 2x2 Drawer
 	applyDrawerResponsive(compact)
-
-	-- Bottom-Center Hero Status Dock
-	if statusDock and levelLabel then
-		if m.isPortrait then
-			local dockW = math.clamp(math.floor(m.viewport.X - 24), 256, 360)
-			statusDock.Size = UDim2.fromOffset(dockW, 70)
-			statusDock.Position = UDim2.new(0.5, 0, 1, -138)
-			levelLabel.TextSize = 16
-		elseif compact then
-			local dockW = math.clamp(math.floor(m.viewport.X * 0.41), 248, 300)
-			statusDock.Size = UDim2.fromOffset(dockW, 68)
-			statusDock.Position = UDim2.new(0.43, 0, 1, -8)
-			levelLabel.TextSize = 16
-		else
-			statusDock.Size = UDim2.fromOffset(420, 84)
-			statusDock.Position = UDim2.new(0.5, 0, 1, -14)
-			levelLabel.TextSize = 21
-		end
-	end
-
-	-- Guide & AFK banners right above Hero Status Dock
-	local dockTopOffset = if m.isPortrait then -214 elseif compact then -82 else -106
-	if guideFrame then
-		local gw = if compact then math.min(340, m.viewport.X - 28) else 440
-		guideFrame.Size = UDim2.fromOffset(gw, if compact then 28 else 32)
-		guideFrame.Position = UDim2.new(0.5, 0, 1, dockTopOffset)
-	end
-	if afkBadgeFrame then
-		local aw = if compact then 260 else 320
-		afkBadgeFrame.Size = UDim2.fromOffset(aw, if compact then 28 else 32)
-		afkBadgeFrame.Position = UDim2.new(0.5, 0, 1, dockTopOffset - 36)
-	end
-
-	-- Bottom-Right Combat Thumb-Arc
-	if actionHolder and throwBtn and dashBtn and autoAimBtn and jumpActionBtn then
-		actionHolder.Position =
-			UDim2.new(1, if compact then -10 else -16, 1, if compact then -8 else -14)
-		local tS = if compact then 66 else 86
-		local dS = if compact then 54 else 70
-		local jS = if compact then 50 else 64
-		local aW = if compact then 92 else 118
-		local aH = if compact then 44 else 48
-		throwBtn.Size = UDim2.fromOffset(tS, tS)
-		if throwTextLbl then
-			throwTextLbl.TextSize = if compact then 15 else 19
-		end
-		dashBtn.Size = UDim2.fromOffset(dS, dS)
-		dashBtn.Position = UDim2.new(1, -(tS + 8), 1, -4)
-		if dashTextLbl then
-			dashTextLbl.TextSize = if compact then 13 else 17
-		end
-		jumpActionBtn.Size = UDim2.fromOffset(jS, jS)
-		jumpActionBtn.Position = UDim2.new(1, -math.floor((tS - jS) * 0.5), 1, -(tS + 10))
-		autoAimBtn.Size = UDim2.fromOffset(aW, aH)
-		autoAimBtn.Position = UDim2.new(1, -(tS + dS + 16), 1, -8)
-		if dashSubLbl then
-			dashSubLbl.Visible = not m.isTouch
-		end
-	end
-
+	applyDockAndBannersResponsive(m)
+	applyCombatButtonsResponsive(m)
 	task.defer(syncNativeTouchJump)
 end
 
@@ -1158,19 +1279,26 @@ function HudGui.setDashCooldown(remaining: number)
 		return
 	end
 	if remaining > 0.05 then
-		dashTextLbl.Text = string.format("%.1fs", remaining)
-		Theme.addGradient(dashBtn, Theme.Colors.CardAlt, Theme.Colors.PanelBottom, 90)
-		Theme.addStroke(dashBtn, Theme.Colors.Stroke, 1.8, 0.2)
-		if dashSubLbl then
-			dashSubLbl.Visible = false
+		if not isDashOnCooldown then
+			isDashOnCooldown = true
+			Theme.addGradient(dashBtn, Theme.Colors.CardAlt, Theme.Colors.PanelBottom, 90)
+			Theme.addStroke(dashBtn, Theme.Colors.Stroke, 1.8, 0.2)
+			if dashIconFrame then
+				dashIconFrame.Visible = false
+			end
+			if dashSubLbl then
+				dashSubLbl.Visible = false
+			end
+			dashTextLbl.Size = UDim2.fromScale(1, 1)
+			dashTextLbl.Position = UDim2.fromOffset(0, 0)
+			dashTextLbl.TextSize = if lastIsCompact then 14 else 17
 		end
-	else
-		dashTextLbl.Text = "DASH"
+		dashTextLbl.Text = string.format("%.1fs", remaining)
+	elseif isDashOnCooldown then
+		isDashOnCooldown = false
 		Theme.addGradient(dashBtn, Color3.fromRGB(122, 206, 255), Color3.fromRGB(58, 146, 228), 90)
 		Theme.addStroke(dashBtn, Color3.fromRGB(196, 238, 255), 2.2, 0.1)
-		if dashSubLbl then
-			dashSubLbl.Visible = UserInputService.PreferredInput ~= Enum.PreferredInput.Touch
-		end
+		applyDashReadyLayout()
 	end
 end
 
