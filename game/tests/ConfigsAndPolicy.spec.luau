@@ -10,6 +10,7 @@ local BiomeConfigs = require("../src/shared/Configs/BiomeConfigs")
 local PetConfigs = require("../src/shared/Configs/PetConfigs")
 local TraitConfigs = require("../src/shared/Configs/TraitConfigs")
 local EggConfigs = require("../src/shared/Configs/EggConfigs")
+local MonetizationConfigs = require("../src/shared/Configs/MonetizationConfigs")
 local EconomyLogic = require("../src/shared/Utils/EconomyLogic")
 local PolicyLogic = require("../src/shared/Utils/PolicyLogic")
 
@@ -215,5 +216,172 @@ assertTrue(
 		and moltenLight.key == "Biome:MoltenCaldera",
 	"Lighting targets resolve distinctly for Overcharged, Hub, and Biomes"
 )
+
+local function verifyJointOddsForOffer(offer: PolicyLogic.ShopCatalogItem)
+	local egg = EggConfigs.getEgg(offer.id)
+	assertTrue(egg ~= nil, `Paid egg config exists for {offer.id}`)
+	local jointOdds = offer.jointOdds :: { PolicyLogic.JointOdd }
+	assertTrue(
+		jointOdds ~= nil and #jointOdds == 9,
+		`{offer.id} exposes all 9 species x mutation jointOdds`
+	)
+	local seen: { [string]: boolean } = {}
+	local totalPercent = 0
+	for _, odd in ipairs(jointOdds) do
+		local key = `{odd.speciesId}:{odd.mutationKey}`
+		assertTrue(not seen[key], `{offer.id} joint odd {key} is unique`)
+		seen[key] = true
+		assertTrue(
+			odd.formattedPercent == string.format("%.2f%%", odd.percent),
+			`{offer.id} {key} formatted to 2 decimal places`
+		)
+		totalPercent += odd.percent
+	end
+	assertNear(totalPercent, 100.0, `{offer.id} jointOdds sum to 100.00%`)
+	assertTrue(
+		string.format("%.2f%%", totalPercent) == "100.00%",
+		`{offer.id} formatted jointOdds sum equals 100.00%`
+	)
+end
+
+local function verifyPaidEggJointOdds(
+	unrestricted: { PolicyLogic.ShopCatalogItem },
+	restricted: { PolicyLogic.ShopCatalogItem },
+	nilPolicy: { PolicyLogic.ShopCatalogItem }
+)
+	for _, offer in ipairs(unrestricted) do
+		verifyJointOddsForOffer(offer)
+	end
+	local prismJoint = unrestricted[1].jointOdds :: { PolicyLogic.JointOdd }
+	local cyberJoint = unrestricted[2].jointOdds :: { PolicyLogic.JointOdd }
+	assertNear(prismJoint[1].percent, 41.25, "PrismFox Normal exact joint odd")
+	assertNear(prismJoint[2].percent, 9.90, "PrismFox Shiny exact joint odd")
+	assertNear(prismJoint[9].percent, 0.84, "AegisGryphon Golden exact joint odd")
+	assertNear(cyberJoint[1].percent, 41.25, "CyberHound Normal exact joint odd")
+	assertNear(cyberJoint[5].percent, 5.94, "NeonMoth Shiny exact joint odd")
+	assertNear(cyberJoint[9].percent, 0.84, "VoltSerpent Golden exact joint odd")
+	for _, list in ipairs({ restricted, nilPolicy }) do
+		for _, offer in ipairs(list) do
+			assertTrue(offer.jointOdds == nil, "DirectBundle must never expose jointOdds")
+		end
+	end
+end
+
+local function verifyRestrictedPaidHatchFallback()
+	local p = EconomyLogic.createDefaultProfile(2000)
+	local noEgg = PolicyLogic.hatchEggWithPolicy(p, "Shop_PrismEgg", 1, false, true)
+	assertTrue(
+		not noEgg.ok and noEgg.reason == "NoEggInInventory",
+		"Restricted paid hatch fails closed when player owns 0 eggs"
+	)
+
+	local grant = PolicyLogic.applyProductReceipt(p, "rcpt_owned_prism", 190000101, false)
+	assertTrue(grant.granted and p.eggs.Shop_PrismEgg == 1, "Owned paid egg seeded")
+
+	-- Even with extreme RNG rolls (0.99, 0.99), restricted policy hatches deterministic bundle
+	local r1 = PolicyLogic.hatchEggWithPolicy(p, "Shop_PrismEgg", 1, false, true, 0.99, 0.99)
+	local bundle1 = MonetizationConfigs.getDirectBundleForEgg("Shop_PrismEgg")
+	assertTrue(r1.ok and r1.data ~= nil and bundle1 ~= nil, "Restricted paid hatch succeeds")
+	assertTrue((r1.data :: any).directBundle == true, "Restricted paid hatch reports directBundle")
+	assertTrue(p.eggs.Shop_PrismEgg == nil, "Consumes 1 Shop_PrismEgg on fallback hatch")
+	assertTrue(
+		#p.pets == 1
+			and p.pets[1].uid == "pet_1"
+			and p.pets[1].speciesId == (bundle1 :: any).guaranteedPetId
+			and p.pets[1].mutationKey == (bundle1 :: any).guaranteedMutation
+			and p.pets[1].pedestalIndex == 1
+			and p.nextPetSeq == 2,
+		"Fallback hatch awards guaranteed pet, mutation, uid, and pedestal placement"
+	)
+	assertTrue(
+		p.codexUnlocked[(bundle1 :: any).guaranteedPetId] == true
+			and p.ownedCosmetics[(bundle1 :: any).guaranteedBallSkin] == true
+			and p.equippedBallSkin == (bundle1 :: any).guaranteedBallSkin
+			and #p.activeFollowerUids == 1
+			and p.activeFollowerUids[1] == "pet_1",
+		"Fallback hatch updates codex, ownedCosmetics, ballSkin, and active follower slot"
+	)
+end
+
+local function verifyNilPolicyHatchAndNonClobber()
+	local p = EconomyLogic.createDefaultProfile(3000)
+	assertTrue(
+		PolicyLogic.applyProductReceipt(p, "rcpt_cyber_1", 190000102, false).granted
+			and PolicyLogic.applyProductReceipt(p, "rcpt_cyber_2", 190000102, false).granted,
+		"Seeded 2 Seasonal_CyberEggs"
+	)
+	p.equippedBallSkin = "PrismTrail"
+
+	local okNil = PolicyLogic.hatchEggWithPolicy(p, "Seasonal_CyberEgg", 1, false, nil :: any)
+	assertTrue(okNil.ok, "First Seasonal_CyberEgg hatches on pedestal 1 under nil policy")
+	assertTrue(p.pets[1].speciesId == "NeonMoth" and p.pets[1].mutationKey == "Normal", "Zero RNG")
+	assertTrue(
+		p.ownedCosmetics.CyberPulse == true and p.equippedBallSkin == "PrismTrail",
+		"Unlocks CyberPulse without clobbering already equipped ball skin"
+	)
+
+	local failOcc = PolicyLogic.hatchEggWithPolicy(p, "Seasonal_CyberEgg", 1, false, nil :: any)
+	assertTrue(
+		not failOcc.ok and failOcc.reason == "PedestalOccupied" and p.eggs.Seasonal_CyberEgg == 1,
+		"Occupied pedestal fails closed without consuming paid egg"
+	)
+	local failLock = PolicyLogic.hatchEggWithPolicy(p, "Seasonal_CyberEgg", 5, false, true)
+	assertTrue(
+		not failLock.ok and failLock.reason == "PedestalLocked" and p.eggs.Seasonal_CyberEgg == 1,
+		"Locked pedestal fails closed without consuming paid egg"
+	)
+end
+
+local function verifyUnrestrictedAndDeterministicRepeats()
+	local p = EconomyLogic.createDefaultProfile(4000)
+	assertTrue(
+		PolicyLogic.applyProductReceipt(p, "rcpt_prism_unr", 190000101, false).granted,
+		"Seeded unrestricted Shop_PrismEgg"
+	)
+	local rUnr = PolicyLogic.hatchEggWithPolicy(p, "Shop_PrismEgg", 2, false, false, 0.99, 0.99)
+	assertTrue(
+		rUnr.ok
+			and (rUnr.data :: any).pet.speciesId == "AegisGryphon"
+			and (rUnr.data :: any).pet.mutationKey == "Golden",
+		"Unrestricted hatch uses normal weighted RNG"
+	)
+	local rStarter = PolicyLogic.hatchEggWithPolicy(p, "StarterEgg", 3, false, true)
+	assertTrue(
+		rStarter.ok
+			and (rStarter.data :: any).pet.speciesId == "TrainingPup"
+			and p.starterEggHatched,
+		"Non-paid StarterEgg hatches normally even under restricted policy"
+	)
+
+	local pRep = EconomyLogic.createDefaultProfile(5000)
+	pRep.pedestalsUnlocked = 6
+	for idx = 1, 4 do
+		assertTrue(
+			PolicyLogic.applyProductReceipt(pRep, `rcpt_rep_{idx}`, 190000101, false).granted,
+			"Seeded repeat Shop_PrismEgg"
+		)
+		local res = PolicyLogic.hatchEggWithPolicy(
+			pRep,
+			"Shop_PrismEgg",
+			idx,
+			false,
+			true,
+			idx * 0.24,
+			0.99
+		)
+		assertTrue(
+			res.ok
+				and pRep.pets[idx].speciesId == "StarlightBeetle"
+				and pRep.pets[idx].mutationKey == "Normal"
+				and pRep.pets[idx].uid == `pet_{idx}`,
+			"Repeated restricted hatch is 100% deterministic"
+		)
+	end
+end
+
+verifyPaidEggJointOdds(unrestrictedShop, restrictedShop, nilShop)
+verifyRestrictedPaidHatchFallback()
+verifyNilPolicyHatchAndNonClobber()
+verifyUnrestrictedAndDeterministicRepeats()
 
 print("PASS: ConfigsAndPolicy.spec.luau")
