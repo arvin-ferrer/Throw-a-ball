@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local PolicyLogic = require(Shared.Utils.PolicyLogic)
 local PetConfigs = require(Shared.Configs.PetConfigs)
 local EggConfigs = require(Shared.Configs.EggConfigs)
 local MathUtil = require(Shared.Utils.MathUtil)
@@ -97,13 +98,25 @@ function PetIncomeService.collectAllPadsMagnet(player: Player)
 	end
 end
 
+local function buildRevealToastText(
+	newPet: EconomyLogic.OwnedPet,
+	speciesName: string,
+	bundleBallSkin: string?
+): string
+	if bundleBallSkin then
+		return `DIRECT BUNDLE: [{newPet.mutationKey}] {speciesName} + {bundleBallSkin} Skin!`
+	end
+	return `HATCHED [{newPet.mutationKey}] {speciesName}!`
+end
+
 local function broadcastHatchReveal(
 	player: Player,
 	profile: EconomyLogic.PlayerProfile,
 	plot: PlotService.PlotRecord,
 	eggId: string,
 	pedestalIndex: number,
-	newPet: EconomyLogic.OwnedPet
+	newPet: EconomyLogic.OwnedPet,
+	bundleBallSkin: string?
 )
 	local remotes = Remotes.ensureServer()
 	local spec = PetConfigs.getSpecies(newPet.speciesId)
@@ -132,11 +145,26 @@ local function broadcastHatchReveal(
 			local label = if spec then spec.displayName else newPet.speciesId
 			remotes.ToastNotify:FireClient(
 				player,
-				`HATCHED [{newPet.mutationKey}] {label}!`,
+				buildRevealToastText(newPet, label, bundleBallSkin),
 				{ 74, 222, 128 }
 			)
 		end
 	end)
+end
+
+local function emitHatchTelemetry(player: Player, eggId: string, newPet: EconomyLogic.OwnedPet)
+	if not telemetryHook then
+		return
+	end
+	telemetryHook("EggHatched", {
+		userId = player.UserId,
+		eggId = eggId,
+		speciesId = newPet.speciesId,
+		mutationKey = newPet.mutationKey,
+	})
+	if eggId == "StarterEgg" then
+		telemetryHook("StarterHatch", { userId = player.UserId })
+	end
 end
 
 function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pedestalIndex: number)
@@ -149,14 +177,9 @@ function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pede
 		return
 	end
 	local hasVip = DataService.hasPass(player, "Pass_ExtraPedestals")
-	local res = EconomyLogic.hatchEggOnPedestal(
-		profile,
-		eggId,
-		pedestalIndex,
-		hasVip,
-		math.random(),
-		math.random()
-	)
+	local isPolicyRestricted = player:GetAttribute("ArePaidRandomItemsRestricted") ~= false
+	local res =
+		PolicyLogic.hatchEggWithPolicy(profile, eggId, pedestalIndex, hasVip, isPolicyRestricted)
 	if not res.ok or not res.data then
 		Remotes.ensureServer().ToastNotify
 			:FireClient(player, `Cannot hatch: {res.reason or "Error"}`, { 239, 68, 68 })
@@ -164,18 +187,20 @@ function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pede
 	end
 	activeHatchLock[player.UserId] = true
 	local newPet = res.data.pet :: EconomyLogic.OwnedPet
-	broadcastHatchReveal(player, profile, plot, eggId, pedestalIndex, newPet)
-	if telemetryHook then
-		telemetryHook("EggHatched", {
-			userId = player.UserId,
-			eggId = eggId,
-			speciesId = newPet.speciesId,
-			mutationKey = newPet.mutationKey,
-		})
-		if eggId == "StarterEgg" then
-			telemetryHook("StarterHatch", { userId = player.UserId })
-		end
+	local bundle = res.data.bundle
+	local bundleBallSkin = if res.data.directBundle and bundle
+		then tostring(bundle.guaranteedBallSkin)
+		else nil
+	if bundleBallSkin and bundle then
+		Remotes.ensureServer().ToastNotify
+			:FireClient(
+				player,
+				`Policy Direct Bundle: opening {bundle.displayName}!`,
+				{ 250, 204, 21 }
+			)
 	end
+	broadcastHatchReveal(player, profile, plot, eggId, pedestalIndex, newPet, bundleBallSkin)
+	emitHatchTelemetry(player, eggId, newPet)
 end
 
 function PetIncomeService.pickDefaultEggForPlayer(profile: EconomyLogic.PlayerProfile): string?
