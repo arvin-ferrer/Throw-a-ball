@@ -128,24 +128,46 @@ for _, offer in ipairs(restrictedShop) do
 	assertTrue(offer.guaranteedPetId ~= nil, "DirectBundle names exact guaranteed pet")
 end
 
-local canPaidEggRestricted = PolicyLogic.canPromptProduct(190000101, true)
-assertTrue(not canPaidEggRestricted, "Restricted account cannot prompt paid random egg")
-local canDirectRestricted = PolicyLogic.canPromptProduct(190000201, true)
-assertTrue(canDirectRestricted, "Restricted account CAN prompt direct bundle")
+for _, paidEggProduct in ipairs({ 190000101, 190000102 }) do
+	local canPrompt = PolicyLogic.canPromptProduct(paidEggProduct, true)
+	assertTrue(not canPrompt, `Restricted account cannot prompt paid random egg {paidEggProduct}`)
+end
+for _, bundleProduct in ipairs({ 190000201, 190000202 }) do
+	local canPrompt = PolicyLogic.canPromptProduct(bundleProduct, true)
+	assertTrue(canPrompt, `Restricted account CAN prompt direct bundle {bundleProduct}`)
+end
 
--- 5. Receipt idempotency
+-- 5. Receipt idempotency & restricted paid-random rejection
 local profile = EconomyLogic.createDefaultProfile(1000)
 local r1 = PolicyLogic.applyProductReceipt(profile, "rcpt_001", 190000201, true)
-assertTrue(r1.granted and not r1.duplicate, "First receipt grants Direct Bundle")
+assertTrue(r1.granted and not r1.duplicate, "First receipt grants Direct Bundle 1")
 assertTrue(
 	#profile.pets == 1 and profile.pets[1].speciesId == "StarlightBeetle",
-	"Direct Bundle pet added"
+	"Direct Bundle 1 pet added"
+)
+local r1b = PolicyLogic.applyProductReceipt(profile, "rcpt_001b", 190000202, true)
+assertTrue(r1b.granted and not r1b.duplicate, "First receipt grants Direct Bundle 2")
+assertTrue(
+	#profile.pets == 2 and profile.pets[2].speciesId == "NeonMoth",
+	"Direct Bundle 2 pet added"
 )
 local r2 = PolicyLogic.applyProductReceipt(profile, "rcpt_001", 190000201, true)
 assertTrue(r2.granted and r2.duplicate, "Duplicate receipt is idempotent")
-assertTrue(#profile.pets == 1, "Duplicate receipt did NOT duplicate pet")
+assertTrue(#profile.pets == 2, "Duplicate receipt did NOT duplicate pet")
 
-local rForbidden = PolicyLogic.applyProductReceipt(profile, "rcpt_002", 190000101, true)
-assertTrue(not rForbidden.granted, "Restricted account receipt for random egg rejected")
+for idx, paidEggProduct in ipairs({ 190000101, 190000102 }) do
+	local petCountBefore = #profile.pets
+	local txCountBefore = #profile.purchaseIds
+	local rForbidden =
+		PolicyLogic.applyProductReceipt(profile, `rcpt_forb_{idx}`, paidEggProduct, true)
+	assertTrue(not rForbidden.granted, `Restricted account receipt {paidEggProduct} rejected`)
+	assertTrue(
+		#profile.pets == petCountBefore
+			and #profile.purchaseIds == txCountBefore
+			and profile.eggs.Shop_PrismEgg == nil
+			and profile.eggs.Seasonal_CyberEgg == nil,
+		"Rejected restricted random egg receipt leaves profile unmutated"
+	)
+end
 
 print("PASS: ConfigsAndPolicy.spec.luau")

@@ -8,6 +8,7 @@
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -45,32 +46,58 @@ local toastLabel: TextLabel? = nil
 local toastExpireAt = 0
 local serviceModalHandler: ((string) -> ())? = nil
 local isHoldingClaim = false
+local activeLightingTween: Tween? = nil
+local lastLightingKey = ""
 
-local function applyBiomeLighting(zone: string, biomeId: string, overchargedActive: boolean)
+local function resolveBiomeLightingTarget(
+	zone: string,
+	biomeId: string,
+	overchargedActive: boolean
+): (string, Color3, Color3, number)
 	if overchargedActive then
-		Lighting.Ambient = Color3.fromRGB(110, 62, 145)
-		Lighting.OutdoorAmbient = Color3.fromRGB(145, 72, 180)
-		Lighting.ClockTime = 20.5
-		return
+		return "Overcharged", Color3.fromRGB(110, 62, 145), Color3.fromRGB(145, 72, 180), 20.5
 	end
 	local biome = BiomeConfigs.getBiome(biomeId)
 	if zone ~= "Hub" and biome then
 		local a = biome.ambientColor
-		Lighting.Ambient = Color3.fromRGB(a[1], a[2], a[3])
-		Lighting.OutdoorAmbient = Color3.fromRGB(
-			math.min(255, a[1] + 24),
-			math.min(255, a[2] + 24),
-			math.min(255, a[3] + 24)
-		)
-		Lighting.ClockTime = if biomeId == "MoltenCaldera"
+		local clockTime = if biomeId == "MoltenCaldera"
 			then 18.2
 			elseif biomeId == "FrostbiteCavern" then 11.5
 			else 14.0
-	else
-		Lighting.Ambient = Color3.fromRGB(115, 130, 152)
-		Lighting.OutdoorAmbient = Color3.fromRGB(142, 156, 178)
-		Lighting.ClockTime = 13.5
+		return `Biome:{biomeId}`,
+			Color3.fromRGB(a[1], a[2], a[3]),
+			Color3.fromRGB(
+				math.min(255, a[1] + 24),
+				math.min(255, a[2] + 24),
+				math.min(255, a[3] + 24)
+			),
+			clockTime
 	end
+	return "Hub", Color3.fromRGB(115, 130, 152), Color3.fromRGB(142, 156, 178), 13.5
+end
+
+local function applyBiomeLighting(zone: string, biomeId: string, overchargedActive: boolean)
+	local key, ambient, outdoorAmbient, clockTime =
+		resolveBiomeLightingTarget(zone, biomeId, overchargedActive)
+	if key == lastLightingKey then
+		return
+	end
+	lastLightingKey = key
+	if activeLightingTween then
+		activeLightingTween:Cancel()
+		activeLightingTween = nil
+	end
+	local tween = TweenService:Create(
+		Lighting,
+		TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Ambient = ambient,
+			OutdoorAmbient = outdoorAmbient,
+			ClockTime = clockTime,
+		}
+	)
+	activeLightingTween = tween
+	tween:Play()
 end
 
 local function buildTopBanner(gui: ScreenGui)
