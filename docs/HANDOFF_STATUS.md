@@ -1,21 +1,23 @@
 # Ball Brawl: Boss Eggs — Team Handoff & Project Status
 
-**Last Updated:** 2026-11-23 (`main @ 8b531ae`, PRs #21–#30 merged)  
-**Canonical Design Spec:** [GameIdea_Evolved_GDD.md](GameIdea_Evolved_GDD.md) (`v1.1`)  
+**Last Updated:** 2026-11-24 (`main @ bccd550`, PRs `#21`–`#40` merged)
+
+**Canonical Design Spec:** [GameIdea_Evolved_GDD.md](GameIdea_Evolved_GDD.md) (`v1.1`)
+
 **Team Workflow & Contracts:** [TEAM_WORKFLOW_3P.md](TEAM_WORKFLOW_3P.md) · [TEAM_SETUP.md](TEAM_SETUP.md)
 
-Arvin is pausing dev on his end — this document is the single source of truth for **what is already built and verified on `main`**, **how to resolve the live Team Create / branch overlap cleanly**, and **every remaining task needed to reach MVP & soft launch**.
+This document is the single source of truth for **what is merged and verified on `main`**, **current GitHub issue status (`#1`–`#20`)**, **remaining manual Roblox Studio / Open Cloud / Creator Hub launch steps**, and the **live module architecture**.
 
 ---
 
 ## 1. Executive Summary — Where the Game Stands Today
 
-- **Core Server & Economy Backbone: ~90% Complete (Merged on `main`)**  
-  All 3 phases of gameplay, combat validation, all 3 biome bosses, mobs, ProfileStore persistence, Dual-Currency ledger (`Coins` + `Boss Gems`), Cash Pads, `<=12h` offline accrual, 3-to-1 Pet Fusion, Lv 1–25 upgrades, Traits, 5-Min Overcharged scheduler, Active Ball Perks, and Roblox 2026 `PolicyService` + exactly-once `ProcessReceipt` monetization are implemented on `main` with strict Luau (`--!strict`) and passing Lune unit tests.
-- **Core Client Controllers: ~55% Complete (Merged on `main`)**  
-  Client bootstrap, `ClientNet`, `MockStateHarness`, `BallThrowController` + touch UI, `ArenaHUDController` (phase banner, opt-in modal, 5s claim ring), `PlotCashController`, `HatchVFXController` (3s reveal), and `FollowerRigController` are merged. **Hub progression menus (`#12`), Codex + Policy-aware Shop UI (`#16`), and mobile/audio polish (`#19`) still need to be built.**
-- **3D Assets & Studio Map: Models Exported, Studio Upload & Launch Art Pending**  
-  `Workspace.BallBrawl_Map_v2` exists in Team Create. **34 Blender models** (`.fbx` + `.glb`) and **35 preview renders** covering all 3 biomes (3 rigged bosses, 6 rigged mobs, 5 ball tiers, 5 boss eggs standard/overcharged, 13 pets, boulder) are merged under `game/assets/`. They still need **Roblox asset upload** (to replace placeholder Parts in-game), a **silhouette polish pass** on older boxy models, and **#20 launch thumbnails/icon**.
+- **Server Authority, Economy & Telemetry (`#1`, `#4`, `#5`, `#9`, `#10`, `#14`, `#15`, `#18`): Complete on `main`**
+  All 9 server services (`DataService`, `PolicyGuardService`, `PlotService`, `ArenaCycleService`, `BossAIService`, `CombatService`, `PetIncomeService`, `EconomyService`, `TelemetryService`) are merged on `main` with `--!strict`, lease-token DataStore session locking, fail-closed Roblox 2026 `PolicyService` compliance, atomic `ProcessReceipt` handling, locked-room PvP containment, and launch funnel/bounce telemetry (`TelemetryLogic`, PR `#37`).
+- **Client UI, Combat, Shop & 0–5m Onboarding (`#2`, `#6`, `#7`, `#11`, `#12`, `#16`, `#19`): Code Merged on `main` (Live Studio QA Open on `#19`)**
+  Following PR `#36` (`GabWork`), PR `#38` (`#16`), PR `#39` (`#19`), and PR `#40` (`#20`), all 6 client controllers (`AnimationController`, `ArenaHUDController`, `BallThrowController`, `HatchVFXController`, `OnboardingGuideController`, `PlotCashController`) and 5 UI modules (`HudGui`, `HudIcons`, `HubModalsGui`, `ShopCodexGui`, `Theme`) are merged on `main`. Issue `#19` stays open for live Roblox Studio Device Simulator (`~667x375`) 60 FPS QA and restricted-policy (`ArePaidRandomItemsRestricted = true`) account playtesting.
+- **3D Assets & Launch Art (`#3`, `#8`, `#13`, `#17`, `#20`): Blender Exports & Launch Art Merged; Open Cloud Upload & Biome 2–3 Studio Art Open**
+  All 39 Blender 5.x scripts (`game/assets/blender/`), 35 `.fbx` / 36 `.glb` exports (`game/assets/exports/`), 40 preview/QA renders (`game/assets/renders/`), and 13 Cycles launch UI assets (`game/assets/ui/`: 3 × 16:9 thumbnails, 512×512 game icon, 5 Game Pass icons, and 4 Badge icons) are merged on `main` (PR `#29`, PR `#32`, PR `#36`, PR `#40`). Issues `#13` and `#17` remain open solely for Roblox Open Cloud asset upload (blocked until `~/.config/roblox/opencloud.key` is configured) and interactive Roblox Studio Hub / Biome 2–3 map art finishing.
 
 ---
 
@@ -23,108 +25,87 @@ Arvin is pausing dev on his end — this document is the single source of truth 
 
 | # | Phase | Role | Issue | Status | Notes / What Remains |
 | :---: | :--- | :--- | :--- | :--- | :--- |
-| **1** | P0 | Server | Shared Configs & Typed Remotes | **Implemented (issue open)** | All 6 config modules (`Biome`, `Combat`, `Economy`, `Monetization`, `Pet`, `Shop`) & `Remotes.luau` live on `main`. Document final remote payload contract & close issue. |
-| **2** | P0 | Client | Client Bootstrap, `ClientNet` & Mock Harness | **Done (PR #21)** | Merged & closed (`@Natex15`). |
-| **3** | P0 | 3D/Map | Hub Plaza & Meadow Greybox (`BallBrawl_Map_v2`) | **In Team Create (issue open)** | Map exists in Team Create (`Throw-a-ball`). Verify all 26 `CollectionService` tags match `TEAM_WORKFLOW_3P.md` & close issue. |
-| **4** | P1 | Server | `ArenaCycleService` (3-Phase FSM, 5s Claim, Storm) | **Done (PR #23)** | Merged, playtested in Studio & closed. |
-| **5** | P1 | Server | `CombatService` & `BossAIService` (Mossback Golem) | **Done (PR #24)** | Merged, playtested in Studio & closed. |
-| **6** | P1 | Client | `BallThrowController` (Pad Lock, Dodge, Aim Assist) | **Done (PR #22)** | Merged & closed (`@Natex15`). |
-| **7** | P1 | Client | `ArenaHUDController` (Banner, Opt-In, 5s Ring) | **Done (PR #24)** | Merged & closed. |
-| **8** | P1 | 3D/Map | Meadow 3D Assets (Golem, Mobs, Balls, Boss Egg) | **Exported (PR #29)** | `.fbx`/`.glb` + renders in `game/assets/`. Still needs **Roblox upload** + optional organic sculpt polish on `MossbackGolem` / `BrambleBoar`. |
-| **9** | P2 | Server | `DataService` & `EconomyService` (ProfileStore, Ascension) | **Done (PR #25)** | Merged & closed. |
-| **10** | P2 | Server | `PetIncomeService` & `PlotService` (Cash Pads, Offline, Fusion) | **Done (PR #26)** | Merged & closed. |
-| **11** | P2 | Client | `PlotCashController`, `HatchVFXController` & Followers | **Done (PR #30)** | Merged on `main@8b531ae`. (Audio upgrade via `AudioCatalog` listed in Section 4.) |
-| **12** | P2 | Client | **Hub Progression UIs** (Pet Bag, Fusion, Trait Altar, Shop, Ascension) | **TODO** | Server remotes (`ShopPurchase`, `PetAction`) are ready. Build pure view-model + Lune spec + mobile-safe UI. |
-| **13** | P2 | 3D/Map | Hub Plaza Art, Tier 1–3 Plots & Starter/Meadow Pets | **Pets Exported (PR #29)** | 5 Starter/Meadow pets exported. Hub art pass + Roblox upload of pet meshes still needed. |
-| **14** | P3 | Server | 5-Min Overcharged Scheduler, Biome 2–3 Bosses & Active Perks | **Done (PR #27)** | Merged & closed. (Follower `Swift` / `Brawler` trait multipliers to port from teammate snapshot — see Section 4.) |
-| **15** | P3 | Server | `PolicyGuardService` & Exactly-Once `ProcessReceipt` | **Done (PR #28)** | Merged on `main@36af854`. |
-| **16** | P3 | Client | **Codex UI, Overcharged Skybox/Alerts & Policy-Aware Shop UI** | **TODO** | Must call `GetPolicyState` + `PolicyGuard.getOfferDisplay` so restricted regions see direct bundles (never random odds). |
-| **17** | P3 | 3D/Map | Biome 2–3 Maps, Glacier Yeti, Obsidian Wyrm & 8 Pets | **Models Exported (PR #29)** | All 18 Frostbite/Caldera models exported & QA'd. Still needs Roblox upload + Biome 2–3 map art pass. |
-| **18** | P4 | Server | **Launch Telemetry Hooks & Anti-Exploit Fuzz Test Suite** | **TODO** | Port `TelemetryService` (`AnalyticsService:LogCustomEvent` + `<60s` / `61-180s` / `>180s` bounce buckets) + add Lune fuzz specs for all pure validators. |
-| **19** | P4 | Client | **Mobile 60 FPS Ergonomics Pass, Audio Mixing & Onboarding** | **TODO** | Device Simulator QA (Phone/Tablet), wire `AudioCatalog` SFX across combat/UI/hatch/cash pads, tune 0–5m onboarding. |
-| **20** | P4 | 3D/Map | **Launch Art Package** (3× 16:9 Thumbnails, 512×512 Icon, Cosmetics) | **TODO** | Compose 3 high-CTR 16:9 thumbnails + 512×512 icon under `game/assets/launch/` (or `game/assets/ui/`) + Ball Trails / Plot Themes. |
+| **1** | P0 | Server | Shared Configs & Typed Remotes | **Closed** | All 6 config modules (`Biome`, `Economy`, `Egg`, `Monetization`, `Pet`, `Trait`) & `Remotes.luau` live on `main`. |
+| **2** | P0 | Client | Client Bootstrap & Remote Wrapper | **Closed (PR #21)** | Merged (`PR #21`) and evolved via `PR #33` / `PR #36` into `init.client.luau` + `Controllers/` + `UI/`. |
+| **3** | P0 | 3D/Map | Hub Plaza & Meadow Greybox (`BallBrawl_Map_v2`) | **Closed** | `Workspace.BallBrawl_Map_v2` imported in Studio with `26` `CollectionService` tags matching `TEAM_WORKFLOW_3P.md`. |
+| **4** | P1 | Server | `ArenaCycleService` (3-Phase FSM, 5s Claim, Storm) | **Closed (PR #23)** | Hardened in `PR #37` with room bounds, entrant pre-pruning, atomic opt-in switching, and single payout settlement. |
+| **5** | P1 | Server | `CombatService` & `BossAIService` (Mossback Golem) | **Closed (PR #24)** | Evolved with ballistic/homing throws (`PR #35`, `PR #36`), arena-validated damage (`PR #37`), and KO position capture (`PR #40`). |
+| **6** | P1 | Client | `BallThrowController` (Training, Dodge, Aim Assist) | **Closed (PR #22)** | Evolved with PC camera aim (`PR #34`), live bounce rebound (`PR #35`), 60 FPS animations (`PR #36`), and cosmetic VFX (`PR #40`). |
+| **7** | P1 | Client | `ArenaHUDController` (Banner, Opt-In, 5s Ring) | **Closed (PR #24)** | Updated with tweened Overcharged lighting and 44px mobile claim ergonomics (`PR #38`). |
+| **8** | P1 | 3D/Map | Meadow 3D Assets (Golem, Mobs, Balls, Boss Egg) | **Closed (PR #29)** | Blender exports/renders merged (`PR #29`, `PR #32`, `PR #36`). Studio `rbxassetid://` binding tracked under `#13` / `#17`. |
+| **9** | P2 | Server | `DataService` & `EconomyService` (Persistence, Ascension) | **Closed (PR #25)** | Hardened in `PR #37` with lease-token locking, Studio-only memory fallback, and finite/overflow ledger guards. |
+| **10** | P2 | Server | `PetIncomeService` & `PlotService` (Cash Pads, Offline, Fusion) | **Closed (PR #26)** | Hardened in `PR #37` and updated in `PR #40` with theme-only refresh, pet rig reuse, and vacant plot material restore. |
+| **11** | P2 | Client | `PlotCashController`, `HatchVFXController` & Followers | **Closed (PR #30)** | Evolved with `AudioCatalog` chimes, `AnimationController` (`PR #36`), and `SupernovaHatch` beam VFX (`PR #40`). |
+| **12** | P2 | Client | Hub Progression UIs (`HubModalsGui`) | **Closed (PR #36)** | Pets (Lv 1–25, Fusion, Traits, Followers, Pedestals), Eggs/Crafting, and Upgrades/Ascension tabs live in `HubModalsGui.luau`. |
+| **13** | P2 | 3D/Map | Hub Plaza Art, Tier 1–3 Plots & Starter/Meadow Pets | **Open (Exports Merged)** | Blender assets merged (`PR #29` / `PR #32`). **Remaining:** Open Cloud upload (`~/.config/roblox/opencloud.key`) + Studio Hub/Plot art pass. |
+| **14** | P3 | Server | 5-Min Overcharged Scheduler, Biome 2–3 Bosses & Active Perks | **Closed (PR #27)** | Live across `ArenaCycleLogic`, `BossAIService`, `CombatLogic`, and `ArenaHUDController`. |
+| **15** | P3 | Server | `PolicyGuardService` & Exactly-Once `ProcessReceipt` | **Closed (PR #28)** | Hardened in `PR #37` with fail-closed policy lookup tokens and durable committed receipt checks. |
+| **16** | P3 | Client | Codex UI, Overcharged Lighting & Policy-Aware Shop UI | **Closed (PR #38)** | Smooth Overcharged lighting tween, fail-closed `ShopCodexGui` direct bundles, `100%` odds, and mobile card fixes merged. |
+| **17** | P3 | 3D/Map | Biome 2–3 Maps, Glacier Yeti, Obsidian Wyrm & 8 Pets | **Open (Exports Merged)** | Blender exports/renders merged (`PR #29` / `PR #32`). **Remaining:** Open Cloud upload, `rbxassetid://` binding, & Frostbite/Caldera Studio maps. |
+| **18** | P4 | Server | Launch Telemetry Hooks & Anti-Exploit Fuzz Test Suite | **Closed (PR #37)** | Added `TelemetryLogic`, `TelemetryService` onboarding/bounce/opt-in/shop events, `SecurityInvariants.spec.luau`, and P0/P1 fixes. |
+| **19** | P4 | Client | Mobile 60 FPS Ergonomics Pass, Audio Mixing & Onboarding | **Open (Code Merged PR #39)** | `OnboardingLogic`, pooled `OnboardingGuideController` floor beam, and `HudGui` mobile wrap merged. **Remaining:** live Studio Device Simulator & policy QA. |
+| **20** | P4 | 3D/Map | Launch Art Package (Thumbnails, Icon, Cosmetics & Plot Themes) | **Closed (PR #40)** | Merged 13 UI PNGs (`game/assets/ui/`), 4 cosmetic QA renders (`game/assets/renders/`), cosmetic VFX, `RoyalMarblePlot`, and `CosmeticsAndThemes.spec.luau`. |
 
 ---
 
-## 3. IMPORTANT FIRST STEP — Team Create & Branch Conflict Resolution
+## 3. Remaining Manual Studio / Open Cloud / Creator Hub Launch Checklist
 
-Before anyone syncs scripts into the shared Team Create place **`Throw-a-ball` (`placeId: 76642126183926`)**, read this carefully so nobody loses work:
+All Luau systems, unit specs, CI checks, and Blender exports are on `main`. Complete these manual external steps before public launch:
 
-1. **What happened:** While PRs `#21`–`#30` were being merged onto `origin/main`, `@Gab172005` (`GabTheGreat` / `GabLakasTama`) pushed a parallel baseline branch **`origin/GabWork`** (`8d99ad4`, 40 files) and created **`ReplicatedStorage.Assets`** (61 Part/Mesh prefabs across `Balls`, `Targets`, `Mobs`, `Bosses`, `Eggs`, `Pets`, `VFX`, `HubProps`) plus untagged scripts in Team Create.
-2. **Current live state of Team Create (`Throw-a-ball`):**
-   - `ReplicatedStorage.Assets`, `Workspace.BallBrawl_Map_v2`, and `Workspace.Pyraxis` are **intact and belong to Dev C — do NOT overwrite or delete them**.
-   - `ReplicatedStorage.Shared` currently contains 14 untagged modules from `GabWork` (NOT `origin/main`).
-   - `ServerScriptService.Server` and `StarterPlayer.StarterPlayerScripts.Client` are currently **empty 1-line shells** (no `SyncedFrom` tag) due to concurrent writes.
-   - A read-only backup of that Studio snapshot was saved on branch **`origin/teammate/teamcreate-snapshot-2026-11-23`**.
-3. **Agreed Resolution Plan (Zero Lost Work):**
-   - Keep **`origin/main` (`8b531ae`)** as the single tested code backbone.
-   - Port the **3 unique high-value features** from `origin/GabWork` / `teammate/teamcreate-snapshot-2026-11-23` into `main` via a normal PR (details in Section 4.1 below).
-   - Confirm nobody else has `rojo serve` connected to Team Create, then have **one person** pull `main` and sync `ReplicatedStorage.Shared`, `ServerScriptService.Server`, and `StarterPlayerScripts.Client` into `Throw-a-ball` cleanly.
-
----
-
-## 4. Prioritized Handoff Checklist (What Still Needs To Be Done)
-
-### Priority 1 — Port Teammate Snapshot Gems & Re-Sync Team Create (Server + Client)
-Branch already created from `origin/main`: `feat/merge-teammate-teamcreate` (clean PR against `main`):
-1. **`AudioCatalog`** (`game/src/shared/Utils/AudioCatalog.luau`): Port `SOUND_IDS`, `play(key, pitch?, volume?, parent?)` (pitch clamp `0.5–2.2`, volume `0–1.5`, `RollOffMaxDistance = 85`, destroy after `2.5s`), and `playCashSweep(step)`. Wire into `PlotCashController` (using `CashPadView.chimePitch`) and `HatchVFXController`.
-2. **Follower Trait Multipliers (`Swift` & `Brawler`)**: Add pure `ActivePerks.traitMultipliers(pets) -> (damageMult, throwSpeedMult)` (`Brawler = +8%` Ball Damage, `Swift = +10%` Throw Speed per active follower) + Lune tests in `game/tests/ActivePerks.spec.luau`, then apply in `PerkService.rollHit` and `CombatService` (`getThrowSpeedMultiplier` hook).
-3. **`TelemetryService` (`#18` part 1)**: Wrap `AnalyticsService:LogCustomEvent` in `pcall`, track session bounce buckets (`<60s` / `61–180s` / `>180s`), expose `record(event, player, value)`, and wire Arena Win, Arena Participation, Shop Purchase, Egg Hatch, and Soft Ascension.
-4. **One Clean Sync to Team Create:** After merging, sync `main` into `"Throw-a-ball"` and verify playtest with 0 errors.
-
-### Priority 2 — Remaining Client UIs & Polish (`@Natex15` / Dev B)
-Follow the existing pure view-model + Lune spec + thin Roblox UI pattern (`ArenaHUDViewModel.luau` + `ArenaHUDController.luau`):
-- **`#12` Hub Progression UIs:**
-  - Pet Inventory / Equip Followers (`PetAction`: `"Equip"` / `"Unequip"`, 1/2/3 slots at Lv 1/10/25)
-  - 3-to-1 Pet Fusion & Lv 1–25 Upgrade UI (`PetAction`: `"Fuse"`, `"LevelUp"`, `"Place"`, `"Remove"`)
-  - Trait Altar (`PetAction`: `"RerollTrait"`, 5 Boss Gems)
-  - Ball / Target / Pedestal / Vault / Gem Egg / Soft Ascension Shop (`ShopPurchase`: `"BallTier"`, `"TargetTier"`, `"Pedestal"`, `"OfflineVault"`, `"GemEgg"`, `"Ascend"`)
-- **`#16` Codex, Overcharged Alerts & Compliant Shop UI:**
-  - Pet & Mutation Codex panel tracking discovered species/mutations
-  - 5-Min Overcharged global countdown banner + skybox/lighting alert
-  - **Roblox 2026 Compliance:** Call `GetPolicyState` RemoteFunction on open and render through `PolicyGuard.getOfferDisplay` — restricted regions must NEVER see paid random egg odds and must see direct bundles instead; unrestricted regions must show exact `100%` odds tables.
-- **`#19` Mobile 60 FPS & Audio Polish:**
-  - Verify `Scale` sizing, `44px+` touch targets, safe area insets, and zero overlap with Jump/Thumbstick in Roblox Studio Device Simulator (Phone & Tablet).
-  - Connect `AudioCatalog` SFX across throws, hits, gold target combos, boss telegraphs, and victory.
-
-### Priority 3 — Server Hardening & Issue Cleanup (Dev A / Server)
-- **`#18` Anti-Exploit Fuzz Suite:** Add Lune fuzz tests feeding `NaN`, `inf`, `-inf`, huge tables, wrong types, negative numbers, and replayed ids into `CombatMath.validateThrowPayload`, `PolicyGuard`, `PurchaseLedger`, `PetFusion`, and `EconomyLedger` — assert clean rejection with zero state mutation.
-- **`#1` Remotes Contract Doc:** Document every event/function payload in `game/src/shared/Net/Remotes.luau` and close `#1`.
-
-### Priority 4 — 3D Asset Upload, Silhouette Polish & Launch Art (`@Gab172005` / Dev C)
-- **`#3` Tag Audit:** Verify all 26 `CollectionService` tags in `Workspace.BallBrawl_Map_v2` resolve cleanly and close `#3`.
-- **Upload 3D Models to Roblox:**
-  - All 34 Blender `.fbx` / `.glb` models are ready in `game/assets/exports/` (with preview PNGs in `game/assets/renders/`).
-  - Currently bosses/mobs render as placeholder Parts on `main` until uploaded to Roblox and placed in `ServerStorage.BossModels` / `ServerStorage.MobModels` (or mapped to `ReplicatedStorage.Assets` once models are upgraded).
-  - *(Note: Automated bulk upload requires a Roblox Open Cloud Assets API key saved locally — never commit API keys to Git.)*
-- **Optional Art Polish Pass:** Replace remaining rectangular box limbs (`PebbleCub`, `PermafrostBear`, `LavaRhino`, `BrambleBoar`, `CrystalWolf`, `MagmaHound`, `CinderImp`, `ObsidianWyrm`) with sculpted `add_lofted_tube` forms matching `Pyraxis_live_preview.png` and saturated biome accents (Meadow emerald, Frostbite ice-cyan, Caldera lava-orange). *(Arvin's local `git stash@{0}` `wip-boss-art-polish` has early organic sculpt upgrades for `MossbackGolem` & `GlacierYeti` if desired.)*
-- **`#20` Launch Art Package:** Create 3 × 16:9 Roblox Home Thumbnails + 1 × 512×512 Game Icon under `game/assets/ui/` (or `game/assets/launch/`), plus cosmetic Ball Trails and Plot Themes.
+1. **Open Cloud 3D Mesh & Animation Upload (`#13`, `#17`):**
+   - Save a Roblox Open Cloud Assets API key (read+write) to `~/.config/roblox/opencloud.key` (never commit API keys to Git).
+   - Upload the `.glb` / `.fbx` assets in `game/assets/exports/` (bosses, mobs, pets, eggs, balls) to Roblox Creator Store, bind published `rbxassetid://` IDs into `ReplicatedStorage.Assets` / Studio rigs, and confirm `ProceduralModels.luau` renders published meshes cleanly.
+2. **Interactive Roblox Studio Map Art (`#13`, `#17`):**
+   - Finish Hub Plaza props and Tier 1–3 Personal Plot aesthetics in `Workspace.BallBrawl_Map_v2` (confirming 8 vs. 12 plot capacity matches `PlotService.luau`).
+   - Finalize **Frostbite Cavern** and **Molten Caldera** `PvELayer` and `BossPvPArena` terrain, lighting, and cover pillars while keeping all `26` `CollectionService` tags from [TEAM_WORKFLOW_3P.md](TEAM_WORKFLOW_3P.md) intact.
+3. **Sync `main` into Team Create (`Throw-a-ball`):**
+   - Verify `"$ignoreUnknownInstances": true` in [game/default.project.json](../game/default.project.json) and have **one designated engineer** run `cd game && rojo serve` against Team Create (`placeId: 76642126183926`) so Studio-built maps and `ReplicatedStorage.Assets` are preserved cleanly.
+4. **Creator Hub Monetization & Publishing Setup:**
+   - Replace placeholder `passId` (`190001001`–`190001005`) and `devProductId` (`190000101`, `190000102`, `190000201`, `190000202`) values in `game/src/shared/Configs/MonetizationConfigs.luau` and `game/src/shared/Configs/EggConfigs.luau` with live Creator Hub product IDs.
+   - Upload the 13 PNGs from `game/assets/ui/` (3 thumbnails, `GameIcon_512.png`, 5 `GamePass_*.png`, and 4 `Badge_*.png`) in Creator Hub, and confirm `DataStoreService` and `AnalyticsService` are enabled on the published experience.
+5. **Live Studio Device Simulator & Policy QA (`#19` Close Gate):**
+   - Playtest end-to-end in Roblox Studio Device Simulator (small phone `~667x375` + tablet + PC): confirm 60 FPS performance, touch button spacing, full `0–5m` onboarding guide flow, audio mix levels, and cosmetic VFX / `RoyalMarblePlot` behavior.
+   - Verify both unrestricted (`ArePaidRandomItemsRestricted = false`) 100% odds display and restricted (`Test_RestrictRandom = true` / restricted account) `DirectBundle` fallback + `ProcessReceipt` grants, then close `#19`.
+   - Before wide release, review and address any deferred pre-release P1 hardening items flagged in the final audit (`PetIncomeService` policy check on owned paid-egg hatch, `ShopCodexGui` 9 joint Pet × Mutation odds view, `ArenaCycleLogic` scramble `phaseEndsAt` timeout + authored room bounds, `CombatService` homing world sweep, `PlotService` vertical pad support + plot count alignment, `DataService` failed final save retry / `BindToClose`, and `TelemetryService` first-session/offer cohort fixes).
 
 ---
 
-## 5. Quick Local Dev Commands (All Teammates)
+## 4. Quick Local Dev Commands (All Teammates)
 
 ```bash
 # 1. One-time machine setup (installs Rokit: Rojo, StyLua, Selene, Lune)
-python scripts/setup_team.py
+python3 scripts/setup_team.py
 
 # 2. Mandatory quality gate before every commit / PR (StyLua + Selene + Lune + Rojo build)
-python scripts/check.py
+python3 scripts/check.py
 
-# 3. Sync scripts into a LOCAL .rbxl snapshot in Roblox Studio (never two rojo serves on live Team Create!)
+# 3. Cross-platform Python tooling unit tests
+python3 -m unittest discover -s scripts/tests -v
+
+# 4. Sync scripts into a LOCAL .rbxl snapshot in Roblox Studio (never two rojo serves on live Team Create!)
 cd game && rojo serve
 
-# 4. Run any headless Blender asset script (one at a time)
-python scripts/blender_run.py game/assets/blender/<script>.py
+# 5. Run any headless Blender asset script (one at a time)
+python3 scripts/blender_run.py game/assets/blender/<script>.py
 ```
 
 ---
 
-## 6. Architecture Reference — What Lives Where on `main`
+## 5. Architecture Reference — What Lives Where on `main`
 
-- **Shared Configs (`game/src/shared/Configs/`):** `BiomeConfigs`, `CombatConfigs`, `EconomyConfigs`, `MonetizationConfigs`, `PetConfigs`, `ShopConfigs`
-- **Shared Net (`game/src/shared/Net/`):** `Remotes.luau`
-- **Pure Testable Logic (`game/src/shared/Utils/`):** `ArenaStateMachine`, `CombatMath`, `BossAIStateMachine`, `ProjectileArc`, `ArenaHUDViewModel`, `EconomyLedger`, `PetIncome`, `PetFusion`, `CashPadView`, `ActivePerks`, `PolicyGuard`, `PurchaseLedger`, `ClientNet`
-- **Server Services (`game/src/server/Services/`):** `ArenaCycleService`, `BossAIService`, `CombatService`, `MobService`, `PortalService`, `DataService`, `EconomyService`, `PetIncomeService`, `PlotService`, `PerkService`, `PolicyGuardService`
-- **Client Controllers & UI (`game/src/client/`):** `ClientLifecycle`, `MockStateHarness`, `BallThrowController` (+ `BallThrowTouchUI`), `ArenaHUDController` (+ `ArenaHUDView`), `PlotCashController`, `HatchVFXController`, `FollowerRigController`
-- **Lune Unit Specs (`game/tests/`):** 16 passing `*.spec.luau` files covering every pure module on `main`.
+- **Shared Configs (`game/src/shared/Configs/`, 6 modules):**
+  `BiomeConfigs`, `EconomyConfigs`, `EggConfigs`, `MonetizationConfigs`, `PetConfigs`, `TraitConfigs`
+- **Shared Net (`game/src/shared/Net/`, 1 module):**
+  `Remotes.luau` (`BallBrawlRemotes`: 17 `RemoteEvent`s + `GetInitialState` `RemoteFunction`)
+- **Shared Utils (`game/src/shared/Utils/`, 9 modules):**
+  - 7 pure Lune-testable logic modules: `ArenaCycleLogic`, `CombatLogic`, `EconomyLogic`, `MathUtil`, `OnboardingLogic`, `PolicyLogic`, `TelemetryLogic`
+  - 2 Roblox client/asset helpers: `AudioCatalog`, `ProceduralModels`
+- **Server (`game/src/server/init.server.luau` + 9 Services in `game/src/server/Services/`):**
+  `ArenaCycleService`, `BossAIService`, `CombatService`, `DataService`, `EconomyService`, `PetIncomeService`, `PlotService`, `PolicyGuardService`, `TelemetryService`
+- **Client (`game/src/client/init.client.luau` + 6 Controllers + 5 UI modules):**
+  - **Controllers (`game/src/client/Controllers/`):** `AnimationController`, `ArenaHUDController`, `BallThrowController`, `HatchVFXController`, `OnboardingGuideController`, `PlotCashController`
+  - **UI (`game/src/client/UI/`):** `HubModalsGui`, `HudGui`, `HudIcons`, `ShopCodexGui`, `Theme`
+- **Lune Unit Specs (`game/tests/`, 9 passing `*.spec.luau` suites):**
+  `ArenaCycleLogic.spec.luau`, `CombatAndEconomyLogic.spec.luau`, `ConfigsAndPolicy.spec.luau`, `CosmeticsAndThemes.spec.luau`, `EconomyConfigs.spec.luau`, `OnboardingLogic.spec.luau`, `SecurityFuzz.spec.luau`, `SecurityInvariants.spec.luau`, `TelemetryLogic.spec.luau`
+- **Python Tooling Tests (`scripts/tests/`):**
+  `test_cross_platform_scripts.py` (7 passing tests)
