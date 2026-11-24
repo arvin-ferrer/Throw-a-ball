@@ -610,10 +610,6 @@ function ShopCodexGui.close()
 	end
 end
 
-function ShopCodexGui.isOpen(): boolean
-	return rootFrame ~= nil and rootFrame.Visible
-end
-
 function ShopCodexGui.setProfile(profile: any)
 	latestProfile = profile
 	rerender()

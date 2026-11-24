@@ -592,7 +592,7 @@ local function buildAutoAimButton(holder: Frame)
 	local aimBtn = Instance.new("TextButton")
 	aimBtn.Name = "AutoAimBtn"
 	aimBtn.AnchorPoint = Vector2.new(1, 1)
-	aimBtn.Position = UDim2.new(1, -64, 1, -106)
+	aimBtn.Position = UDim2.new(1, -66, 1, -12)
 	aimBtn.Size = UDim2.fromOffset(88, 44)
 	aimBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	aimBtn.BackgroundTransparency = 0.05
@@ -704,7 +704,7 @@ local function buildShootButton(holder: Frame)
 	local tBtn = Instance.new("TextButton")
 	tBtn.Name = "ThrowBtn"
 	tBtn.AnchorPoint = Vector2.new(1, 1)
-	tBtn.Position = UDim2.new(1, -68, 1, -22)
+	tBtn.Position = UDim2.new(1, -68, 1, -68)
 	tBtn.Size = UDim2.fromOffset(78, 78)
 	tBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	tBtn.Text = ""
@@ -997,10 +997,10 @@ local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
 		jumpActionBtn.Position = UDim2.new(1, 0, 1, if compact then -76 else -96)
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		throwBtn.Position =
-			UDim2.new(1, if compact then -68 else -84, 1, if compact then -22 else -28)
+			UDim2.new(1, if compact then -68 else -84, 1, if compact then -68 else -85)
 		autoAimBtn.Size = UDim2.fromOffset(if compact then 88 else 112, if compact then 44 else 48)
 		autoAimBtn.Position =
-			UDim2.new(1, if compact then -64 else -80, 1, if compact then -106 else -132)
+			UDim2.new(1, if compact then -66 else -82, 1, if compact then -12 else -21)
 	else
 		local dS = if compact then 56 else 68
 		local tS = if compact then 66 else 78
@@ -1008,10 +1008,10 @@ local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
 		dashBtn.Position = UDim2.new(1, 0, 1, if compact then -8 else -12)
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		throwBtn.Position =
-			UDim2.new(1, if compact then -66 else -80, 1, if compact then -8 else -12)
+			UDim2.new(1, if compact then -24 else -28, 1, if compact then -74 else -92)
 		autoAimBtn.Size = UDim2.fromOffset(if compact then 104 else 122, if compact then 44 else 48)
 		autoAimBtn.Position =
-			UDim2.new(1, if compact then -14 else -16, 1, if compact then -82 else -100)
+			UDim2.new(1, if compact then -68 else -82, 1, if compact then -14 else -22)
 	end
 	applyCombatButtonTypography(compact, m.isTouch)
 end

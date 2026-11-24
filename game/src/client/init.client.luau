@@ -16,7 +16,6 @@ local UI = script:WaitForChild("UI")
 local Controllers = script:WaitForChild("Controllers")
 
 local HudGui = require(UI.HudGui)
-local CrosshairGui = require(UI.CrosshairGui)
 local HubModalsGui = require(UI.HubModalsGui)
 local ShopCodexGui = require(UI.ShopCodexGui)
 
@@ -68,7 +67,6 @@ HudGui.mount({
 	onToggleAutoAim = BallThrowController.toggleAutoAim,
 	onOpenModal = openPanel,
 })
-CrosshairGui.mount()
 HubModalsGui.mount()
 ShopCodexGui.mount()
 ArenaHUDController.setServiceModalHandler(openPanel)

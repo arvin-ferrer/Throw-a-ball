@@ -651,10 +651,6 @@ function HubModalsGui.close()
 	end
 end
 
-function HubModalsGui.isOpen(): boolean
-	return rootFrame ~= nil and rootFrame.Visible
-end
-
 function HubModalsGui.setProfile(profile: any)
 	latestProfile = profile
 	rerender()
