@@ -21,17 +21,16 @@ local PlotService = require(script.Parent.PlotService)
 local PolicyGuardService = {}
 
 local restrictedByUser: { [number]: boolean } = {}
+local telemetryHook: ((string, { [string]: any }) -> ())? = nil
 
 local function checkPlayerPolicy(player: Player)
-	local restricted = false
-	if player:GetAttribute("Test_RestrictRandom") == true then
-		restricted = true
-	else
+	local restricted = true
+	if player:GetAttribute("Test_RestrictRandom") ~= true then
 		local ok, info = pcall(function()
 			return PolicyService:GetPolicyInfoForPlayerAsync(player)
 		end)
-		if ok and type(info) == "table" and info.ArePaidRandomItemsRestricted == true then
-			restricted = true
+		if ok and type(info) == "table" and info.ArePaidRandomItemsRestricted == false then
+			restricted = false
 		end
 	end
 	restrictedByUser[player.UserId] = restricted
@@ -62,7 +61,7 @@ local function handleProcessReceipt(receiptInfo: any): Enum.ProductPurchaseDecis
 	if not player or not profile then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
-	local restricted = restrictedByUser[userId] == true
+	local restricted = PolicyGuardService.isRestricted(player)
 	local res = PolicyLogic.applyProductReceipt(profile, purchaseId, productId, restricted)
 	if not res.granted then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -74,6 +73,9 @@ local function handleProcessReceipt(receiptInfo: any): Enum.ProductPurchaseDecis
 	PlotService.refreshPlotVisuals(player, profile)
 	DataService.syncToClient(player)
 	if not res.duplicate then
+		if telemetryHook then
+			telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
+		end
 		Remotes.ensureServer().ToastNotify:FireClient(
 			player,
 			"Purchase confirmed! Check your Egg Backpack / Pet Inventory!",
@@ -84,7 +86,11 @@ local function handleProcessReceipt(receiptInfo: any): Enum.ProductPurchaseDecis
 end
 
 function PolicyGuardService.isRestricted(player: Player): boolean
-	return restrictedByUser[player.UserId] == true
+	return restrictedByUser[player.UserId] ~= false
+end
+
+function PolicyGuardService.setTelemetryHook(cb: (string, { [string]: any }) -> ())
+	telemetryHook = cb
 end
 
 function PolicyGuardService.init() end
@@ -105,6 +111,9 @@ function PolicyGuardService.start()
 						PlotService.refreshPlotVisuals(player, profile)
 						DataService.syncToClient(player)
 					end
+					if telemetryHook then
+						telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
+					end
 					Remotes.ensureServer().ToastNotify:FireClient(
 						player,
 						`Game Pass Activated: {spec.displayName}!`,
@@ -116,17 +125,18 @@ function PolicyGuardService.start()
 		end
 	)
 
-	Players.PlayerAdded:Connect(function(player: Player)
+	local function initPolicyAndPasses(player: Player)
+		restrictedByUser[player.UserId] = true
+		player:SetAttribute("ArePaidRandomItemsRestricted", true)
 		task.spawn(function()
 			checkPlayerPolicy(player)
 			syncGamePasses(player)
 		end)
-	end)
+	end
+
+	Players.PlayerAdded:Connect(initPolicyAndPasses)
 	for _, player in ipairs(Players:GetPlayers()) do
-		task.spawn(function()
-			checkPlayerPolicy(player)
-			syncGamePasses(player)
-		end)
+		initPolicyAndPasses(player)
 	end
 
 	Players.PlayerRemoving:Connect(function(player: Player)

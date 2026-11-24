@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local MathUtil = require(Shared.Utils.MathUtil)
 local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local Remotes = require(Shared.Net.Remotes)
 
@@ -52,7 +53,7 @@ local function handleBuyCosmetic(
 		end
 		return
 	end
-	if profile.bossGems < spec.costGems then
+	if not MathUtil.isFinite(profile.bossGems) or profile.bossGems < spec.costGems then
 		notifyResult(player, false, "", "InsufficientGems")
 		return
 	end
@@ -60,6 +61,9 @@ local function handleBuyCosmetic(
 	profile.ownedCosmetics[cosmeticId] = true
 	if spec.category == "BallSkin" then
 		profile.equippedBallSkin = cosmeticId
+	end
+	if telemetryHook then
+		telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
 	end
 	DataService.syncToClient(player)
 	notifyResult(player, true, `Unlocked {spec.displayName}!`, nil)
@@ -111,6 +115,9 @@ local function handleUpgradeAction(player: Player, action: any, arg: any)
 	end
 
 	if res.ok then
+		if action ~= "SoftAscend" and telemetryHook then
+			telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
+		end
 		PlotService.refreshPlotVisuals(player, profile)
 		DataService.syncToClient(player)
 		notifyResult(player, true, successMsg, nil)

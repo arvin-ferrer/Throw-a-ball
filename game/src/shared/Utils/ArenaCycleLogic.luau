@@ -193,17 +193,28 @@ function ArenaCycleLogic.stepOverchargedClock(
 	return events
 end
 
+local function isFiniteNumber(value: any): boolean
+	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
+end
+
 function ArenaCycleLogic.setOptIn(
 	state: BiomeArenaState,
 	userId: number,
 	optedIn: boolean,
 	powerRating: number
 ): boolean
-	if state.phase ~= "OptIn_Window" then
+	if
+		state.phase ~= "OptIn_Window"
+		or not isFiniteNumber(userId)
+		or type(optedIn) ~= "boolean"
+	then
 		return false
 	end
 	if optedIn then
-		state.queuedPlayers[userId] = math.max(0, math.floor(powerRating))
+		local safePower = if isFiniteNumber(powerRating)
+			then math.max(0, math.floor(powerRating))
+			else 0
+		state.queuedPlayers[userId] = safePower
 	else
 		state.queuedPlayers[userId] = nil
 	end
@@ -265,7 +276,7 @@ function ArenaCycleLogic.applyBossDamage(
 	if state.phase ~= "Boss_Phase" or not state.activePlayers[attackerId] then
 		return false, events
 	end
-	if damage <= 0 or damage ~= damage or damage == math.huge then
+	if not isFiniteNumber(damage) or damage <= 0 or not isFiniteNumber(now) then
 		return false, events
 	end
 	state.bossHP = math.max(0, state.bossHP - damage)
@@ -300,7 +311,7 @@ function ArenaCycleLogic.canDealPvPDamage(
 	victimId: number,
 	now: number
 ): boolean
-	if state.phase ~= "PvP_EggScramble" then
+	if state.phase ~= "PvP_EggScramble" or not isFiniteNumber(now) then
 		return false
 	end
 	if attackerId == victimId then
@@ -319,6 +330,9 @@ function ArenaCycleLogic.beginEggClaim(
 	now: number
 ): boolean
 	if state.phase ~= "PvP_EggScramble" or not state.activePlayers[userId] then
+		return false
+	end
+	if not isFiniteNumber(now) or not isFiniteNumber(distanceToEgg) or distanceToEgg < 0 then
 		return false
 	end
 	if now < state.pvpStartedAt then
@@ -424,9 +438,13 @@ function ArenaCycleLogic.stepBiome(
 		state.suddenDeathRadius = BiomeConfigs.computeSuddenDeathRadius(pvpElapsed)
 		local claimer = state.claim.claimerId
 		if claimer ~= nil then
-			local outOfRange = (
-				claimerDistance ~= nil and claimerDistance > BiomeConfigs.EGG_CLAIM_RADIUS
-			)
+			local badDist = claimerDistance ~= nil
+				and (not isFiniteNumber(claimerDistance) or (claimerDistance :: number) < 0)
+			local outOfRange = badDist
+				or (
+					claimerDistance ~= nil
+					and (claimerDistance :: number) > BiomeConfigs.EGG_CLAIM_RADIUS
+				)
 			if not state.activePlayers[claimer] or outOfRange then
 				local cancelEv = ArenaCycleLogic.cancelEggClaim(state, claimer, "OutOfRadius")
 				for _, ev in ipairs(cancelEv) do

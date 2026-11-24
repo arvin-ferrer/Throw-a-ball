@@ -52,6 +52,55 @@ local function getStore(): DataStore?
 	return nil
 end
 
+local function sanitizeNumberField(
+	raw: { [string]: any },
+	key: string,
+	fallback: number,
+	minVal: number,
+	integerOnly: boolean?
+)
+	local val = raw[key]
+	if type(val) ~= "number" or not MathUtil.isFinite(val) or val < minVal then
+		raw[key] = fallback
+		return
+	end
+	if integerOnly then
+		raw[key] = math.floor(val)
+	end
+end
+
+local function sanitizeProfileTables(raw: { [string]: any }, template: PlayerProfile)
+	for _, field in ipairs({
+		"pets",
+		"activeFollowerUids",
+		"codexUnlocked",
+		"ownedCosmetics",
+		"purchaseIds",
+		"processedPurchases",
+	}) do
+		if type(raw[field]) ~= "table" then
+			raw[field] = {}
+		end
+	end
+	if type(raw.eggs) ~= "table" then
+		raw.eggs = template.eggs
+	end
+	if type(raw.padStoredCoins) ~= "table" then
+		raw.padStoredCoins = {}
+	else
+		for idx, amt in pairs(raw.padStoredCoins) do
+			if type(idx) ~= "number" or not MathUtil.isPositiveFinite(amt) then
+				raw.padStoredCoins[idx] = nil
+			end
+		end
+	end
+	for _, pid in ipairs(raw.purchaseIds) do
+		if type(pid) == "string" and pid ~= "" then
+			raw.processedPurchases[pid] = true
+		end
+	end
+end
+
 local function reconcileProfile(raw: any, now: number): PlayerProfile
 	local template = EconomyLogic.createDefaultProfile(now)
 	if type(raw) ~= "table" then
@@ -62,27 +111,19 @@ local function reconcileProfile(raw: any, now: number): PlayerProfile
 			raw[key] = defaultVal
 		end
 	end
-	if type(raw.eggs) ~= "table" then
-		raw.eggs = template.eggs
-	end
-	if type(raw.pets) ~= "table" then
-		raw.pets = {}
-	end
-	if type(raw.activeFollowerUids) ~= "table" then
-		raw.activeFollowerUids = {}
-	end
-	if type(raw.padStoredCoins) ~= "table" then
-		raw.padStoredCoins = {}
-	end
-	if type(raw.codexUnlocked) ~= "table" then
-		raw.codexUnlocked = {}
-	end
-	if type(raw.ownedCosmetics) ~= "table" then
-		raw.ownedCosmetics = {}
-	end
-	if type(raw.purchaseIds) ~= "table" then
-		raw.purchaseIds = {}
-	end
+	sanitizeNumberField(raw, "coins", template.coins, 0, false)
+	sanitizeNumberField(raw, "bossGems", template.bossGems, 0, true)
+	sanitizeNumberField(raw, "ballDamage", template.ballDamage, 1, false)
+	sanitizeNumberField(raw, "throwSpeed", template.throwSpeed, 1, false)
+	sanitizeNumberField(raw, "level", template.level, 1, true)
+	sanitizeNumberField(raw, "exp", template.exp, 0, true)
+	sanitizeNumberField(raw, "ascensionRank", template.ascensionRank, 0, true)
+	sanitizeNumberField(raw, "pedestalsUnlocked", template.pedestalsUnlocked, 4, true)
+	sanitizeNumberField(raw, "offlineVaultTier", template.offlineVaultTier, 1, true)
+	sanitizeNumberField(raw, "activeSlotsUnlocked", template.activeSlotsUnlocked, 1, true)
+	sanitizeNumberField(raw, "lastLogoutTime", now, 0, false)
+	sanitizeNumberField(raw, "nextPetSeq", template.nextPetSeq, 1, true)
+	sanitizeProfileTables(raw, template)
 	return raw :: PlayerProfile
 end
 
@@ -184,10 +225,21 @@ function DataService.savePlayer(userId: number, releaseLock: boolean): boolean
 	local store = getStore()
 	local saved = false
 	if store then
-		local ok = pcall(function()
-			store:UpdateAsync(key, function(oldData: any): any
-				if type(oldData) == "table" and type(oldData.data) == "table" then
-					if (oldData.data.schemaVersion or 0) > EconomyLogic.CURRENT_SCHEMA_VERSION then
+		local ok, result = pcall(function()
+			return store:UpdateAsync(key, function(oldData: any): any
+				if type(oldData) == "table" then
+					if
+						oldData.sessionLock ~= nil
+						and oldData.sessionLock ~= serverSessionId
+						and (now - (oldData.lockTime or 0)) < SESSION_LOCK_TTL
+					then
+						return nil
+					end
+					if
+						type(oldData.data) == "table"
+						and (oldData.data.schemaVersion or 0)
+							> EconomyLogic.CURRENT_SCHEMA_VERSION
+					then
 						return nil
 					end
 				end
@@ -198,18 +250,48 @@ function DataService.savePlayer(userId: number, releaseLock: boolean): boolean
 				}
 			end)
 		end)
-		saved = ok
-		if not ok then
+		if ok and type(result) == "table" then
+			saved = true
+		elseif not ok and RunService:IsStudio() then
 			useMemoryFallback = true
 			memoryStore[key] = profile
 			saved = true
 		end
-	else
+	elseif RunService:IsStudio() or useMemoryFallback then
 		memoryStore[key] = profile
 		saved = true
 	end
 	keyLocks[userId] = nil
 	return saved
+end
+
+local function acquireProfileFromStore(
+	store: DataStore,
+	key: string,
+	now: number
+): (boolean, any, boolean)
+	local ok, result = pcall(function()
+		return store:UpdateAsync(key, function(oldVal: any)
+			if
+				type(oldVal) == "table"
+				and oldVal.sessionLock ~= nil
+				and oldVal.sessionLock ~= serverSessionId
+				and (now - (oldVal.lockTime or 0)) < SESSION_LOCK_TTL
+			then
+				return nil
+			end
+			local existing = if type(oldVal) == "table" then oldVal.data else nil
+			return {
+				sessionLock = serverSessionId,
+				lockTime = now,
+				data = existing or EconomyLogic.createDefaultProfile(now),
+			}
+		end)
+	end)
+	if ok and type(result) == "table" and result.sessionLock == serverSessionId then
+		return true, result.data, false
+	end
+	return false, nil, ok
 end
 
 local function loadPlayer(player: Player)
@@ -219,37 +301,25 @@ local function loadPlayer(player: Player)
 	local rawData: any = nil
 	local store = getStore()
 	if store then
-		local ok, result = pcall(function()
-			return store:UpdateAsync(key, function(oldVal: any)
-				if
-					type(oldVal) == "table"
-					and oldVal.sessionLock ~= nil
-					and oldVal.sessionLock ~= serverSessionId
-				then
-					if now - (oldVal.lockTime or 0) < SESSION_LOCK_TTL then
-						return oldVal
-					end
-				end
-				local existing = if type(oldVal) == "table" then oldVal.data else nil
-				return {
-					sessionLock = serverSessionId,
-					lockTime = now,
-					data = existing or EconomyLogic.createDefaultProfile(now),
-				}
-			end)
-		end)
-		if ok and type(result) == "table" then
-			rawData = result.data
-		else
+		local acquired, data, canceled = acquireProfileFromStore(store, key, now)
+		if acquired then
+			rawData = data
+		elseif not canceled and RunService:IsStudio() then
 			useMemoryFallback = true
 			rawData = memoryStore[key]
+		else
+			player:Kick("Session data is locked or unavailable. Please rejoin in a moment.")
+			return
 		end
 	else
 		rawData = memoryStore[key]
 	end
 
 	local profile = reconcileProfile(rawData, now)
-	local elapsedOffline = math.max(0, now - (profile.lastLogoutTime or now))
+	local lastLogout = if MathUtil.isFinite(profile.lastLogoutTime)
+		then profile.lastLogoutTime
+		else now
+	local elapsedOffline = math.max(0, now - lastLogout)
 	local offlineEarned = EconomyLogic.accruePedestalCoins(
 		profile,
 		elapsedOffline,

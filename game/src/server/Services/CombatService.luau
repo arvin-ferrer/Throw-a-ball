@@ -138,6 +138,9 @@ local function applyPvPDamage(
 		local perTick = math.max(1, math.floor(eval.burnTotalDamage / 3 + 0.5))
 		for i = 1, 3 do
 			task.delay(i * 1.0, function()
+				if not attacker.Parent or not victim.Parent then
+					return
+				end
 				if not ArenaCycleService.canDealPvPDamage(attacker, victim) then
 					return
 				end
@@ -271,6 +274,29 @@ local function classifyHitPart(player: Player, hitPart: BasePart): ResolvedTarge
 	return nil
 end
 
+local function isTargetEligibleForPlayer(player: Player, target: ResolvedTarget): boolean
+	if not player.Parent or not target.hitPart.Parent then
+		return false
+	end
+	local char = player.Character
+	local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+	if not hum or hum.Health <= 0 then
+		return false
+	end
+	local zone = tostring(player:GetAttribute("Zone") or "Hub")
+	local activeBiome = tostring(player:GetAttribute("ActiveBiome") or "")
+	if target.hitKind == "Target" or target.hitKind == "GoldTarget" then
+		return zone == "Hub" and PlotService.isPlayerOnAssignedPad(player)
+	elseif target.mob then
+		return zone == "BiomePvE" and target.mob.alive and target.mob.biomeId == activeBiome
+	elseif target.boss then
+		return zone == "LockedBossPvP" and target.boss.biomeId == activeBiome
+	elseif target.victim then
+		return zone == "LockedBossPvP" and ArenaCycleService.canDealPvPDamage(player, target.victim)
+	end
+	return false
+end
+
 local function resolveAutoAimTarget(
 	player: Player,
 	origin: Vector3,
@@ -280,7 +306,7 @@ local function resolveAutoAimTarget(
 	if typeof(targetHint) == "Instance" and targetHint:IsA("BasePart") and targetHint.Parent then
 		if (targetHint.Position - origin).Magnitude <= maxRange then
 			local hinted = classifyHitPart(player, targetHint)
-			if hinted then
+			if hinted and isTargetEligibleForPlayer(player, hinted) then
 				return hinted
 			end
 		end
@@ -375,7 +401,7 @@ local function applyResolvedImpact(
 	impactDir: Vector3,
 	eval: CombatLogic.DamageEvalResult
 )
-	if not player.Parent or not target.hitPart.Parent then
+	if not isTargetEligibleForPlayer(player, target) then
 		return
 	end
 	if target.hitKind == "Target" or target.hitKind == "GoldTarget" then
@@ -397,14 +423,16 @@ local function applyResolvedImpact(
 			target.mob
 		)
 	elseif target.boss then
-		BossAIService.damageBoss(
+		local hitAccepted = BossAIService.damageBoss(
 			target.boss,
 			player,
 			eval.damage,
 			eval.slowDuration,
 			eval.miniStunDuration
 		)
-		applyHeal(player, eval.leechHeal)
+		if hitAccepted then
+			applyHeal(player, eval.leechHeal)
+		end
 	elseif target.victim and ArenaCycleService.canDealPvPDamage(player, target.victim) then
 		applyPvPDamage(player, target.victim, eval.damage, impactDir, eval)
 		applyHeal(player, eval.leechHeal)
@@ -461,6 +489,9 @@ local function handleProjectileCollision(
 	local n = if hitNormal.Magnitude > 1e-4 then hitNormal.Unit else Vector3.yAxis
 	local resolved = forcedResolved
 		or (if hitPart then classifyHitPart(proj.player, hitPart) else nil)
+	if resolved and not isTargetEligibleForPlayer(proj.player, resolved) then
+		resolved = nil
+	end
 
 	if resolved then
 		local eval = evaluateCurrentHit(proj.profile)
@@ -532,7 +563,12 @@ local function stepHomingProjectile(proj: ActiveProjectile, now: number): boolea
 	proj.homingTarget = nil
 	proj.homingArrivesAt = nil
 	proj.vel = dir * proj.speed
-	local forced = if target.hitPart.Parent then target else nil
+	local forced = if target.hitPart.Parent and isTargetEligibleForPlayer(proj.player, target)
+		then target
+		else nil
+	if not forced then
+		return false
+	end
 	return handleProjectileCollision(proj, now, livePos, livePos, -dir, target.hitPart, forced)
 end
 

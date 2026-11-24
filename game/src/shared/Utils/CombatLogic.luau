@@ -120,8 +120,14 @@ function CombatLogic.getActiveTraitBonuses(activePets: { OwnedPetSnapshot }): (n
 end
 
 function CombatLogic.validateThrowRequest(input: ThrowValidationInput): (boolean, string?, number)
+	if type(input) ~= "table" then
+		return false, "InvalidPayload", 0
+	end
 	if
-		not MathUtil.isFinite(input.originX)
+		not MathUtil.isFinite(input.lastThrowAt)
+		or not MathUtil.isFinite(input.now)
+		or not MathUtil.isFinite(input.throwSpeedStat)
+		or not MathUtil.isFinite(input.originX)
 		or not MathUtil.isFinite(input.originY)
 		or not MathUtil.isFinite(input.originZ)
 		or not MathUtil.isFinite(input.dirX)

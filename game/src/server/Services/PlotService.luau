@@ -295,11 +295,13 @@ function PlotService.isPlayerOnAssignedPad(player: Player): boolean
 	local plot = plotByUserId[player.UserId]
 	local char = player.Character
 	local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
-	if not plot or not hrp or not hrp:IsA("BasePart") then
+	local hum = if char then char:FindFirstChildOfClass("Humanoid") else nil
+	if not plot or not hrp or not hrp:IsA("BasePart") or not hum or hum.Health <= 0 then
 		return false
 	end
 	local dist = (hrp.Position - plot.firingPad.Position).Magnitude
-	return dist <= 9.5
+	local dy = math.abs(hrp.Position.Y - plot.firingPad.Position.Y)
+	return dist <= 9.5 and dy <= 8.0
 end
 
 function PlotService.teleportCharacter(player: Player, targetCF: CFrame)
@@ -541,7 +543,7 @@ function PlotService.start()
 
 	local remotes = Remotes.ensureServer()
 	remotes.TeleportZone.OnServerEvent:Connect(function(player: Player, targetZone: any)
-		if type(targetZone) ~= "string" then
+		if type(targetZone) ~= "string" or player:GetAttribute("Zone") == "LockedBossPvP" then
 			return
 		end
 		if targetZone == "Hub" then

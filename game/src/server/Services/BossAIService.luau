@@ -353,6 +353,10 @@ function BossAIService.damageBoss(
 	slowDur: number,
 	stunDur: number
 ): boolean
+	local ok = ArenaCycleService.damageBoss(boss.biomeId, attacker, damage)
+	if not ok then
+		return false
+	end
 	local now = os.clock()
 	if slowDur > 0 then
 		boss.slowUntil = math.max(boss.slowUntil, now + slowDur)
@@ -360,12 +364,11 @@ function BossAIService.damageBoss(
 	if stunDur > 0 then
 		boss.stunUntil = math.max(boss.stunUntil, now + stunDur)
 	end
-	local ok = ArenaCycleService.damageBoss(boss.biomeId, attacker, damage)
 	local st = ArenaCycleService.getBiomeState(boss.biomeId)
-	if ok and st and activeBosses[boss.biomeId] == boss then
+	if st and activeBosses[boss.biomeId] == boss then
 		updateHealthBar(boss.model, st.bossHP, st.bossMaxHP)
 	end
-	return ok
+	return true
 end
 
 function BossAIService.init()

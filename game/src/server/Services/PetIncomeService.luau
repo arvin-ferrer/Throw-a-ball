@@ -88,6 +88,9 @@ function PetIncomeService.collectAllPadsMagnet(player: Player)
 	if total > 0 then
 		PlotService.refreshPlotVisuals(player, profile)
 		DataService.syncToClient(player)
+		if telemetryHook then
+			telemetryHook("CashPadSweep", { userId = player.UserId, coins = total })
+		end
 	end
 end
 
@@ -159,6 +162,9 @@ function PetIncomeService.hatchEggOnPedestal(player: Player, eggId: string, pede
 			speciesId = newPet.speciesId,
 			mutationKey = newPet.mutationKey,
 		})
+		if eggId == "StarterEgg" then
+			telemetryHook("StarterHatch", { userId = player.UserId })
+		end
 	end
 end
 
@@ -202,7 +208,18 @@ local function handlePetAction(player: Player, action: any, payload: any)
 	elseif action == "ToggleActive" and type(payload) == "string" then
 		res = EconomyLogic.toggleActiveFollower(profile, payload)
 	elseif action == "PlacePet" and type(payload) == "table" and type(payload.uid) == "string" then
-		local pedIdx = if payload.pedestalIndex ~= nil then tonumber(payload.pedestalIndex) else nil
+		local rawIdx = payload.pedestalIndex
+		local pedIdx: number? = nil
+		if rawIdx ~= nil then
+			if
+				type(rawIdx) ~= "number"
+				or not MathUtil.isFinite(rawIdx)
+				or math.floor(rawIdx) ~= rawIdx
+			then
+				return
+			end
+			pedIdx = rawIdx
+		end
 		res = EconomyLogic.placeOrMovePet(
 			profile,
 			payload.uid,
@@ -257,10 +274,14 @@ function PetIncomeService.start()
 	end)
 
 	remotes.HatchEgg.OnServerEvent:Connect(function(player: Player, eggId: any, pedestalIndex: any)
-		if type(eggId) ~= "string" or type(pedestalIndex) ~= "number" then
+		if
+			type(eggId) ~= "string"
+			or not MathUtil.isPositiveFinite(pedestalIndex)
+			or math.floor(pedestalIndex) ~= pedestalIndex
+		then
 			return
 		end
-		PetIncomeService.hatchEggOnPedestal(player, eggId, math.floor(pedestalIndex))
+		PetIncomeService.hatchEggOnPedestal(player, eggId, pedestalIndex)
 	end)
 
 	remotes.PetAction.OnServerEvent:Connect(handlePetAction)

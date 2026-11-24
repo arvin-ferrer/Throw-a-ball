@@ -8,10 +8,16 @@
 
 local AnalyticsService = game:GetService("AnalyticsService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local MathUtil = require(Shared.Utils.MathUtil)
+local TelemetryLogic = require(Shared.Utils.TelemetryLogic)
 
 local ArenaCycleService = require(script.Parent.ArenaCycleService)
 local PetIncomeService = require(script.Parent.PetIncomeService)
 local EconomyService = require(script.Parent.EconomyService)
+local PolicyGuardService = require(script.Parent.PolicyGuardService)
 
 local TelemetryService = {}
 
@@ -23,15 +29,24 @@ local function logCustom(player: Player?, eventName: string, value: number?)
 	if not player then
 		return
 	end
+	local safeVal = if type(value) == "number" and MathUtil.isFinite(value) then value else 1
 	pcall(function()
-		AnalyticsService:LogCustomEvent(player, eventName, value or 1)
+		AnalyticsService:LogCustomEvent(player, eventName, safeVal)
 	end)
 end
 
 function TelemetryService.record(eventName: string, payload: { [string]: any })
 	local uid = tonumber(payload.userId)
 	local plr = if uid then Players:GetPlayerByUserId(uid) else nil
-	logCustom(plr, eventName, tonumber(payload.coins or payload.rank or 1))
+	local val: number
+	if eventName == "StarterHatch" then
+		local joined = if uid then joinTimestamps[uid] else nil
+		val = if joined then math.max(0, os.clock() - joined) else 0
+	else
+		local raw = tonumber(payload.value or payload.coins or payload.rank or 1)
+		val = if raw and MathUtil.isFinite(raw) then raw else 1
+	end
+	logCustom(plr, eventName, val)
 end
 
 function TelemetryService.getCounters(): { [string]: number }
@@ -42,6 +57,7 @@ function TelemetryService.init()
 	ArenaCycleService.setTelemetryHook(TelemetryService.record)
 	PetIncomeService.setTelemetryHook(TelemetryService.record)
 	EconomyService.setTelemetryHook(TelemetryService.record)
+	PolicyGuardService.setTelemetryHook(TelemetryService.record)
 end
 
 function TelemetryService.start()
@@ -55,13 +71,7 @@ function TelemetryService.start()
 		joinTimestamps[player.UserId] = nil
 		if joined then
 			local duration = os.clock() - joined
-			if duration < 60 then
-				logCustom(player, "FirstPlayBounce_Under60s", duration)
-			elseif duration <= 180 then
-				logCustom(player, "FirstPlayBounce_61To180s", duration)
-			else
-				logCustom(player, "EngagedSession_Over180s", duration)
-			end
+			logCustom(player, TelemetryLogic.sessionBucket(duration), duration)
 		end
 	end)
 end
