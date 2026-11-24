@@ -64,6 +64,9 @@ local autoAimEnabled = UserInputService.PreferredInput == Enum.PreferredInput.To
 local currentLockedPart: BasePart? = nil
 local lockReticleGui: BillboardGui? = nil
 local activeVisualBalls: { [number]: VisualBall } = {}
+local crosshairRayParams = RaycastParams.new()
+crosshairRayParams.FilterType = Enum.RaycastFilterType.Exclude
+crosshairRayParams.IgnoreWater = true
 
 local function getRootAndHum(): (BasePart?, Humanoid?)
 	local char = localPlayer.Character
@@ -276,9 +279,78 @@ local function findAutoAimTarget(origin: Vector3): BasePart?
 	return if chosen then partById[chosen.id] else nil
 end
 
-local function computeManualAim(cam: Camera): Vector3
-	local look = cam.CFrame.LookVector
-	local dx, dy, dz = CombatLogic.computeCameraAimDirection(look.X, look.Y, look.Z)
+local function isSightlineTargetPart(part: BasePart): boolean
+	local tk = part:GetAttribute("TargetKind")
+	if tk == "Static" or tk == "MovingGold" then
+		return true
+	end
+	local mdl = part:FindFirstAncestorOfClass("Model")
+	if not mdl then
+		return false
+	end
+	local entityKind = mdl:GetAttribute("EntityKind")
+	if entityKind == "PvEMob" or entityKind == "BiomeBoss" then
+		local hum = mdl:FindFirstChildOfClass("Humanoid")
+		return not hum or hum.Health > 0
+	end
+	local hitPlr = Players:GetPlayerFromCharacter(mdl)
+	if
+		hitPlr
+		and hitPlr ~= localPlayer
+		and localPlayer:GetAttribute("Zone") == "LockedBossPvP"
+		and hitPlr:GetAttribute("Zone") == "LockedBossPvP"
+	then
+		local hum = mdl:FindFirstChildOfClass("Humanoid")
+		return hum ~= nil and hum.Health > 0
+	end
+	return false
+end
+
+local function isCrosshairIgnorablePart(part: BasePart): boolean
+	if isSightlineTargetPart(part) then
+		return false
+	end
+	return not part.CanCollide and part.Transparency >= 0.85
+end
+
+local function castCrosshairSightline(cam: Camera, origin: Vector3): Vector3
+	local vp = cam.ViewportSize
+	local ray = cam:ViewportPointToRay(vp.X * 0.5, vp.Y * 0.5)
+	local excluded: { Instance } = {}
+	if localPlayer.Character then
+		table.insert(excluded, localPlayer.Character)
+	end
+	local followers = workspace:FindFirstChild("LocalActiveFollowers")
+	if followers then
+		table.insert(excluded, followers)
+	end
+	local hitDist: number? = nil
+	for _ = 1, 5 do
+		crosshairRayParams.FilterDescendantsInstances = excluded
+		local res = workspace:Raycast(ray.Origin, ray.Direction * 240, crosshairRayParams)
+		if not res or not res.Instance or not res.Instance:IsA("BasePart") then
+			break
+		end
+		local part = res.Instance
+		if isCrosshairIgnorablePart(part) then
+			table.insert(excluded, part)
+		else
+			hitDist = res.Distance
+			break
+		end
+	end
+	local dx, dy, dz = CombatLogic.computeCrosshairAimDirection(
+		origin.X,
+		origin.Y,
+		origin.Z,
+		ray.Origin.X,
+		ray.Origin.Y,
+		ray.Origin.Z,
+		ray.Direction.X,
+		ray.Direction.Y,
+		ray.Direction.Z,
+		hitDist
+	)
 	return Vector3.new(dx, dy, dz)
 end
 
@@ -320,7 +392,7 @@ local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
 			end
 		end
 	else
-		aimDir = computeManualAim(cam)
+		aimDir = castCrosshairSightline(cam, origin)
 	end
 
 	AnimationController.playThrowAnim(localPlayer)
@@ -803,7 +875,12 @@ function BallThrowController.start()
 		end
 		if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.ButtonL3 then
 			isSprinting = true
-		elseif input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.ButtonB then
+		elseif
+			input.KeyCode == Enum.KeyCode.Q
+			or input.KeyCode == Enum.KeyCode.LeftControl
+			or input.KeyCode == Enum.KeyCode.ButtonB
+			or input.KeyCode == Enum.KeyCode.ButtonR1
+		then
 			BallThrowController.triggerDash()
 		elseif input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonY then
 			BallThrowController.toggleAutoAim()

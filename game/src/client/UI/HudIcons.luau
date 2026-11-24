@@ -411,4 +411,60 @@ function HudIcons.createJumpIcon(parent: Instance, px: number): Frame
 	return root
 end
 
+function HudIcons.createShootIcon(parent: Instance, px: number): Frame
+	local root = Instance.new("Frame")
+	root.Name = "ShootIcon"
+	root.BackgroundTransparency = 1
+	root.Size = UDim2.fromOffset(px, px)
+	root.Active = false
+	root.Parent = parent
+
+	local col = Color3.fromRGB(255, 248, 232)
+	local stroke = Color3.fromRGB(122, 42, 8)
+	local ring =
+		part(root, "Ring", UDim2.fromScale(0.74, 0.74), UDim2.fromScale(0.5, 0.5), col, 999)
+	ring.BackgroundTransparency = 1
+	Theme.addStroke(ring, col, 1.6, 0.08)
+
+	local core =
+		part(root, "BallCore", UDim2.fromScale(0.36, 0.36), UDim2.fromScale(0.5, 0.5), col, 999)
+	Theme.addStroke(core, stroke, 1.2)
+	part(root, "TickT", UDim2.fromScale(0.11, 0.24), UDim2.fromScale(0.5, 0.12), col, 99)
+	part(root, "TickB", UDim2.fromScale(0.11, 0.24), UDim2.fromScale(0.5, 0.88), col, 99)
+	part(root, "TickL", UDim2.fromScale(0.24, 0.11), UDim2.fromScale(0.12, 0.5), col, 99)
+	part(root, "TickR", UDim2.fromScale(0.24, 0.11), UDim2.fromScale(0.88, 0.5), col, 99)
+	return root
+end
+
+function HudIcons.createDashIcon(parent: Instance, px: number): Frame
+	local root = Instance.new("Frame")
+	root.Name = "DashIcon"
+	root.BackgroundTransparency = 1
+	root.Size = UDim2.fromOffset(px, px)
+	root.Active = false
+	root.Parent = parent
+
+	local col = Color3.fromRGB(240, 250, 255)
+	local stroke = Color3.fromRGB(18, 58, 108)
+	local chevrons = {
+		{ name = "C1T", x = 0.36, y = 0.36, rot = 38 },
+		{ name = "C1B", x = 0.36, y = 0.64, rot = -38 },
+		{ name = "C2T", x = 0.66, y = 0.36, rot = 38 },
+		{ name = "C2B", x = 0.66, y = 0.64, rot = -38 },
+	}
+	for _, c in ipairs(chevrons) do
+		local bar = part(
+			root,
+			c.name,
+			UDim2.fromScale(0.34, 0.14),
+			UDim2.fromScale(c.x, c.y),
+			col,
+			99,
+			c.rot
+		)
+		Theme.addStroke(bar, stroke, 1.0, 0.2)
+	end
+	return root
+end
+
 return HudIcons

@@ -167,6 +167,40 @@ assertTrue(
 	"Ball keeps bouncing when hitting surfaces"
 )
 
+-- 1f. Fixed FPS crosshair aim convergence
+local function testCrosshairAimConvergence()
+	assertTrue(CombatLogic.MANUAL_UPWARD_LOFT == 0.09, "Manual upward loft matches server")
+	local sx, sy, sz =
+		CombatLogic.computeCrosshairAimDirection(0, 6.4, 0, 0, 6.5, 12, 0, 0, -1, nil)
+	assertTrue(
+		math.abs(sx) < 1e-4 and math.abs(sy) < 0.02 and sz < -0.999,
+		"Unhit sky sightline aims straight ahead along camera look"
+	)
+	local tx, ty, tz = CombatLogic.computeCrosshairAimDirection(2, 6.4, 0, 0, 8, 12, 0, 0, -1, 32)
+	assertTrue(
+		tx < -0.05 and ty > 0.05 and tz < -0.95,
+		"Mid-range hit point converges from ball origin toward center crosshair"
+	)
+	local bx, by, bz = CombatLogic.computeCrosshairAimDirection(0, 6.4, 0, 0, 6.5, 12, 0, 0, -1, 2)
+	assertTrue(
+		math.abs(bx) < 1e-4 and math.abs(by) < 0.05 and bz < -0.99,
+		"Behind-character camera obstruction clamps target forward of origin"
+	)
+	local nx, ny, nz =
+		CombatLogic.computeCrosshairAimDirection(0, 6.4, 0, 0, 6.5, 12, 0 / 0, 0, 0, 10)
+	assertTrue(
+		nx == 0 and ny == 0 and nz == -1,
+		"NaN/zero ray input falls back safely to forward unit vector"
+	)
+	local zx, zy, zz = CombatLogic.computeCrosshairAimDirection(0, 6.4, 0, 0, 6.5, 12, 0, 0, 0, 10)
+	assertTrue(
+		zx == 0 and zy == 0 and zz == -1,
+		"Zero ray direction falls back safely to forward unit vector"
+	)
+end
+
+testCrosshairAimConvergence()
+
 -- 2. Training off-pad rejection vs on-pad Moving Gold 2x + Throw Speed
 local offPad = CombatLogic.evaluateTrainingHit({
 	isOnAssignedPad = false,

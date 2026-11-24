@@ -105,6 +105,7 @@ CombatLogic.BOUNCE_RESTITUTION = 0.78
 CombatLogic.BOUNCE_TANGENT_RETENTION = 0.88
 CombatLogic.BOUNCE_HIT_COOLDOWN = 0.25
 CombatLogic.MAX_ACTIVE_BALLS_PER_PLAYER = 12
+CombatLogic.MANUAL_UPWARD_LOFT = 0.09
 
 function CombatLogic.getActiveTraitBonuses(activePets: { OwnedPetSnapshot }): (number, number)
 	local throwSpeedBonus = 0
@@ -314,6 +315,49 @@ function CombatLogic.computeCameraAimDirection(
 		return 0, 0, -1
 	end
 	return lookX / mag, lookY / mag, lookZ / mag
+end
+
+function CombatLogic.computeCrosshairAimDirection(
+	originX: number,
+	originY: number,
+	originZ: number,
+	rayOriginX: number,
+	rayOriginY: number,
+	rayOriginZ: number,
+	rayDirX: number,
+	rayDirY: number,
+	rayDirZ: number,
+	hitDist: number?
+): (number, number, number)
+	local rx, ry, rz = CombatLogic.computeCameraAimDirection(rayDirX, rayDirY, rayDirZ)
+	if
+		not MathUtil.isFinite(originX)
+		or not MathUtil.isFinite(originY)
+		or not MathUtil.isFinite(originZ)
+		or not MathUtil.isFinite(rayOriginX)
+		or not MathUtil.isFinite(rayOriginY)
+		or not MathUtil.isFinite(rayOriginZ)
+		or not MathUtil.isFinite(rayDirX)
+		or not MathUtil.isFinite(rayDirY)
+		or not MathUtil.isFinite(rayDirZ)
+	then
+		return rx, ry, rz
+	end
+	local rayMag = math.sqrt(rayDirX * rayDirX + rayDirY * rayDirY + rayDirZ * rayDirZ)
+	if rayMag < 1e-4 then
+		return rx, ry, rz
+	end
+	local fwdOffset = (originX - rayOriginX) * rx
+		+ (originY - rayOriginY) * ry
+		+ (originZ - rayOriginZ) * rz
+	local minDist = math.max(0, fwdOffset) + 4
+	local targetDist = if hitDist ~= nil and MathUtil.isPositiveFinite(hitDist)
+		then math.max(minDist, hitDist)
+		else math.max(minDist + 140, 160)
+	local tx = rayOriginX + rx * targetDist
+	local ty = rayOriginY + ry * targetDist
+	local tz = rayOriginZ + rz * targetDist
+	return CombatLogic.computeCameraAimDirection(tx - originX, ty - originY, tz - originZ)
 end
 
 function CombatLogic.computeBallisticLaunchVelocity(
