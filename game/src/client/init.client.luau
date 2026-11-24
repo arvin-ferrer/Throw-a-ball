@@ -24,6 +24,7 @@ local PlotCashController = require(Controllers.PlotCashController)
 local ArenaHUDController = require(Controllers.ArenaHUDController)
 local HatchVFXController = require(Controllers.HatchVFXController)
 local AnimationController = require(Controllers.AnimationController)
+local OnboardingGuideController = require(Controllers.OnboardingGuideController)
 
 local function openPanel(kind: string)
 	if kind == "Pets" or kind == "TraitAltar" then
@@ -56,6 +57,7 @@ local function applyProfilePayload(payload: any)
 	HubModalsGui.setProfile(payload.profile)
 	ShopCodexGui.setProfile(payload.profile)
 	HatchVFXController.rebuildFollowers(payload.profile)
+	OnboardingGuideController.updateProfile(payload.profile)
 end
 
 HudGui.mount({
@@ -74,6 +76,7 @@ BallThrowController.start()
 PlotCashController.start()
 ArenaHUDController.start()
 HatchVFXController.start()
+OnboardingGuideController.start()
 
 local remotes = Remotes.waitClient()
 remotes.ProfileSync.OnClientEvent:Connect(applyProfilePayload)

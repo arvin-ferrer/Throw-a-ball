@@ -19,6 +19,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Rokit and pinned Roblox tools
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROKIT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           curl -sSf https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
           echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
