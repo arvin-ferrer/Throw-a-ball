@@ -5,6 +5,7 @@
 	Robux exclusion), and PolicyLogic (ArePaidRandomItemsRestricted fallback + receipt idempotency).
 ]]
 
+local ArenaCycleLogic = require("../src/shared/Utils/ArenaCycleLogic")
 local BiomeConfigs = require("../src/shared/Configs/BiomeConfigs")
 local PetConfigs = require("../src/shared/Configs/PetConfigs")
 local TraitConfigs = require("../src/shared/Configs/TraitConfigs")
@@ -126,7 +127,22 @@ assertTrue(#restrictedShop == 2, "Restricted region sees 2 direct non-random bun
 for _, offer in ipairs(restrictedShop) do
 	assertTrue(offer.kind == "DirectBundle", "Restricted offer must be DirectBundle (zero RNG)")
 	assertTrue(offer.guaranteedPetId ~= nil, "DirectBundle names exact guaranteed pet")
+	assertTrue(
+		offer.petOdds == nil and offer.mutationOdds == nil,
+		"DirectBundle must never expose random odds"
+	)
 end
+
+-- Nil/unknown policy status must fail closed (never expose paid random eggs)
+local nilShop = PolicyLogic.buildShopOfferings(nil :: any)
+assertTrue(
+	#nilShop == 2 and nilShop[1].kind == "DirectBundle",
+	"Nil policy fails closed to DirectBundle"
+)
+assertTrue(
+	not PolicyLogic.canPromptProduct(190000101, nil :: any),
+	"Nil policy blocks prompting paid random egg"
+)
 
 for _, paidEggProduct in ipairs({ 190000101, 190000102 }) do
 	local canPrompt = PolicyLogic.canPromptProduct(paidEggProduct, true)
@@ -169,5 +185,35 @@ for idx, paidEggProduct in ipairs({ 190000101, 190000102 }) do
 		"Rejected restricted random egg receipt leaves profile unmutated"
 	)
 end
+
+local rNil = PolicyLogic.applyProductReceipt(profile, "rcpt_nil_policy", 190000101, nil :: any)
+assertTrue(not rNil.granted, "Nil policy receipt for paid random egg fails closed")
+
+local rUnrestricted = PolicyLogic.applyProductReceipt(profile, "rcpt_unrest_1", 190000101, false)
+assertTrue(
+	rUnrestricted.granted and profile.eggs.Shop_PrismEgg == 1,
+	"Unrestricted account receives paid random egg"
+)
+
+-- 6. Overcharged & Biome lighting targets (#16)
+assertTrue(
+	ArenaCycleLogic.isOverchargedVisualActive({
+		EmeraldMeadow = { isOvercharged = true, phase = "PvP_EggScramble" },
+	}),
+	"Overcharged lighting remains active through PvP_EggScramble"
+)
+assertTrue(not ArenaCycleLogic.isOverchargedVisualActive({
+	EmeraldMeadow = { isOvercharged = true, phase = "PvE_Open" },
+}), "Overcharged lighting clears once reset to PvE_Open")
+local ovLight = ArenaCycleLogic.getBiomeLighting("Hub", "", true)
+local hubLight = ArenaCycleLogic.getBiomeLighting("Hub", "", false)
+local moltenLight = ArenaCycleLogic.getBiomeLighting("BiomePvE", "MoltenCaldera", false)
+assertTrue(
+	ovLight.key == "Overcharged"
+		and ovLight.clockTime == 20.5
+		and hubLight.key == "Hub"
+		and moltenLight.key == "Biome:MoltenCaldera",
+	"Lighting targets resolve distinctly for Overcharged, Hub, and Biomes"
+)
 
 print("PASS: ConfigsAndPolicy.spec.luau")

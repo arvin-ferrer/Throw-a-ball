@@ -49,7 +49,7 @@ function PolicyLogic.buildShopOfferings(arePaidRandomItemsRestricted: boolean): 
 	for _, eggId in ipairs(paidEggs) do
 		local egg = EggConfigs.getEgg(eggId)
 		if egg and EggConfigs.isRobuxPurchasable(eggId) then
-			if arePaidRandomItemsRestricted then
+			if arePaidRandomItemsRestricted ~= false then
 				local bundle = MonetizationConfigs.getDirectBundleForEgg(eggId)
 				if bundle then
 					table.insert(items, {
@@ -88,7 +88,7 @@ function PolicyLogic.canPromptProduct(
 		return false, "UnknownProduct"
 	end
 	if kind == "PaidEgg" then
-		if arePaidRandomItemsRestricted then
+		if arePaidRandomItemsRestricted ~= false then
 			return false, "PaidRandomItemsRestricted"
 		end
 		if not EggConfigs.isRobuxPurchasable(itemId) then
@@ -174,7 +174,7 @@ function PolicyLogic.applyProductReceipt(
 		return { granted = false, duplicate = false, reason = "UnknownProduct" }
 	end
 	if kind == "PaidEgg" then
-		if arePaidRandomItemsRestricted or not EggConfigs.isRobuxPurchasable(itemId) then
+		if arePaidRandomItemsRestricted ~= false or not EggConfigs.isRobuxPurchasable(itemId) then
 			return { granted = false, duplicate = false, reason = "RestrictedOrForbiddenEgg" }
 		end
 		profile.eggs[itemId] = (profile.eggs[itemId] or 0) + 1
