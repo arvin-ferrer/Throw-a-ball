@@ -89,10 +89,10 @@ local function buildOverchargedPill(stack: Frame)
 	local ovPill = Theme.makeFrame(
 		stack,
 		"OverchargedPill",
-		UDim2.fromOffset(348, 26),
-		UDim2.new(0.5, 0, 0, 50),
+		UDim2.fromOffset(216, 20),
+		UDim2.new(0.5, 0, 0, 38),
 		Color3.fromRGB(255, 255, 255),
-		10
+		8
 	)
 	ovPill.AnchorPoint = Vector2.new(0.5, 0)
 	ovPill.ZIndex = 1
@@ -103,16 +103,16 @@ local function buildOverchargedPill(stack: Frame)
 	local ovLbl = Theme.makeLabel(
 		ovPill,
 		"Overcharged",
-		'⚡ 5-MIN OVERCHARGED BOSS EVENT <font color="#FFFFFF">5:00</font>',
-		UDim2.new(1, -14, 1, 0),
-		UDim2.fromOffset(7, 1),
-		11,
+		'⚡ OVERCHARGED EVENT <font color="#FFFFFF">5:00</font>',
+		UDim2.new(1, -10, 1, 0),
+		UDim2.fromOffset(5, 0),
+		10,
 		Color3.fromRGB(255, 150, 198),
 		true
 	)
 	ovLbl.RichText = true
 	ovLbl.TextXAlignment = Enum.TextXAlignment.Center
-	applyTextConstraint(ovLbl, 8, 12)
+	applyTextConstraint(ovLbl, 7, 10)
 	overchargedChip = ovLbl
 end
 
@@ -120,17 +120,17 @@ local function buildPhaseBanner(stack: Frame)
 	local banner = Theme.makeGlossyPanel(
 		stack,
 		"PhaseBanner",
-		UDim2.fromOffset(396, 54),
+		UDim2.fromOffset(236, 40),
 		UDim2.fromScale(0.5, 0),
-		16
+		12
 	)
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.ZIndex = 2
 	bannerFrame = banner
 
-	local sh = HudIcons.createShieldIcon(banner, 30, Theme.Colors.Emerald)
+	local sh = HudIcons.createShieldIcon(banner, 22, Theme.Colors.Emerald)
 	sh.AnchorPoint = Vector2.new(0, 0.5)
-	sh.Position = UDim2.new(0, 14, 0.5, 0)
+	sh.Position = UDim2.new(0, 10, 0.5, 0)
 	sh.ZIndex = 3
 	shieldIcon = sh
 
@@ -138,30 +138,30 @@ local function buildPhaseBanner(stack: Frame)
 		banner,
 		"PhaseTitle",
 		"HUB PLAZA • PvE SAFE",
-		UDim2.new(1, -60, 0, 24),
-		UDim2.fromOffset(50, 6),
-		17,
+		UDim2.new(1, -44, 0, 18),
+		UDim2.fromOffset(36, 4),
+		14,
 		Theme.Colors.Emerald,
 		true
 	)
 	title.TextXAlignment = Enum.TextXAlignment.Center
 	title.ZIndex = 3
-	applyTextConstraint(title, 11, 17)
+	applyTextConstraint(title, 7, 13)
 	phaseTitle = title
 
 	local sub = Theme.makeLabel(
 		banner,
 		"PhaseSubtitle",
 		"(Walk through Portals to Fight!)",
-		UDim2.new(1, -60, 0, 18),
-		UDim2.fromOffset(50, 30),
-		12,
+		UDim2.new(1, -44, 0, 14),
+		UDim2.fromOffset(36, 22),
+		10,
 		Color3.fromRGB(218, 226, 240),
 		false
 	)
 	sub.TextXAlignment = Enum.TextXAlignment.Center
 	sub.ZIndex = 3
-	applyTextConstraint(sub, 9, 12)
+	applyTextConstraint(sub, 7, 10)
 	phaseSubtitle = sub
 end
 
@@ -207,9 +207,9 @@ local function buildTopBanner(gui: ScreenGui)
 	local stack = Instance.new("Frame")
 	stack.Name = "TopCenterStack"
 	stack.BackgroundTransparency = 1
-	stack.AnchorPoint = Vector2.new(0.5, 0)
-	stack.Position = UDim2.new(0.5, 0, 0, 6)
-	stack.Size = UDim2.fromOffset(396, 86)
+	stack.AnchorPoint = Vector2.new(1, 0)
+	stack.Position = UDim2.new(1, -14, 0, 6)
+	stack.Size = UDim2.fromOffset(236, 58)
 	stack.Parent = gui
 	topStack = stack
 	buildOverchargedPill(stack)
@@ -418,30 +418,29 @@ local function applyTopBannerResponsive(m: Theme.LayoutMetrics)
 		return
 	end
 	local compact = m.isCompact
-	local bw = if m.isPortrait
-		then math.clamp(m.viewport.X - 24, 240, 344)
-		elseif compact then math.max(224, math.min(316, m.viewport.X - 230))
-		else 376
-	local bh = if compact then 44 else 54
-	local oh = if compact then 22 else 26
-	local topY = if m.isPortrait then 70 elseif compact then 4 else 6
-	topStack.Position = UDim2.new(0.5, 0, 0, topY)
-	topStack.Size = UDim2.fromOffset(bw, bh + oh + 4)
+	local bw = if compact then 184 else 236
+	local bh = if compact then 34 else 40
+	local oh = if compact then 17 else 20
+	local ow = if compact then 168 else 216
+	local topX = if compact then -10 else -14
+	local topY = if compact then 4 else 6
+	topStack.Position = UDim2.new(1, topX, 0, topY)
+	topStack.Size = UDim2.fromOffset(bw, bh + oh - 2)
 	bannerFrame.Size = UDim2.fromOffset(bw, bh)
-	overchargedPill.Size = UDim2.fromOffset(bw - 34, oh)
-	overchargedPill.Position = UDim2.new(0.5, 0, 0, bh - 3)
-	local shS = if compact then 24 else 30
+	overchargedPill.Size = UDim2.fromOffset(ow, oh)
+	overchargedPill.Position = UDim2.new(0.5, 0, 0, bh - 2)
+	local shS = if compact then 18 else 22
 	shieldIcon.Size = UDim2.fromOffset(shS, shS)
-	shieldIcon.Position = UDim2.new(0, if compact then 12 else 18, 0.5, 0)
+	shieldIcon.Position = UDim2.new(0, if compact then 8 else 10, 0.5, 0)
+	local leftOff = if compact then 30 else 36
+	local padW = if compact then -36 else -44
 	if phaseTitle then
-		phaseTitle.Position = UDim2.fromOffset(if compact then 42 else 54, if compact then 4 else 6)
-		phaseTitle.Size = UDim2.new(1, if compact then -52 else -68, 0, if compact then 20 else 24)
+		phaseTitle.Position = UDim2.fromOffset(leftOff, if compact then 3 else 4)
+		phaseTitle.Size = UDim2.new(1, padW, 0, if compact then 15 else 18)
 	end
 	if phaseSubtitle then
-		phaseSubtitle.Position =
-			UDim2.fromOffset(if compact then 42 else 54, if compact then 24 else 30)
-		phaseSubtitle.Size =
-			UDim2.new(1, if compact then -52 else -68, 0, if compact then 15 else 18)
+		phaseSubtitle.Position = UDim2.fromOffset(leftOff, if compact then 18 else 22)
+		phaseSubtitle.Size = UDim2.new(1, padW, 0, if compact then 12 else 14)
 	end
 end
 
@@ -450,15 +449,21 @@ local function applyArenaResponsive()
 	local compact = m.isCompact
 	applyTopBannerResponsive(m)
 	if bossBarFrame then
-		local barY = if m.isPortrait then 142 elseif compact then 72 else 90
-		bossBarFrame.Size =
-			UDim2.fromOffset(if compact then 290 else 370, if compact then 26 else 30)
+		local barY = if m.isPortrait then 92 elseif compact then 8 else 10
+		local bossW = if m.isPortrait
+			then math.clamp(m.viewport.X - 28, 220, 320)
+			elseif compact then math.clamp(m.viewport.X - 410, 210, 260)
+			else 340
+		bossBarFrame.Size = UDim2.fromOffset(bossW, if compact then 24 else 28)
 		bossBarFrame.Position = UDim2.new(0.5, 0, 0, barY)
 	end
 	if toastFrame then
-		local toastY = if m.isPortrait then 176 elseif compact then 102 else 124
-		toastFrame.Size =
-			UDim2.fromOffset(if compact then math.min(340, m.viewport.X - 24) else 440, 34)
+		local toastY = if m.isPortrait then 122 elseif compact then 38 else 46
+		local toastW = if m.isPortrait
+			then math.min(320, m.viewport.X - 24)
+			elseif compact then math.clamp(m.viewport.X - 410, 220, 280)
+			else 380
+		toastFrame.Size = UDim2.fromOffset(toastW, if compact then 28 else 32)
 		toastFrame.Position = UDim2.new(0.5, 0, 0, toastY)
 	end
 	if claimFrame then
@@ -602,7 +607,7 @@ local function onArenaStateSync(snapshot: any)
 	local overLeft = tonumber(snapshot.overchargedRemaining) or 300
 	if overchargedChip then
 		overchargedChip.Text =
-			`⚡ 5-MIN OVERCHARGED BOSS EVENT <font color="#FFFFFF">{MathUtil.formatClock(overLeft)}</font>`
+			`⚡ OVERCHARGED EVENT <font color="#FFFFFF">{MathUtil.formatClock(overLeft)}</font>`
 	end
 	local biomes = snapshot.biomes or {}
 	local st = if activeBiome ~= "" then biomes[activeBiome] else nil

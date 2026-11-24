@@ -1048,6 +1048,34 @@ local function applyDockAndBannersResponsive(m: Theme.LayoutMetrics)
 	end
 end
 
+local function applyTopRightResponsive(compact: boolean)
+	if topRightStack then
+		topRightStack.Position =
+			UDim2.new(1, if compact then -10 else -14, 0, if compact then 58 else 70)
+		local list = topRightStack:FindFirstChildOfClass("UIListLayout")
+		if list then
+			list.Padding = UDim.new(0, if compact then 4 else 6)
+		end
+	end
+	if audioBtn then
+		audioBtn.Size = UDim2.fromOffset(if compact then 104 else 124, if compact then 26 else 30)
+	end
+	if speakerIcon then
+		local icS = if compact then 15 else 18
+		speakerIcon.Size = UDim2.fromOffset(icS, icS)
+		speakerIcon.Position = UDim2.new(0, if compact then 8 else 10, 0.5, 0)
+	end
+	if audioLabel then
+		audioLabel.Position = UDim2.fromOffset(if compact then 26 else 32, 0)
+		audioLabel.Size = UDim2.new(1, if compact then -30 else -34, 1, 0)
+		audioLabel.TextSize = if compact then 10 else 11
+	end
+	if hubReturnBtn then
+		hubReturnBtn.Size =
+			UDim2.fromOffset(if compact then 100 else 120, if compact then 26 else 30)
+	end
+end
+
 local function applyResponsiveLayout()
 	local m = Theme.getLayoutMetrics()
 	local compact = m.isCompact
@@ -1071,20 +1099,7 @@ local function applyResponsiveLayout()
 	if gemsValLabel then
 		gemsValLabel.TextSize = if compact then 14 else 17
 	end
-	if topRightStack then
-		topRightStack.Position =
-			UDim2.new(1, if compact then -10 else -14, 0, if compact then 6 else 8)
-	end
-	if audioBtn then
-		audioBtn.Size = UDim2.fromOffset(if compact then 108 else 132, if compact then 28 else 34)
-	end
-	if audioLabel then
-		audioLabel.TextSize = if compact then 10 else 12
-	end
-	if hubReturnBtn then
-		hubReturnBtn.Size =
-			UDim2.fromOffset(if compact then 102 else 124, if compact then 28 else 34)
-	end
+	applyTopRightResponsive(compact)
 
 	applyDrawerResponsive(compact)
 	applyDockAndBannersResponsive(m)
