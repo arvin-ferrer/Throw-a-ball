@@ -14,11 +14,19 @@ local EggConfigs = if isRoblox
 local MonetizationConfigs = if isRoblox
 	then req(scriptRef.Parent.Parent.Configs.MonetizationConfigs)
 	else req("../Configs/MonetizationConfigs")
+local EconomyLogic = if isRoblox then req(scriptRef.Parent.EconomyLogic) else req("./EconomyLogic")
 local MathUtil = if isRoblox then req(scriptRef.Parent.MathUtil) else req("./MathUtil")
 
 export type DisclosedOdd = {
 	id: string,
 	percent: number,
+}
+
+export type JointOdd = {
+	speciesId: string,
+	mutationKey: string,
+	percent: number,
+	formattedPercent: string,
 }
 
 export type ShopCatalogItem = {
@@ -29,6 +37,7 @@ export type ShopCatalogItem = {
 	devProductId: number,
 	petOdds: { DisclosedOdd }?,
 	mutationOdds: { DisclosedOdd }?,
+	jointOdds: { JointOdd }?,
 	guaranteedPetId: string?,
 	guaranteedBallSkin: string?,
 }
@@ -42,6 +51,77 @@ export type ReceiptResult = {
 local PolicyLogic = {}
 
 PolicyLogic.MAX_PURCHASE_LOG = 100
+
+local function distributeBpsRemainders(
+	entries: {
+		{
+			speciesId: string,
+			mutationKey: string,
+			bps: number,
+			rem: number,
+			idx: number,
+		}
+	},
+	deficit: number
+)
+	if deficit <= 0 then
+		return
+	end
+	local order: { number } = {}
+	for idx = 1, #entries do
+		table.insert(order, idx)
+	end
+	table.sort(order, function(a, b)
+		if math.abs(entries[a].rem - entries[b].rem) > 1e-12 then
+			return entries[a].rem > entries[b].rem
+		end
+		return entries[a].idx < entries[b].idx
+	end)
+	for k = 1, math.min(deficit, #order) do
+		entries[order[k]].bps += 1
+	end
+end
+
+function PolicyLogic.computeJointOdds(eggId: string): { JointOdd }
+	local egg = EggConfigs.getEgg(eggId)
+	if not egg then
+		return {}
+	end
+	local petSum = EggConfigs.getWeightSum(egg.petTable)
+	local mutSum = EggConfigs.getWeightSum(egg.mutationTable)
+	if petSum <= 0 or mutSum <= 0 then
+		return {}
+	end
+	local raw: { { speciesId: string, mutationKey: string, bps: number, rem: number, idx: number } } =
+		{}
+	local bpsSum = 0
+	for _, petEntry in ipairs(egg.petTable) do
+		for _, mutEntry in ipairs(egg.mutationTable) do
+			local exactBps = (petEntry.weight / petSum) * (mutEntry.weight / mutSum) * 10000
+			local floorBps = math.floor(exactBps + 1e-9)
+			bpsSum += floorBps
+			table.insert(raw, {
+				speciesId = petEntry.id,
+				mutationKey = mutEntry.id,
+				bps = floorBps,
+				rem = math.max(0, exactBps - floorBps),
+				idx = #raw + 1,
+			})
+		end
+	end
+	distributeBpsRemainders(raw, 10000 - bpsSum)
+	local out: { JointOdd } = {}
+	for _, entry in ipairs(raw) do
+		local pct = entry.bps / 100
+		table.insert(out, {
+			speciesId = entry.speciesId,
+			mutationKey = entry.mutationKey,
+			percent = pct,
+			formattedPercent = string.format("%.2f%%", pct),
+		})
+	end
+	return out
+end
 
 function PolicyLogic.buildShopOfferings(arePaidRandomItemsRestricted: boolean): { ShopCatalogItem }
 	local items: { ShopCatalogItem } = {}
@@ -72,6 +152,7 @@ function PolicyLogic.buildShopOfferings(arePaidRandomItemsRestricted: boolean): 
 					devProductId = egg.devProductId or 0,
 					petOdds = petOdds,
 					mutationOdds = mutOdds,
+					jointOdds = PolicyLogic.computeJointOdds(eggId),
 				})
 			end
 		end
@@ -119,26 +200,140 @@ function PolicyLogic.hasRecordedPurchase(profile: any, purchaseId: string): bool
 	return false
 end
 
-local function grantDirectBundle(profile: any, itemId: string): boolean
-	local bundle = MonetizationConfigs.DIRECT_BUNDLES[itemId]
-	if not bundle then
-		return false
-	end
-	local uid = `pet_{profile.nextPetSeq}`
-	profile.nextPetSeq += 1
-	table.insert(profile.pets, {
+function PolicyLogic.isPaidRandomEgg(eggId: string): boolean
+	local egg = if type(eggId) == "string" then EggConfigs.getEgg(eggId) else nil
+	return egg ~= nil and egg.isPaidRandomItem == true
+end
+
+local function awardDirectBundleContents(
+	profile: any,
+	bundle: MonetizationConfigs.DirectBundleSpec,
+	pedestalIndex: number?,
+	equipBallSkin: boolean
+): EconomyLogic.OwnedPet
+	local seq = if MathUtil.isPositiveFinite(profile.nextPetSeq)
+		then math.floor(profile.nextPetSeq)
+		else 1
+	local uid = `pet_{seq}`
+	profile.nextPetSeq = seq + 1
+	local newPet: EconomyLogic.OwnedPet = {
 		uid = uid,
 		speciesId = bundle.guaranteedPetId,
 		mutationKey = bundle.guaranteedMutation,
 		starTier = 1,
 		level = 1,
 		traitKey = nil,
-		pedestalIndex = nil,
-	})
+		pedestalIndex = pedestalIndex,
+	}
+	table.insert(profile.pets, newPet)
+	if type(profile.codexUnlocked) ~= "table" then
+		profile.codexUnlocked = {}
+	end
 	profile.codexUnlocked[bundle.guaranteedPetId] = true
+	if type(profile.ownedCosmetics) ~= "table" then
+		profile.ownedCosmetics = {}
+	end
 	profile.ownedCosmetics[bundle.guaranteedBallSkin] = true
-	profile.equippedBallSkin = bundle.guaranteedBallSkin
+	if equipBallSkin or profile.equippedBallSkin == nil then
+		profile.equippedBallSkin = bundle.guaranteedBallSkin
+	end
+	return newPet
+end
+
+local function grantDirectBundle(profile: any, itemId: string): boolean
+	local bundle = MonetizationConfigs.DIRECT_BUNDLES[itemId]
+	if not bundle then
+		return false
+	end
+	awardDirectBundleContents(profile, bundle, nil, true)
 	return true
+end
+
+local function validatePaidHatchSlot(
+	profile: any,
+	eggId: string,
+	pedestalIndex: number,
+	hasVipPass: boolean
+): string?
+	if type(profile) ~= "table" or type(eggId) ~= "string" then
+		return "InvalidArgs"
+	end
+	if not EggConfigs.getEgg(eggId) then
+		return "UnknownEgg"
+	end
+	if type(profile.eggs) ~= "table" or (profile.eggs[eggId] or 0) < 1 then
+		return "NoEggInInventory"
+	end
+	if not MathUtil.isFinite(pedestalIndex) or math.floor(pedestalIndex) ~= pedestalIndex then
+		return "InvalidPedestal"
+	end
+	local unlocked = if MathUtil.isPositiveFinite(profile.pedestalsUnlocked)
+		then math.floor(profile.pedestalsUnlocked)
+		else 0
+	local maxUnlocked = if hasVipPass then 14 else unlocked
+	if pedestalIndex < 1 or pedestalIndex > maxUnlocked then
+		return "PedestalLocked"
+	end
+	if pedestalIndex > unlocked and pedestalIndex <= 12 then
+		return "PedestalLocked"
+	end
+	for _, pet in ipairs(profile.pets) do
+		if pet.pedestalIndex == pedestalIndex then
+			return "PedestalOccupied"
+		end
+	end
+	return nil
+end
+
+function PolicyLogic.hatchPaidEggDirectBundle(
+	profile: any,
+	eggId: string,
+	pedestalIndex: number,
+	hasVipPass: boolean
+): EconomyLogic.TxResult
+	local errReason = validatePaidHatchSlot(profile, eggId, pedestalIndex, hasVipPass)
+	if errReason then
+		return { ok = false, reason = errReason }
+	end
+	local bundle = MonetizationConfigs.getDirectBundleForEgg(eggId)
+	if not bundle then
+		return { ok = false, reason = "DirectBundleUnavailable" }
+	end
+	profile.eggs[eggId] = (profile.eggs[eggId] or 1) - 1
+	if profile.eggs[eggId] <= 0 then
+		profile.eggs[eggId] = nil
+	end
+	local newPet = awardDirectBundleContents(profile, bundle, pedestalIndex, false)
+	if type(profile.activeFollowerUids) ~= "table" then
+		profile.activeFollowerUids = {}
+	end
+	local activeSlots = if MathUtil.isPositiveFinite(profile.activeSlotsUnlocked)
+		then math.floor(profile.activeSlotsUnlocked)
+		else 1
+	if #profile.activeFollowerUids < activeSlots then
+		table.insert(profile.activeFollowerUids, newPet.uid)
+	end
+	return { ok = true, data = { pet = newPet, directBundle = true, bundle = bundle } }
+end
+
+function PolicyLogic.hatchEggWithPolicy(
+	profile: EconomyLogic.PlayerProfile,
+	eggId: string,
+	pedestalIndex: number,
+	hasVipPass: boolean,
+	arePaidRandomItemsRestricted: boolean,
+	petRollUnit: number?,
+	mutRollUnit: number?
+): EconomyLogic.TxResult
+	if type(profile) ~= "table" then
+		return { ok = false, reason = "InvalidArgs" }
+	end
+	if PolicyLogic.isPaidRandomEgg(eggId) and arePaidRandomItemsRestricted ~= false then
+		return PolicyLogic.hatchPaidEggDirectBundle(profile, eggId, pedestalIndex, hasVipPass)
+	end
+	local r1 = if petRollUnit ~= nil then petRollUnit else math.random()
+	local r2 = if mutRollUnit ~= nil then mutRollUnit else math.random()
+	return EconomyLogic.hatchEggOnPedestal(profile, eggId, pedestalIndex, hasVipPass, r1, r2)
 end
 
 local function recordPurchase(profile: any, purchaseId: string)

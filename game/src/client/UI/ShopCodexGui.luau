@@ -3,7 +3,7 @@
 	ShopCodexGui.luau
 	PolicyService-Compliant Shop & Full 19-Species Codex UI:
 	- Automatically swaps Paid Random Eggs -> Direct Non-Random Bundles when ArePaidRandomItemsRestricted ~= false
-	- Displays exact 100.0% server-driven Pet & Mutation odds on every Paid Egg card
+	- Displays exact 100.00% joint species x mutation odds pre-purchase on every Paid Egg card
 	- Lists all 5 Game Passes (reading Pass_* attributes) & Gem Cosmetics
 ]]
 
@@ -46,17 +46,22 @@ local function clearScroll()
 	end
 end
 
-local function formatOddsLine(oddsList: { any }?): string
-	if not oddsList then
+local function formatJointOddsBlock(jointOdds: { PolicyLogic.JointOdd }?): string
+	if not jointOdds or #jointOdds == 0 then
 		return ""
 	end
-	local parts: { string } = {}
-	for _, entry in ipairs(oddsList) do
-		local sp = PetConfigs.getSpecies(entry.id)
-		local label = if sp then sp.displayName else entry.id
-		table.insert(parts, string.format("%s %.1f%%", label, entry.percent))
+	local total = 0
+	local lines: { string } = {}
+	for _, entry in ipairs(jointOdds) do
+		total += entry.percent
+		local sp = PetConfigs.getSpecies(entry.speciesId)
+		local mutSpec = PetConfigs.MUTATIONS[entry.mutationKey]
+		local speciesLabel = if sp then sp.displayName else entry.speciesId
+		local mutLabel = if mutSpec then mutSpec.displayName else entry.mutationKey
+		table.insert(lines, `• {speciesLabel} ({mutLabel}): {entry.formattedPercent}`)
 	end
-	return table.concat(parts, " | ")
+	local header = string.format("Pre-Purchase Odds (%.2f%% Total):", total)
+	return header .. "\n" .. table.concat(lines, "\n")
 end
 
 local function makeShopCardRow(
@@ -89,11 +94,87 @@ local function makeShopCardRow(
 	return card
 end
 
+local function buildOfferHeaderRow(card: Frame, remotes: any, item: PolicyLogic.ShopCatalogItem)
+	local headerRow = Instance.new("Frame")
+	headerRow.Name = "HeaderRow"
+	headerRow.BackgroundTransparency = 1
+	headerRow.LayoutOrder = 1
+	headerRow.Size = UDim2.new(1, 0, 0, 44)
+	headerRow.Parent = card
+
+	local title = Theme.makeLabel(
+		headerRow,
+		"Name",
+		item.displayName,
+		UDim2.new(1, -124, 1, 0),
+		UDim2.fromOffset(0, 0),
+		15,
+		Theme.Colors.Text,
+		true
+	)
+	title.TextWrapped = true
+	applyTextConstraint(title, 10, 15)
+	local buyBtn = Theme.makeButton(
+		headerRow,
+		"BuyBtn",
+		"BUY (ROBUX)",
+		UDim2.fromOffset(116, 44),
+		UDim2.new(1, -116, 0, 0),
+		Theme.Colors.Emerald,
+		function()
+			remotes.ShopRequest:FireServer("Product", item.devProductId)
+		end
+	)
+	applyTextConstraint(buyBtn :: any, 10, 14)
+end
+
+local function renderPaidEggOfferCard(
+	parent: ScrollingFrame,
+	remotes: any,
+	item: PolicyLogic.ShopCatalogItem
+)
+	local card = Theme.makeFrame(
+		parent,
+		"Offer_" .. item.id,
+		UDim2.new(1, -8, 0, 206),
+		UDim2.fromOffset(0, 0),
+		Theme.Colors.Card,
+		10
+	)
+	card.AutomaticSize = Enum.AutomaticSize.Y
+	Theme.addPadding(card, 10, 8)
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = card
+
+	buildOfferHeaderRow(card, remotes, item)
+
+	local desc = Theme.makeLabel(
+		card,
+		"Desc",
+		formatJointOddsBlock(item.jointOdds),
+		UDim2.new(1, 0, 0, 140),
+		UDim2.fromOffset(0, 0),
+		11,
+		Theme.Colors.Muted,
+		false
+	)
+	desc.LayoutOrder = 2
+	desc.TextWrapped = true
+	desc.TextYAlignment = Enum.TextYAlignment.Top
+	desc.AutomaticSize = Enum.AutomaticSize.Y
+end
+
 local function renderOfferCard(
 	parent: ScrollingFrame,
 	remotes: any,
 	item: PolicyLogic.ShopCatalogItem
 )
+	if item.kind == "PaidEgg" then
+		renderPaidEggOfferCard(parent, remotes, item)
+		return
+	end
 	local card = makeShopCardRow(
 		parent,
 		"Offer_" .. item.id,
@@ -115,16 +196,12 @@ local function renderOfferCard(
 		Theme.Colors.Text,
 		true
 	)
+	title.TextWrapped = true
 	applyTextConstraint(title, 10, 15)
-	local detail = if item.kind == "DirectBundle"
-		then item.description
-		else `Pets (100%): {formatOddsLine(item.petOdds)}\nMutations (100%): {formatOddsLine(
-			item.mutationOdds
-		)}`
 	local desc = Theme.makeLabel(
 		card,
 		"Desc",
-		detail,
+		item.description,
 		UDim2.new(1, -144, 0, 68),
 		UDim2.fromOffset(10, 32),
 		11,
