@@ -25,6 +25,14 @@ local scrollBody: ScrollingFrame? = nil
 local activeTab = "Pets"
 local latestProfile: any = nil
 
+local function applyTextConstraint(lbl: TextLabel, minSize: number, maxSize: number)
+	lbl.TextScaled = true
+	local tc = Instance.new("UITextSizeConstraint")
+	tc.MinTextSize = minSize
+	tc.MaxTextSize = maxSize
+	tc.Parent = lbl
+end
+
 local function clearScroll()
 	if not scrollBody then
 		return
@@ -96,7 +104,7 @@ local function renderPetsTab(profile: any)
 		return
 	end
 
-	for _, pet in ipairs(pets) do
+	for idx, pet in ipairs(pets) do
 		local spec = PetConfigs.getSpecies(pet.speciesId)
 		local name = if spec then spec.displayName else pet.speciesId
 		local baseRate = if spec then spec.baseRate else 5
@@ -117,6 +125,7 @@ local function renderPetsTab(profile: any)
 			Theme.Colors.Card,
 			10
 		)
+		card.LayoutOrder = idx
 		local traitTxt = if pet.traitKey then ` | Trait: {pet.traitKey}` else ""
 		local pedTxt = if pet.pedestalIndex then `Ped #{pet.pedestalIndex}` else "Backpack"
 		Theme.makeLabel(
@@ -148,10 +157,13 @@ local function renderPetsTab(profile: any)
 		btnRow.Parent = card
 		local rl = Instance.new("UIListLayout")
 		rl.FillDirection = Enum.FillDirection.Horizontal
+		rl.SortOrder = Enum.SortOrder.LayoutOrder
 		rl.Padding = UDim.new(0, 5)
 		rl.Parent = btnRow
 
+		local btnOrder = 0
 		local function addCardBtn(btnName: string, txt: string, col: Color3, cb: () -> ())
+			btnOrder += 1
 			local b = Theme.makeButton(
 				btnRow,
 				btnName,
@@ -161,6 +173,7 @@ local function renderPetsTab(profile: any)
 				col,
 				cb
 			)
+			b.LayoutOrder = btnOrder
 			b.TextScaled = true
 			local tc = Instance.new("UITextSizeConstraint")
 			tc.MaxTextSize = 12
@@ -232,13 +245,15 @@ local function renderPetsTab(profile: any)
 	end
 end
 
-local function renderEggsTab(profile: any)
-	if not scrollBody then
-		return
-	end
-	local remotes = Remotes.waitClient()
-	Theme.makeLabel(
-		scrollBody,
+local function renderOwnedEggsSection(
+	parent: ScrollingFrame,
+	profile: any,
+	remotes: any,
+	startOrder: number
+): number
+	local order = startOrder
+	local h1 = Theme.makeLabel(
+		parent,
 		"H1",
 		"Your Egg Backpack (3s Instant Pedestal Hatch)",
 		UDim2.new(1, 0, 0, 24),
@@ -247,48 +262,58 @@ local function renderEggsTab(profile: any)
 		Theme.Colors.Coins,
 		true
 	)
-	local anyEgg = false
+	h1.LayoutOrder = order
+	order += 1
+
+	local ownedIds: { string } = {}
 	for eggId, count in pairs(profile.eggs or {}) do
 		if count > 0 then
-			anyEgg = true
-			local cfg = EggConfigs.getEgg(eggId)
-			local card = Theme.makeFrame(
-				scrollBody,
-				"Egg_" .. eggId,
-				UDim2.new(1, -8, 0, 56),
-				UDim2.fromOffset(0, 0),
-				Theme.Colors.Card,
-				10
-			)
-			Theme.makeLabel(
-				card,
-				"Name",
-				`{if cfg then cfg.displayName else eggId} (x{count})`,
-				UDim2.fromScale(0.65, 1),
-				UDim2.fromOffset(12, 0),
-				15,
-				Theme.Colors.Text,
-				true
-			)
-			Theme.makeButton(
-				card,
-				"HatchBtn",
-				"HATCH NOW",
-				UDim2.fromOffset(120, 36),
-				UDim2.new(1, -132, 0, 10),
-				Theme.Colors.Emerald,
-				function()
-					local ped = findOpenPedestal(profile)
-					if ped then
-						remotes.HatchEgg:FireServer(eggId, ped)
-					end
-				end
-			)
+			table.insert(ownedIds, eggId)
 		end
 	end
-	if not anyEgg then
+	table.sort(ownedIds)
+
+	for _, eggId in ipairs(ownedIds) do
+		local count = (profile.eggs or {})[eggId]
+		local cfg = EggConfigs.getEgg(eggId)
+		local card = Theme.makeFrame(
+			parent,
+			"Egg_" .. eggId,
+			UDim2.new(1, -8, 0, 56),
+			UDim2.fromOffset(0, 0),
+			Theme.Colors.Card,
+			10
+		)
+		card.LayoutOrder = order
+		order += 1
 		Theme.makeLabel(
-			scrollBody,
+			card,
+			"Name",
+			`{if cfg then cfg.displayName else eggId} (x{count})`,
+			UDim2.fromScale(0.65, 1),
+			UDim2.fromOffset(12, 0),
+			15,
+			Theme.Colors.Text,
+			true
+		)
+		Theme.makeButton(
+			card,
+			"HatchBtn",
+			"HATCH NOW",
+			UDim2.fromOffset(120, 36),
+			UDim2.new(1, -132, 0, 10),
+			Theme.Colors.Emerald,
+			function()
+				local ped = findOpenPedestal(profile)
+				if ped then
+					remotes.HatchEgg:FireServer(eggId, ped)
+				end
+			end
+		)
+	end
+	if #ownedIds == 0 then
+		local emptyLbl = Theme.makeLabel(
+			parent,
 			"NoEggs",
 			"Win Biome Boss Eggs in PvP or craft Standard Eggs with Boss Gems below!",
 			UDim2.new(1, 0, 0, 24),
@@ -297,10 +322,20 @@ local function renderEggsTab(profile: any)
 			Theme.Colors.Muted,
 			false
 		)
+		emptyLbl.LayoutOrder = order
+		order += 1
 	end
+	return order
+end
 
-	Theme.makeLabel(
-		scrollBody,
+local function renderGemCraftSection(
+	parent: ScrollingFrame,
+	remotes: any,
+	startOrder: number
+): number
+	local order = startOrder
+	local h2 = Theme.makeLabel(
+		parent,
 		"H2",
 		"Gem Egg Crafter (Standard Biome Eggs — Overcharged stays PvP Exclusive!)",
 		UDim2.new(1, 0, 0, 24),
@@ -309,16 +344,20 @@ local function renderEggsTab(profile: any)
 		Theme.Colors.Gems,
 		true
 	)
+	h2.LayoutOrder = order
+	order += 1
 	for _, biomeId in ipairs({ "EmeraldMeadow", "FrostbiteCavern", "MoltenCaldera" }) do
 		local cost = EconomyConfigs.GEM_CRAFT_EGG_COSTS[biomeId]
 		local card = Theme.makeFrame(
-			scrollBody,
+			parent,
 			"Craft_" .. biomeId,
 			UDim2.new(1, -8, 0, 54),
 			UDim2.fromOffset(0, 0),
 			Theme.Colors.Card,
 			10
 		)
+		card.LayoutOrder = order
+		order += 1
 		Theme.makeLabel(
 			card,
 			"Name",
@@ -341,6 +380,16 @@ local function renderEggsTab(profile: any)
 			end
 		)
 	end
+	return order
+end
+
+local function renderEggsTab(profile: any)
+	if not scrollBody then
+		return
+	end
+	local remotes = Remotes.waitClient()
+	local nextOrder = renderOwnedEggsSection(scrollBody, profile, remotes, 1)
+	renderGemCraftSection(scrollBody, remotes, nextOrder)
 end
 
 local function addUpgradeRow(
@@ -348,7 +397,8 @@ local function addUpgradeRow(
 	desc: string,
 	btnText: string,
 	color: Color3,
-	action: string
+	action: string,
+	order: number
 )
 	if not scrollBody then
 		return
@@ -361,26 +411,30 @@ local function addUpgradeRow(
 		Theme.Colors.Card,
 		10
 	)
-	Theme.makeLabel(
+	card.LayoutOrder = order
+	local titleLbl = Theme.makeLabel(
 		card,
 		"Title",
 		title,
-		UDim2.new(0.64, 0, 0, 24),
+		UDim2.new(1, -174, 0, 22),
 		UDim2.fromOffset(12, 6),
 		15,
 		Theme.Colors.Text,
 		true
 	)
-	Theme.makeLabel(
+	applyTextConstraint(titleLbl, 10, 15)
+	local descLbl = Theme.makeLabel(
 		card,
 		"Desc",
 		desc,
-		UDim2.new(0.64, 0, 0, 28),
-		UDim2.fromOffset(12, 30),
+		UDim2.new(1, -174, 0, 32),
+		UDim2.fromOffset(12, 28),
 		12,
 		Theme.Colors.Muted,
 		false
 	)
+	descLbl.TextWrapped = true
+	applyTextConstraint(descLbl, 9, 12)
 	Theme.makeButton(
 		card,
 		"Btn",
@@ -404,7 +458,8 @@ local function renderUpgradesTab(profile: any)
 			else "Max Target Tier!",
 		if nextTarget then `{MathUtil.formatNumber(nextTarget.costCoins)} Coins` else "MAXED",
 		Theme.Colors.Emerald,
-		"UpgradeTarget"
+		"UpgradeTarget",
+		1
 	)
 
 	local bIdx = EconomyConfigs.getBallTierIndex(profile.ballTierId or "RubberBall")
@@ -416,7 +471,8 @@ local function renderUpgradesTab(profile: any)
 			else "Max Ball Tier!",
 		if nextBall then `{MathUtil.formatNumber(nextBall.costCoins)} Coins` else "MAXED",
 		Theme.Colors.Molten,
-		"UpgradeBall"
+		"UpgradeBall",
+		2
 	)
 
 	local pedCount = profile.pedestalsUnlocked or 4
@@ -431,7 +487,8 @@ local function renderUpgradesTab(profile: any)
 		"Unlock Pedestals 5-8 (Courtyard) & 9-12 (2nd-Floor Showcase Balcony).",
 		pedCostTxt,
 		Theme.Colors.Coins,
-		"UnlockPedestal"
+		"UnlockPedestal",
+		3
 	)
 
 	local vTier = profile.offlineVaultTier or 1
@@ -441,7 +498,8 @@ local function renderUpgradesTab(profile: any)
 		"Upgrade offline Cash Pad accrual efficiency (50% -> 75% -> 100%).",
 		if nextVault then `{nextVault.costGems} Gems` else "100% MAX",
 		Theme.Colors.Gems,
-		"UpgradeOfflineVault"
+		"UpgradeOfflineVault",
+		4
 	)
 
 	local slots = profile.activeSlotsUnlocked or 1
@@ -453,7 +511,8 @@ local function renderUpgradesTab(profile: any)
 			else "All 3 Slots Unlocked!",
 		if nextSlot then `{nextSlot.costGems} Gems` else "MAXED",
 		Theme.Colors.Frost,
-		"UnlockActiveSlot"
+		"UnlockActiveSlot",
+		5
 	)
 
 	local ascRank = profile.ascensionRank or 0
@@ -463,7 +522,8 @@ local function renderUpgradesTab(profile: any)
 		"Resets COINS ONLY (keeps 100% Pets, DMG, Lv & Gems)! +25% Coins & +5% Training.",
 		`{MathUtil.formatNumber(ascCost)} Coins`,
 		Theme.Colors.Overcharged,
-		"SoftAscend"
+		"SoftAscend",
+		6
 	)
 end
 
@@ -512,8 +572,8 @@ function HubModalsGui.mount()
 		panel,
 		"CloseBtn",
 		"X",
-		UDim2.fromOffset(40, 40),
-		UDim2.new(1, -48, 0, 6),
+		UDim2.fromOffset(44, 44),
+		UDim2.new(1, -50, 0, 6),
 		Theme.Colors.Danger,
 		function()
 			panel.Visible = false
@@ -528,6 +588,7 @@ function HubModalsGui.mount()
 	tabRow.Parent = panel
 	local tl = Instance.new("UIListLayout")
 	tl.FillDirection = Enum.FillDirection.Horizontal
+	tl.SortOrder = Enum.SortOrder.LayoutOrder
 	tl.Padding = UDim.new(0, 8)
 	tl.Parent = tabRow
 
@@ -536,7 +597,7 @@ function HubModalsGui.mount()
 		{ id = "Eggs", label = "EGGS & CRAFT", color = Theme.Colors.Coins },
 		{ id = "Upgrades", label = "UPGRADES & ASCEND", color = Theme.Colors.Frost },
 	}
-	for _, t in ipairs(tabs) do
+	for idx, t in ipairs(tabs) do
 		local tb = Theme.makeButton(
 			tabRow,
 			"Tab_" .. t.id,
@@ -549,6 +610,7 @@ function HubModalsGui.mount()
 				rerender()
 			end
 		)
+		tb.LayoutOrder = idx
 		tb.TextScaled = true
 		local tc = Instance.new("UITextSizeConstraint")
 		tc.MaxTextSize = 13
@@ -569,6 +631,7 @@ function HubModalsGui.mount()
 	sc.ScrollBarThickness = 6
 	sc.Parent = panel
 	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
 	list.Padding = UDim.new(0, 8)
 	list.Parent = sc
 	scrollBody = sc

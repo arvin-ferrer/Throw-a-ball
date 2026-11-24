@@ -131,7 +131,8 @@ end
 local function renderPaidEggOfferCard(
 	parent: ScrollingFrame,
 	remotes: any,
-	item: PolicyLogic.ShopCatalogItem
+	item: PolicyLogic.ShopCatalogItem,
+	order: number
 )
 	local card = Theme.makeFrame(
 		parent,
@@ -141,6 +142,7 @@ local function renderPaidEggOfferCard(
 		Theme.Colors.Card,
 		10
 	)
+	card.LayoutOrder = order
 	card.AutomaticSize = Enum.AutomaticSize.Y
 	Theme.addPadding(card, 10, 8)
 	local layout = Instance.new("UIListLayout")
@@ -169,10 +171,11 @@ end
 local function renderOfferCard(
 	parent: ScrollingFrame,
 	remotes: any,
-	item: PolicyLogic.ShopCatalogItem
+	item: PolicyLogic.ShopCatalogItem,
+	order: number
 )
 	if item.kind == "PaidEgg" then
-		renderPaidEggOfferCard(parent, remotes, item)
+		renderPaidEggOfferCard(parent, remotes, item, order)
 		return
 	end
 	local card = makeShopCardRow(
@@ -186,6 +189,7 @@ local function renderOfferCard(
 			remotes.ShopRequest:FireServer("Product", item.devProductId)
 		end
 	)
+	card.LayoutOrder = order
 	local title = Theme.makeLabel(
 		card,
 		"Name",
@@ -212,7 +216,13 @@ local function renderOfferCard(
 	applyTextConstraint(desc, 8, 12)
 end
 
-local function renderEggSection(parent: ScrollingFrame, remotes: any, restricted: boolean)
+local function renderEggSection(
+	parent: ScrollingFrame,
+	remotes: any,
+	restricted: boolean,
+	startOrder: number
+): number
+	local order = startOrder
 	local headerText = if restricted
 		then "DIRECT NON-RANDOM BUNDLES (Regional Policy Compliance — Zero RNG)"
 		else "SHOP EXCLUSIVE EGGS (100.0% Disclosed Odds • Boss Eggs Stay 100% Gameplay-Earned!)"
@@ -226,17 +236,22 @@ local function renderEggSection(parent: ScrollingFrame, remotes: any, restricted
 		Theme.Colors.Coins,
 		true
 	)
+	hdr.LayoutOrder = order
+	order += 1
 	hdr.TextWrapped = true
 	applyTextConstraint(hdr, 9, 13)
 	for _, item in ipairs(PolicyLogic.buildShopOfferings(restricted)) do
-		renderOfferCard(parent, remotes, item)
+		renderOfferCard(parent, remotes, item, order)
+		order += 1
 	end
+	return order
 end
 
 local function renderGamePassCard(
 	parent: ScrollingFrame,
 	remotes: any,
-	pass: MonetizationConfigs.GamePassSpec
+	pass: MonetizationConfigs.GamePassSpec,
+	order: number
 )
 	local owned = localPlayer:GetAttribute(pass.attributeName) == true
 	local card = makeShopCardRow(
@@ -252,6 +267,7 @@ local function renderGamePassCard(
 			end
 		end
 	)
+	card.LayoutOrder = order
 	local title = Theme.makeLabel(
 		card,
 		"Title",
@@ -277,8 +293,13 @@ local function renderGamePassCard(
 	applyTextConstraint(desc, 8, 11)
 end
 
-local function renderGamePassSection(parent: ScrollingFrame, remotes: any)
-	Theme.makeLabel(
+local function renderGamePassSection(
+	parent: ScrollingFrame,
+	remotes: any,
+	startOrder: number
+): number
+	local order = startOrder
+	local hdr = Theme.makeLabel(
 		parent,
 		"PassHeader",
 		"GAME PASSES (Progression & QoL)",
@@ -288,6 +309,8 @@ local function renderGamePassSection(parent: ScrollingFrame, remotes: any)
 		Theme.Colors.Frost,
 		true
 	)
+	hdr.LayoutOrder = order
+	order += 1
 	local ordered: { MonetizationConfigs.GamePassSpec } = {}
 	for _, pass in pairs(MonetizationConfigs.GAME_PASSES) do
 		table.insert(ordered, pass)
@@ -296,8 +319,10 @@ local function renderGamePassSection(parent: ScrollingFrame, remotes: any)
 		return a.passId < b.passId
 	end)
 	for _, pass in ipairs(ordered) do
-		renderGamePassCard(parent, remotes, pass)
+		renderGamePassCard(parent, remotes, pass, order)
+		order += 1
 	end
+	return order
 end
 
 local function renderCosmeticCard(
@@ -305,7 +330,8 @@ local function renderCosmeticCard(
 	remotes: any,
 	cos: MonetizationConfigs.CosmeticSpec,
 	isOwned: boolean,
-	isEquipped: boolean
+	isEquipped: boolean,
+	order: number
 )
 	local btnText = if isEquipped
 		then "EQUIPPED"
@@ -320,6 +346,7 @@ local function renderCosmeticCard(
 			remotes.UpgradeAction:FireServer("BuyCosmetic", cos.id)
 		end
 	end)
+	card.LayoutOrder = order
 	local title = Theme.makeLabel(
 		card,
 		"Title",
@@ -334,8 +361,13 @@ local function renderCosmeticCard(
 	applyTextConstraint(title, 9, 14)
 end
 
-local function renderCosmeticSection(parent: ScrollingFrame, remotes: any)
-	Theme.makeLabel(
+local function renderCosmeticSection(
+	parent: ScrollingFrame,
+	remotes: any,
+	startOrder: number
+): number
+	local order = startOrder
+	local hdr = Theme.makeLabel(
 		parent,
 		"CosHeader",
 		"COSMETICS (Boss Gems)",
@@ -345,6 +377,8 @@ local function renderCosmeticSection(parent: ScrollingFrame, remotes: any)
 		Theme.Colors.Gems,
 		true
 	)
+	hdr.LayoutOrder = order
+	order += 1
 	local ordered: { MonetizationConfigs.CosmeticSpec } = {}
 	for _, cos in pairs(MonetizationConfigs.COSMETICS) do
 		table.insert(ordered, cos)
@@ -359,8 +393,10 @@ local function renderCosmeticSection(parent: ScrollingFrame, remotes: any)
 	for _, cos in ipairs(ordered) do
 		local isOwned = ownedCos[cos.id] == true
 		local isEquipped = EconomyLogic.isCosmeticEquipped(latestProfile, cos.id)
-		renderCosmeticCard(parent, remotes, cos, isOwned, isEquipped)
+		renderCosmeticCard(parent, remotes, cos, isOwned, isEquipped, order)
+		order += 1
 	end
+	return order
 end
 
 local function renderShopTab()
@@ -369,15 +405,16 @@ local function renderShopTab()
 	end
 	local remotes = Remotes.waitClient()
 	local restricted = localPlayer:GetAttribute("ArePaidRandomItemsRestricted") ~= false
-	renderEggSection(scrollBody, remotes, restricted)
-	renderGamePassSection(scrollBody, remotes)
-	renderCosmeticSection(scrollBody, remotes)
+	local nextOrder = renderEggSection(scrollBody, remotes, restricted, 1)
+	nextOrder = renderGamePassSection(scrollBody, remotes, nextOrder)
+	renderCosmeticSection(scrollBody, remotes, nextOrder)
 end
 
 local function renderCodexCard(
 	parent: ScrollingFrame,
 	sp: PetConfigs.PetSpecies,
-	discovered: boolean
+	discovered: boolean,
+	order: number
 )
 	local card = Theme.makeFrame(
 		parent,
@@ -387,6 +424,7 @@ local function renderCodexCard(
 		if discovered then Theme.Colors.Card else Theme.Colors.Panel,
 		10
 	)
+	card.LayoutOrder = order
 	local rCol = PetConfigs.RARITY_COLORS[sp.rarity] or { 200, 200, 200 }
 	local title = Theme.makeLabel(
 		card,
@@ -435,9 +473,10 @@ local function renderCodexTab()
 		Theme.Colors.Gems,
 		true
 	)
+	summary.LayoutOrder = 1
 	applyTextConstraint(summary, 11, 15)
-	for _, sp in ipairs(allSpecies) do
-		renderCodexCard(scrollBody, sp, unlockedMap[sp.id] == true)
+	for idx, sp in ipairs(allSpecies) do
+		renderCodexCard(scrollBody, sp, unlockedMap[sp.id] == true, idx + 1)
 	end
 end
 
@@ -458,7 +497,8 @@ local function buildTabButton(
 	name: string,
 	label: string,
 	color: Color3,
-	tabId: string
+	tabId: string,
+	order: number
 )
 	local tb = Theme.makeButton(
 		tabRow,
@@ -472,6 +512,7 @@ local function buildTabButton(
 			rerender()
 		end
 	)
+	tb.LayoutOrder = order
 	applyTextConstraint(tb :: any, 10, 14)
 	local fx = Instance.new("UIFlexItem")
 	fx.FlexMode = Enum.UIFlexMode.Fill
@@ -509,10 +550,11 @@ local function buildHeaderAndTabs(panel: Frame)
 	tabRow.Parent = panel
 	local tl = Instance.new("UIListLayout")
 	tl.FillDirection = Enum.FillDirection.Horizontal
+	tl.SortOrder = Enum.SortOrder.LayoutOrder
 	tl.Padding = UDim.new(0, 8)
 	tl.Parent = tabRow
-	buildTabButton(tabRow, "ShopTab", "SHOP & PASSES", Theme.Colors.Coins, "Shop")
-	buildTabButton(tabRow, "CodexTab", "CREATURE CODEX", Theme.Colors.Gems, "Codex")
+	buildTabButton(tabRow, "ShopTab", "SHOP & PASSES", Theme.Colors.Coins, "Shop", 1)
+	buildTabButton(tabRow, "CodexTab", "CREATURE CODEX", Theme.Colors.Gems, "Codex", 2)
 end
 
 local function buildScrollContainer(panel: Frame)
@@ -526,6 +568,7 @@ local function buildScrollContainer(panel: Frame)
 	sc.ScrollBarThickness = 6
 	sc.Parent = panel
 	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
 	list.Padding = UDim.new(0, 8)
 	list.Parent = sc
 	scrollBody = sc

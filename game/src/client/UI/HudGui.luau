@@ -318,6 +318,7 @@ local function buildMenuDrawer(gui: ScreenGui)
 	local grid = Instance.new("UIGridLayout")
 	grid.CellSize = UDim2.fromOffset(74, 74)
 	grid.CellPadding = UDim2.fromOffset(8, 8)
+	grid.FillDirectionMaxCells = 2
 	grid.SortOrder = Enum.SortOrder.LayoutOrder
 	grid.Parent = panel
 	drawerGrid = grid
@@ -452,15 +453,15 @@ local function buildHeroStatusDock(gui: ScreenGui)
 	local topRow = Instance.new("Frame")
 	topRow.Name = "TopRow"
 	topRow.BackgroundTransparency = 1
-	topRow.Position = UDim2.fromOffset(12, 8)
-	topRow.Size = UDim2.new(1, -24, 0, 30)
+	topRow.Position = UDim2.fromOffset(12, 6)
+	topRow.Size = UDim2.new(1, -24, 0, 28)
 	topRow.Parent = dock
 
 	local lv = Theme.makeLabel(
 		topRow,
 		"LevelLabel",
 		"LV 1",
-		UDim2.fromOffset(66, 30),
+		UDim2.fromOffset(66, 28),
 		UDim2.fromOffset(0, 0),
 		21,
 		Theme.Colors.Text,
@@ -471,8 +472,8 @@ local function buildHeroStatusDock(gui: ScreenGui)
 	local hpTrack = Theme.makeFrame(
 		topRow,
 		"HpTrack",
-		UDim2.new(1, -72, 0, 26),
-		UDim2.new(0, 72, 0.5, -13),
+		UDim2.new(1, -72, 0, 24),
+		UDim2.new(0, 72, 0.5, -12),
 		Theme.Colors.Card,
 		9
 	)
@@ -513,8 +514,8 @@ local function buildHeroStatusDock(gui: ScreenGui)
 	local botRow = Instance.new("Frame")
 	botRow.Name = "StatRow"
 	botRow.BackgroundTransparency = 1
-	botRow.Position = UDim2.new(0, 12, 1, -36)
-	botRow.Size = UDim2.new(1, -24, 0, 28)
+	botRow.Position = UDim2.new(0, 12, 1, -33)
+	botRow.Size = UDim2.new(1, -24, 0, 26)
 	botRow.Parent = dock
 
 	local rowLayout = Instance.new("UIListLayout")
@@ -826,6 +827,46 @@ local function syncNativeTouchJump()
 	end
 end
 
+local function applyDrawerResponsive(compact: boolean)
+	if not (drawerWrap and drawerPanel and drawerGrid and drawerTabBtn) then
+		return
+	end
+	local tileS = if compact then 54 else 74
+	local pad = if compact then 8 else 10
+	local gap = if compact then 6 else 8
+	local panelS = tileS * 2 + gap + pad * 2 + 2
+	local tabW = if compact then 22 else 26
+	local tabH = if compact then 42 else 52
+	local padding = drawerPanel:FindFirstChildOfClass("UIPadding")
+	if padding then
+		padding.PaddingTop = UDim.new(0, pad)
+		padding.PaddingBottom = UDim.new(0, pad)
+		padding.PaddingLeft = UDim.new(0, pad)
+		padding.PaddingRight = UDim.new(0, pad)
+	end
+	drawerGrid.CellSize = UDim2.fromOffset(tileS, tileS)
+	drawerGrid.CellPadding = UDim2.fromOffset(gap, gap)
+	drawerPanel.Size = UDim2.fromOffset(panelS, panelS)
+	drawerTabBtn.Size = UDim2.fromOffset(tabW, tabH)
+	drawerTabBtn.Position = UDim2.new(0, panelS - 2, 0.5, 0)
+	drawerWrap.Size = UDim2.fromOffset(panelS + tabW, panelS)
+	if compact then
+		drawerWrap.AnchorPoint = Vector2.new(0, 0)
+		drawerWrap.Position = UDim2.fromOffset(if drawerOpen then 0 else -panelS, 72)
+	else
+		drawerWrap.AnchorPoint = Vector2.new(0, 0.5)
+		drawerWrap.Position = UDim2.new(0, if drawerOpen then 0 else -panelS, 0.44, 0)
+	end
+	for _, tile in ipairs(drawerTileButtons) do
+		local ic = tile:FindFirstChild("TileIcon")
+		if ic and ic:IsA("Frame") then
+			local icS = if compact then 26 else 36
+			ic.Size = UDim2.fromOffset(icS, icS)
+			ic.Position = UDim2.new(0.5, 0, 0, if compact then 5 else 8)
+		end
+	end
+end
+
 local function applyResponsiveLayout()
 	local m = Theme.getLayoutMetrics()
 	local compact = m.isCompact
@@ -866,35 +907,7 @@ local function applyResponsiveLayout()
 	end
 
 	-- Collapsible 2x2 Drawer
-	if drawerWrap and drawerPanel and drawerGrid and drawerTabBtn then
-		local tileS = if compact then 54 else 74
-		local pad = if compact then 8 else 10
-		local gap = if compact then 6 else 8
-		local panelS = tileS * 2 + gap + pad * 2
-		local tabW = if compact then 22 else 26
-		local tabH = if compact then 42 else 52
-		drawerGrid.CellSize = UDim2.fromOffset(tileS, tileS)
-		drawerGrid.CellPadding = UDim2.fromOffset(gap, gap)
-		drawerPanel.Size = UDim2.fromOffset(panelS, panelS)
-		drawerTabBtn.Size = UDim2.fromOffset(tabW, tabH)
-		drawerTabBtn.Position = UDim2.new(0, panelS - 2, 0.5, 0)
-		drawerWrap.Size = UDim2.fromOffset(panelS + tabW, panelS)
-		if compact then
-			drawerWrap.AnchorPoint = Vector2.new(0, 0)
-			drawerWrap.Position = UDim2.fromOffset(if drawerOpen then 0 else -panelS, 72)
-		else
-			drawerWrap.AnchorPoint = Vector2.new(0, 0.5)
-			drawerWrap.Position = UDim2.new(0, if drawerOpen then 0 else -panelS, 0.44, 0)
-		end
-		for _, tile in ipairs(drawerTileButtons) do
-			local ic = tile:FindFirstChild("TileIcon")
-			if ic and ic:IsA("Frame") then
-				local icS = if compact then 26 else 36
-				ic.Size = UDim2.fromOffset(icS, icS)
-				ic.Position = UDim2.new(0.5, 0, 0, if compact then 5 else 8)
-			end
-		end
-	end
+	applyDrawerResponsive(compact)
 
 	-- Bottom-Center Hero Status Dock
 	if statusDock and levelLabel then
@@ -936,7 +949,7 @@ local function applyResponsiveLayout()
 		local dS = if compact then 54 else 70
 		local jS = if compact then 50 else 64
 		local aW = if compact then 92 else 118
-		local aH = if compact then 42 else 48
+		local aH = if compact then 44 else 48
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		if throwTextLbl then
 			throwTextLbl.TextSize = if compact then 15 else 19
