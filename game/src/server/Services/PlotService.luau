@@ -15,6 +15,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local BiomeConfigs = require(Shared.Configs.BiomeConfigs)
 local EconomyConfigs = require(Shared.Configs.EconomyConfigs)
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local CombatLogic = require(Shared.Utils.CombatLogic)
 local MathUtil = require(Shared.Utils.MathUtil)
 local ProceduralModels = require(Shared.Utils.ProceduralModels)
 local Remotes = require(Shared.Net.Remotes)
@@ -291,6 +292,30 @@ function PlotService.getPlotForPlayer(player: Player): PlotRecord?
 	return plotByUserId[player.UserId]
 end
 
+local function computeWorldHalfExtents(part: BasePart): (number, number, number)
+	local cf = part.CFrame
+	local sz = part.Size
+	local hx = 0.5
+		* (
+			math.abs(cf.XVector.X) * sz.X
+			+ math.abs(cf.YVector.X) * sz.Y
+			+ math.abs(cf.ZVector.X) * sz.Z
+		)
+	local hy = 0.5
+		* (
+			math.abs(cf.XVector.Y) * sz.X
+			+ math.abs(cf.YVector.Y) * sz.Y
+			+ math.abs(cf.ZVector.Y) * sz.Z
+		)
+	local hz = 0.5
+		* (
+			math.abs(cf.XVector.Z) * sz.X
+			+ math.abs(cf.YVector.Z) * sz.Y
+			+ math.abs(cf.ZVector.Z) * sz.Z
+		)
+	return hx, hy, hz
+end
+
 function PlotService.isPlayerOnAssignedPad(player: Player): boolean
 	local plot = plotByUserId[player.UserId]
 	local char = player.Character
@@ -299,9 +324,10 @@ function PlotService.isPlayerOnAssignedPad(player: Player): boolean
 	if not plot or not hrp or not hrp:IsA("BasePart") or not hum or hum.Health <= 0 then
 		return false
 	end
-	local dist = (hrp.Position - plot.firingPad.Position).Magnitude
-	local dy = math.abs(hrp.Position.Y - plot.firingPad.Position.Y)
-	return dist <= 9.5 and dy <= 8.0
+	local pad = plot.firingPad
+	local hx, hy, hz = computeWorldHalfExtents(pad)
+	local delta = hrp.Position - pad.Position
+	return CombatLogic.isWithinPadFootprint(delta.X, delta.Y, delta.Z, hx, hy, hz)
 end
 
 function PlotService.teleportCharacter(player: Player, targetCF: CFrame)
@@ -521,9 +547,7 @@ function PlotService.init()
 	wireHubPortalsAndServices()
 end
 
-function PlotService.start()
-	DataService.onProfileLoaded(assignPlot)
-
+local function bindPlayerSpawns()
 	Players.PlayerAdded:Connect(function(player: Player)
 		player.CharacterAdded:Connect(function(char: Model)
 			local hum = char:WaitForChild("Humanoid", 10)
@@ -538,9 +562,9 @@ function PlotService.start()
 			end)
 		end)
 	end)
+end
 
-	Players.PlayerRemoving:Connect(releasePlot)
-
+local function bindPlotRemotes()
 	local remotes = Remotes.ensureServer()
 	remotes.TeleportZone.OnServerEvent:Connect(function(player: Player, targetZone: any)
 		if type(targetZone) ~= "string" or player:GetAttribute("Zone") == "LockedBossPvP" then
@@ -557,14 +581,16 @@ function PlotService.start()
 		if type(wantsLock) ~= "boolean" then
 			return
 		end
-		if wantsLock and PlotService.isPlayerOnAssignedPad(player) then
-			playerOnPad[player.UserId] = true
-		else
-			playerOnPad[player.UserId] = false
-		end
+		playerOnPad[player.UserId] = wantsLock and PlotService.isPlayerOnAssignedPad(player)
 	end)
+end
 
-	-- Animate Moving Gold Targets smoothly across all plots
+function PlotService.start()
+	DataService.onProfileLoaded(assignPlot)
+	bindPlayerSpawns()
+	Players.PlayerRemoving:Connect(releasePlot)
+	bindPlotRemotes()
+
 	RunService.Heartbeat:Connect(function()
 		local t = os.clock()
 		for _, plot in pairs(plotsById) do

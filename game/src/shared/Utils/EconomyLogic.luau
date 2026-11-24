@@ -229,9 +229,52 @@ function EconomyLogic.collectCashPad(profile: PlayerProfile, pedestalIndex: numb
 	if stored <= 0 then
 		return 0
 	end
+	local nextCoins = (profile.coins :: number) + stored
+	if not MathUtil.isFinite(nextCoins) then
+		return 0
+	end
 	profile.padStoredCoins[pedestalIndex] = (rawStored :: number) - stored
-	profile.coins += stored
+	profile.coins = nextCoins
 	return stored
+end
+
+local function validateHatchArgs(
+	profile: PlayerProfile,
+	eggId: string,
+	pedestalIndex: number,
+	hasVipPass: boolean,
+	petRollUnit: number,
+	mutRollUnit: number
+): string?
+	if
+		type(eggId) ~= "string"
+		or not MathUtil.isFinite(petRollUnit)
+		or not MathUtil.isFinite(mutRollUnit)
+	then
+		return "InvalidArgs"
+	end
+	if not EggConfigs.getEgg(eggId) then
+		return "UnknownEgg"
+	end
+	if (profile.eggs[eggId] or 0) < 1 then
+		return "NoEggInInventory"
+	end
+	if not isValidIntegerSlot(pedestalIndex) then
+		return "InvalidPedestal"
+	end
+	local maxUnlocked = if hasVipPass then 14 else profile.pedestalsUnlocked
+	if pedestalIndex < 1 or pedestalIndex > maxUnlocked then
+		return "PedestalLocked"
+	end
+	if pedestalIndex > profile.pedestalsUnlocked and pedestalIndex <= 12 then
+		return "PedestalLocked"
+	end
+	for _, pet in ipairs(profile.pets) do
+		if pet.pedestalIndex == pedestalIndex then
+			return "PedestalOccupied"
+		end
+	end
+	return nil
 end
 
 function EconomyLogic.hatchEggOnPedestal(
@@ -242,36 +285,11 @@ function EconomyLogic.hatchEggOnPedestal(
 	petRollUnit: number,
 	mutRollUnit: number
 ): TxResult
-	if
-		type(eggId) ~= "string"
-		or not MathUtil.isFinite(petRollUnit)
-		or not MathUtil.isFinite(mutRollUnit)
-	then
-		return { ok = false, reason = "InvalidArgs" }
+	local errReason =
+		validateHatchArgs(profile, eggId, pedestalIndex, hasVipPass, petRollUnit, mutRollUnit)
+	if errReason then
+		return { ok = false, reason = errReason }
 	end
-	local egg = EggConfigs.getEgg(eggId)
-	if not egg then
-		return { ok = false, reason = "UnknownEgg" }
-	end
-	if (profile.eggs[eggId] or 0) < 1 then
-		return { ok = false, reason = "NoEggInInventory" }
-	end
-	if not isValidIntegerSlot(pedestalIndex) then
-		return { ok = false, reason = "InvalidPedestal" }
-	end
-	local maxUnlocked = if hasVipPass then 14 else profile.pedestalsUnlocked
-	if pedestalIndex < 1 or pedestalIndex > maxUnlocked then
-		return { ok = false, reason = "PedestalLocked" }
-	end
-	if pedestalIndex > profile.pedestalsUnlocked and pedestalIndex <= 12 then
-		return { ok = false, reason = "PedestalLocked" }
-	end
-	for _, pet in ipairs(profile.pets) do
-		if pet.pedestalIndex == pedestalIndex then
-			return { ok = false, reason = "PedestalOccupied" }
-		end
-	end
-
 	local speciesId, mutationKey = EggConfigs.rollHatch(eggId, petRollUnit, mutRollUnit)
 	profile.eggs[eggId] = (profile.eggs[eggId] or 1) - 1
 	if profile.eggs[eggId] <= 0 then
@@ -293,7 +311,6 @@ function EconomyLogic.hatchEggOnPedestal(
 	}
 	table.insert(profile.pets, newPet)
 	profile.codexUnlocked[speciesId] = true
-	-- Auto-equip first starter pet as Active Follower #1 without pausing pedestal income
 	if #profile.activeFollowerUids < profile.activeSlotsUnlocked then
 		table.insert(profile.activeFollowerUids, uid)
 	end
@@ -462,6 +479,10 @@ function EconomyLogic.sellPet(profile: PlayerProfile, petUid: string): TxResult
 	local species = PetConfigs.getSpecies(pet.speciesId)
 	local baseRate = if species then species.baseRate else 5
 	local value = EconomyConfigs.getPetSellValue(baseRate, pet.starTier, pet.level)
+	local nextCoins = (profile.coins :: number) + value
+	if not MathUtil.isFinite(nextCoins) then
+		return { ok = false, reason = "BalanceOverflow" }
+	end
 	table.remove(profile.pets, idx)
 	for i, aUid in ipairs(profile.activeFollowerUids) do
 		if aUid == petUid then
@@ -469,7 +490,7 @@ function EconomyLogic.sellPet(profile: PlayerProfile, petUid: string): TxResult
 			break
 		end
 	end
-	profile.coins += value
+	profile.coins = nextCoins
 	return { ok = true, data = { coinsGained = value } }
 end
 

@@ -1,16 +1,24 @@
 --!strict
 --[[
 	TelemetryLogic.luau
-	Pure launch telemetry helpers (session bounce bucket classification).
+	Pure launch telemetry helpers (first-session bounce buckets and 30s starter hatch outcomes).
 ]]
 
 local TelemetryLogic = {}
 
-function TelemetryLogic.sessionBucket(durationSeconds: number): string
-	if type(durationSeconds) ~= "number" or durationSeconds ~= durationSeconds then
-		return "FirstPlayBounce_Under60s"
+local function isFiniteNonNegative(value: any): boolean
+	return type(value) == "number"
+		and value == value
+		and value >= 0
+		and value ~= math.huge
+		and value ~= -math.huge
+end
+
+function TelemetryLogic.sessionBucket(durationSeconds: number, isFirstSession: boolean?): string
+	if isFirstSession == false then
+		return "ReturningSession"
 	end
-	if durationSeconds < 0 or durationSeconds == math.huge or durationSeconds == -math.huge then
+	if not isFiniteNonNegative(durationSeconds) then
 		return "FirstPlayBounce_Under60s"
 	end
 	if durationSeconds < 60 then
@@ -20,6 +28,17 @@ function TelemetryLogic.sessionBucket(durationSeconds: number): string
 	else
 		return "EngagedSession_Over180s"
 	end
+end
+
+function TelemetryLogic.starterHatchOutcome(elapsedSeconds: number?): (string?, number?)
+	if not isFiniteNonNegative(elapsedSeconds) then
+		return nil, nil
+	end
+	local safeSec = elapsedSeconds :: number
+	if safeSec <= 30 then
+		return "StarterHatch_Within30s", safeSec
+	end
+	return "StarterHatch_Over30s", safeSec
 end
 
 return TelemetryLogic

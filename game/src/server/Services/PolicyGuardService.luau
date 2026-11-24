@@ -21,9 +21,12 @@ local PlotService = require(script.Parent.PlotService)
 local PolicyGuardService = {}
 
 local restrictedByUser: { [number]: boolean } = {}
+local policyTokens: { [number]: number } = {}
+local nextPolicyToken = 0
+local recordedShopReceipts: { [string]: boolean } = {}
 local telemetryHook: ((string, { [string]: any }) -> ())? = nil
 
-local function checkPlayerPolicy(player: Player)
+local function checkPlayerPolicy(player: Player, token: number)
 	local restricted = true
 	if player:GetAttribute("Test_RestrictRandom") ~= true then
 		local ok, info = pcall(function()
@@ -32,6 +35,9 @@ local function checkPlayerPolicy(player: Player)
 		if ok and type(info) == "table" and info.ArePaidRandomItemsRestricted == false then
 			restricted = false
 		end
+	end
+	if not player.Parent or policyTokens[player.UserId] ~= token then
+		return
 	end
 	restrictedByUser[player.UserId] = restricted
 	player:SetAttribute("ArePaidRandomItemsRestricted", restricted)
@@ -66,21 +72,24 @@ local function handleProcessReceipt(receiptInfo: any): Enum.ProductPurchaseDecis
 	if not res.granted then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
-	local saved = DataService.savePlayer(userId, false)
+	local saved = DataService.savePlayer(userId, false, purchaseId)
 	if not saved then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	PlotService.refreshPlotVisuals(player, profile)
 	DataService.syncToClient(player)
-	if not res.duplicate then
+	if not recordedShopReceipts[purchaseId] then
+		recordedShopReceipts[purchaseId] = true
 		if telemetryHook then
 			telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
 		end
-		Remotes.ensureServer().ToastNotify:FireClient(
-			player,
-			"Purchase confirmed! Check your Egg Backpack / Pet Inventory!",
-			{ 74, 222, 128 }
-		)
+		if not res.duplicate then
+			Remotes.ensureServer().ToastNotify:FireClient(
+				player,
+				"Purchase confirmed! Check your Egg Backpack / Pet Inventory!",
+				{ 74, 222, 128 }
+			)
+		end
 	end
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
@@ -95,44 +104,71 @@ end
 
 function PolicyGuardService.init() end
 
-function PolicyGuardService.start()
-	MarketplaceService.ProcessReceipt = handleProcessReceipt
-
-	MarketplaceService.PromptGamePassPurchaseFinished:Connect(
-		function(player: Player, passId: number, purchased: boolean)
-			if not purchased then
-				return
+local function onGamePassFinished(player: Player, passId: number, purchased: boolean)
+	if not purchased then
+		return
+	end
+	for _, spec in pairs(MonetizationConfigs.GAME_PASSES) do
+		if spec.passId == passId then
+			player:SetAttribute(spec.attributeName, true)
+			local profile = DataService.getProfile(player)
+			if profile then
+				PlotService.refreshPlotVisuals(player, profile)
+				DataService.syncToClient(player)
 			end
-			for _, spec in pairs(MonetizationConfigs.GAME_PASSES) do
-				if spec.passId == passId then
-					player:SetAttribute(spec.attributeName, true)
-					local profile = DataService.getProfile(player)
-					if profile then
-						PlotService.refreshPlotVisuals(player, profile)
-						DataService.syncToClient(player)
-					end
-					if telemetryHook then
-						telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
-					end
-					Remotes.ensureServer().ToastNotify:FireClient(
-						player,
-						`Game Pass Activated: {spec.displayName}!`,
-						{ 250, 204, 21 }
-					)
-					break
-				end
+			if telemetryHook then
+				telemetryHook("ShopPurchase", { userId = player.UserId, value = 1 })
 			end
+			Remotes.ensureServer().ToastNotify
+				:FireClient(player, `Game Pass Activated: {spec.displayName}!`, { 250, 204, 21 })
+			break
 		end
-	)
+	end
+end
 
-	local function initPolicyAndPasses(player: Player)
-		restrictedByUser[player.UserId] = true
-		player:SetAttribute("ArePaidRandomItemsRestricted", true)
-		task.spawn(function()
-			checkPlayerPolicy(player)
-			syncGamePasses(player)
+local function handleShopRequest(player: Player, kind: any, idOrProduct: any)
+	if type(kind) ~= "string" then
+		return
+	end
+	if kind == "GamePass" and type(idOrProduct) == "string" then
+		local spec = MonetizationConfigs.GAME_PASSES[idOrProduct]
+		if spec then
+			pcall(function()
+				MarketplaceService:PromptGamePassPurchase(player, spec.passId)
+			end)
+		end
+	elseif kind == "Product" and type(idOrProduct) == "number" then
+		local allowed, reason =
+			PolicyLogic.canPromptProduct(idOrProduct, PolicyGuardService.isRestricted(player))
+		if not allowed then
+			Remotes.ensureServer().ToastNotify:FireClient(
+				player,
+				`Purchase blocked by regional policy ({reason or "Restricted"}).`,
+				{ 239, 68, 68 }
+			)
+			return
+		end
+		pcall(function()
+			MarketplaceService:PromptProductPurchase(player, idOrProduct)
 		end)
 	end
+end
+
+local function initPolicyAndPasses(player: Player)
+	nextPolicyToken += 1
+	local token = nextPolicyToken
+	policyTokens[player.UserId] = token
+	restrictedByUser[player.UserId] = true
+	player:SetAttribute("ArePaidRandomItemsRestricted", true)
+	task.spawn(function()
+		checkPlayerPolicy(player, token)
+		syncGamePasses(player)
+	end)
+end
+
+function PolicyGuardService.start()
+	MarketplaceService.ProcessReceipt = handleProcessReceipt
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(onGamePassFinished)
 
 	Players.PlayerAdded:Connect(initPolicyAndPasses)
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -141,36 +177,10 @@ function PolicyGuardService.start()
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		restrictedByUser[player.UserId] = nil
+		policyTokens[player.UserId] = nil
 	end)
 
-	local remotes = Remotes.ensureServer()
-	remotes.ShopRequest.OnServerEvent:Connect(function(player: Player, kind: any, idOrProduct: any)
-		if type(kind) ~= "string" then
-			return
-		end
-		if kind == "GamePass" and type(idOrProduct) == "string" then
-			local spec = MonetizationConfigs.GAME_PASSES[idOrProduct]
-			if spec then
-				pcall(function()
-					MarketplaceService:PromptGamePassPurchase(player, spec.passId)
-				end)
-			end
-		elseif kind == "Product" and type(idOrProduct) == "number" then
-			local allowed, reason =
-				PolicyLogic.canPromptProduct(idOrProduct, PolicyGuardService.isRestricted(player))
-			if not allowed then
-				remotes.ToastNotify:FireClient(
-					player,
-					`Purchase blocked by regional policy ({reason or "Restricted"}).`,
-					{ 239, 68, 68 }
-				)
-				return
-			end
-			pcall(function()
-				MarketplaceService:PromptProductPurchase(player, idOrProduct)
-			end)
-		end
-	end)
+	Remotes.ensureServer().ShopRequest.OnServerEvent:Connect(handleShopRequest)
 end
 
 return PolicyGuardService

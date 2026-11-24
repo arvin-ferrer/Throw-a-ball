@@ -24,4 +24,31 @@ run("Invalid or negative durations clamp safely to Under60s", function()
 	end
 end)
 
+run("Returning sessions classify separately from first-play bounce", function()
+	assert(TelemetryLogic.sessionBucket(12, false) == "ReturningSession", "returning under 60s")
+	assert(TelemetryLogic.sessionBucket(400, false) == "ReturningSession", "returning over 180s")
+	assert(
+		TelemetryLogic.sessionBucket(45, true) == "FirstPlayBounce_Under60s",
+		"explicit first session still uses bounce bucket"
+	)
+end)
+
+run("Starter hatch outcome bounds <=30s vs >30s and omits unknown durations", function()
+	for _, bad in { -1, 0 / 0, math.huge, -math.huge } do
+		local outcome, sec = TelemetryLogic.starterHatchOutcome(bad)
+		assert(outcome == nil and sec == nil, "invalid duration omitted")
+	end
+	local nilOutcome, nilSec = TelemetryLogic.starterHatchOutcome(nil)
+	assert(nilOutcome == nil and nilSec == nil, "missing join timestamp omitted")
+
+	for _, fast in { 0, 18.5, 30 } do
+		local outcome, sec = TelemetryLogic.starterHatchOutcome(fast)
+		assert(outcome == "StarterHatch_Within30s" and sec == fast, "fast hatch within 30s")
+	end
+	for _, slow in { 30.1, 95 } do
+		local outcome, sec = TelemetryLogic.starterHatchOutcome(slow)
+		assert(outcome == "StarterHatch_Over30s" and sec == slow, "slow hatch over 30s")
+	end
+end)
+
 print("PASS: TelemetryLogic.spec.luau")

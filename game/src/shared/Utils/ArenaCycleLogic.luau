@@ -40,6 +40,8 @@ export type BiomeArenaState = {
 	pvpStartedAt: number,
 	suddenDeathRadius: number,
 	claim: ClaimState,
+	roundSeq: number?,
+	offeredOptIn: { [number]: boolean }?,
 }
 
 export type OverchargedClock = {
@@ -93,6 +95,7 @@ local function resetToPvE(
 	state.eggSpawnedAt = 0
 	state.pvpStartedAt = 0
 	state.suddenDeathRadius = BiomeConfigs.SUDDEN_DEATH_START_RADIUS
+	state.offeredOptIn = {}
 	clearClaim(state)
 	table.insert(events, {
 		kind = "PhaseChanged",
@@ -134,6 +137,8 @@ function ArenaCycleLogic.createBiomeState(biomeId: string, now: number): BiomeAr
 		pvpStartedAt = 0,
 		suddenDeathRadius = BiomeConfigs.SUDDEN_DEATH_START_RADIUS,
 		claim = { claimerId = nil, startedAt = 0, progress = 0 },
+		roundSeq = 0,
+		offeredOptIn = {},
 	}
 end
 
@@ -151,6 +156,8 @@ function ArenaCycleLogic.triggerOptIn(
 	state.phaseEndsAt = now + BiomeConfigs.OPT_IN_WINDOW_SEC
 	state.isOvercharged = isOvercharged
 	state.queuedPlayers = {}
+	state.roundSeq = (state.roundSeq or 0) + 1
+	state.offeredOptIn = {}
 	table.insert(events, {
 		kind = "PhaseChanged",
 		biomeId = state.biomeId,
@@ -221,6 +228,101 @@ function ArenaCycleLogic.setOptIn(
 	return true
 end
 
+function ArenaCycleLogic.switchOptIn(
+	statesByBiome: { [string]: BiomeArenaState },
+	targetBiomeId: string,
+	userId: number,
+	wantsIn: boolean,
+	powerRating: number
+): boolean
+	local target = statesByBiome[targetBiomeId]
+	if not target then
+		return false
+	end
+	local accepted = ArenaCycleLogic.setOptIn(target, userId, wantsIn, powerRating)
+	if accepted and wantsIn then
+		for biomeId, st in pairs(statesByBiome) do
+			if biomeId ~= targetBiomeId then
+				st.queuedPlayers[userId] = nil
+			end
+		end
+	end
+	return accepted
+end
+
+function ArenaCycleLogic.markOptInOffered(state: BiomeArenaState, userId: number): boolean
+	if state.phase ~= "OptIn_Window" or not isFiniteNumber(userId) then
+		return false
+	end
+	if not state.offeredOptIn then
+		state.offeredOptIn = {}
+	end
+	local offered = state.offeredOptIn :: { [number]: boolean }
+	if offered[userId] then
+		return false
+	end
+	offered[userId] = true
+	return true
+end
+
+function ArenaCycleLogic.collectOptInDecisions(
+	state: BiomeArenaState
+): { { userId: number, optedIn: boolean } }
+	local out: { { userId: number, optedIn: boolean } } = {}
+	local offered = state.offeredOptIn
+	if not offered then
+		return out
+	end
+	for _, userId in ipairs(cloneUserList(offered)) do
+		table.insert(out, {
+			userId = userId,
+			optedIn = state.queuedPlayers[userId] ~= nil,
+		})
+	end
+	state.offeredOptIn = {}
+	return out
+end
+
+function ArenaCycleLogic.pruneQueuedPlayers(state: BiomeArenaState, isEligible: (number) -> boolean)
+	local toRemove: { number } = {}
+	for userId in pairs(state.queuedPlayers) do
+		if not isEligible(userId) then
+			table.insert(toRemove, userId)
+		end
+	end
+	for _, userId in ipairs(toRemove) do
+		state.queuedPlayers[userId] = nil
+	end
+end
+
+function ArenaCycleLogic.isInsideArenaBounds(
+	px: number,
+	py: number,
+	pz: number,
+	centerX: number,
+	centerY: number,
+	centerZ: number,
+	radius: number,
+	maxHeightDelta: number?
+): boolean
+	if
+		not isFiniteNumber(px)
+		or not isFiniteNumber(py)
+		or not isFiniteNumber(pz)
+		or not isFiniteNumber(centerX)
+		or not isFiniteNumber(centerY)
+		or not isFiniteNumber(centerZ)
+		or not isFiniteNumber(radius)
+		or radius <= 0
+	then
+		return false
+	end
+	local dx = px - centerX
+	local dz = pz - centerZ
+	local maxY = maxHeightDelta or 120
+	return (dx * dx + dz * dz) <= (radius * radius) and math.abs(py - centerY) <= maxY
+end
+
 function ArenaCycleLogic.getQueueSummary(state: BiomeArenaState): (number, number)
 	local count = 0
 	local maxPower = 0
@@ -235,9 +337,13 @@ end
 
 function ArenaCycleLogic.startBossPhase(state: BiomeArenaState, now: number): { ArenaEvent }
 	local events: { ArenaEvent } = {}
+	local decisions = ArenaCycleLogic.collectOptInDecisions(state)
 	local count = countMap(state.queuedPlayers)
 	if count == 0 then
 		resetToPvE(state, now, events, "NoOptIn")
+		if #events > 0 then
+			events[1].payload.optInDecisions = decisions
+		end
 		return events
 	end
 	state.phase = "Boss_Phase"
@@ -261,6 +367,7 @@ function ArenaCycleLogic.startBossPhase(state: BiomeArenaState, now: number): { 
 			bossMaxHP = state.bossMaxHP,
 			isOvercharged = state.isOvercharged,
 			endsAt = state.phaseEndsAt,
+			optInDecisions = decisions,
 		},
 	})
 	return events
@@ -411,6 +518,51 @@ function ArenaCycleLogic.removePlayerFromArena(
 	return events
 end
 
+local function stepPvpScramble(
+	state: BiomeArenaState,
+	now: number,
+	claimerDistance: number?,
+	events: { ArenaEvent }
+)
+	if countMap(state.activePlayers) == 0 then
+		resetToPvE(state, now, events, "EmptyPvP")
+		return
+	end
+	local pvpElapsed = math.max(0, now - state.pvpStartedAt)
+	state.suddenDeathRadius = BiomeConfigs.computeSuddenDeathRadius(pvpElapsed)
+	local claimer = state.claim.claimerId
+	if claimer == nil then
+		return
+	end
+	local badDist = claimerDistance ~= nil
+		and (not isFiniteNumber(claimerDistance) or (claimerDistance :: number) < 0)
+	local outOfRange = badDist
+		or (claimerDistance ~= nil and (claimerDistance :: number) > BiomeConfigs.EGG_CLAIM_RADIUS)
+	if not state.activePlayers[claimer] or outOfRange then
+		for _, ev in ipairs(ArenaCycleLogic.cancelEggClaim(state, claimer, "OutOfRadius")) do
+			table.insert(events, ev)
+		end
+		return
+	end
+	local held = math.max(0, now - state.claim.startedAt)
+	state.claim.progress = math.clamp(held / BiomeConfigs.EGG_CLAIM_DURATION_SEC, 0, 1)
+	if held >= BiomeConfigs.EGG_CLAIM_DURATION_SEC then
+		local biome = BiomeConfigs.BIOMES[state.biomeId]
+		local eggId = if state.isOvercharged then biome.overchargedEggId else biome.standardEggId
+		table.insert(events, {
+			kind = "EggClaimed",
+			biomeId = state.biomeId,
+			payload = {
+				winnerId = claimer,
+				eggId = eggId,
+				isOvercharged = state.isOvercharged,
+				participants = cloneUserList(state.participants),
+			},
+		})
+		resetToPvE(state, now, events, "EggClaimed")
+	end
+end
+
 function ArenaCycleLogic.stepBiome(
 	state: BiomeArenaState,
 	now: number,
@@ -430,48 +582,7 @@ function ArenaCycleLogic.stepBiome(
 			resetToPvE(state, now, events, "BossExpiredOrWiped")
 		end
 	elseif state.phase == "PvP_EggScramble" then
-		if countMap(state.activePlayers) == 0 then
-			resetToPvE(state, now, events, "EmptyPvP")
-			return events
-		end
-		local pvpElapsed = math.max(0, now - state.pvpStartedAt)
-		state.suddenDeathRadius = BiomeConfigs.computeSuddenDeathRadius(pvpElapsed)
-		local claimer = state.claim.claimerId
-		if claimer ~= nil then
-			local badDist = claimerDistance ~= nil
-				and (not isFiniteNumber(claimerDistance) or (claimerDistance :: number) < 0)
-			local outOfRange = badDist
-				or (
-					claimerDistance ~= nil
-					and (claimerDistance :: number) > BiomeConfigs.EGG_CLAIM_RADIUS
-				)
-			if not state.activePlayers[claimer] or outOfRange then
-				local cancelEv = ArenaCycleLogic.cancelEggClaim(state, claimer, "OutOfRadius")
-				for _, ev in ipairs(cancelEv) do
-					table.insert(events, ev)
-				end
-			else
-				local held = math.max(0, now - state.claim.startedAt)
-				state.claim.progress = math.clamp(held / BiomeConfigs.EGG_CLAIM_DURATION_SEC, 0, 1)
-				if held >= BiomeConfigs.EGG_CLAIM_DURATION_SEC then
-					local biome = BiomeConfigs.BIOMES[state.biomeId]
-					local eggId = if state.isOvercharged
-						then biome.overchargedEggId
-						else biome.standardEggId
-					table.insert(events, {
-						kind = "EggClaimed",
-						biomeId = state.biomeId,
-						payload = {
-							winnerId = claimer,
-							eggId = eggId,
-							isOvercharged = state.isOvercharged,
-							participants = cloneUserList(state.participants),
-						},
-					})
-					resetToPvE(state, now, events, "EggClaimed")
-				end
-			end
-		end
+		stepPvpScramble(state, now, claimerDistance, events)
 	end
 	return events
 end

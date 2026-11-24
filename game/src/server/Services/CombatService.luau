@@ -98,6 +98,32 @@ local function applyPvPKnockback(victim: Player, dir: Vector3, strength: number)
 	end)
 end
 
+local function schedulePvpBurnTicks(
+	attacker: Player,
+	victim: Player,
+	hum: Humanoid,
+	burnTotalDamage: number
+)
+	if burnTotalDamage <= 0 or hum.Health <= 0 then
+		return
+	end
+	local perTick = math.max(1, math.floor(burnTotalDamage / 3 + 0.5))
+	for i = 1, 3 do
+		task.delay(i * 1.0, function()
+			if not attacker.Parent or not victim.Parent then
+				return
+			end
+			if not ArenaCycleService.canDealPvPDamage(attacker, victim) then
+				return
+			end
+			if hum.Parent and hum.Health > 0 then
+				hum.Health = math.max(0, hum.Health - perTick)
+				ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, hum.Health <= 0)
+			end
+		end)
+	end
+end
+
 local function applyPvPDamage(
 	attacker: Player,
 	victim: Player,
@@ -133,24 +159,7 @@ local function applyPvPDamage(
 	end
 	applyPvPKnockback(victim, hitDir, eval.knockbackStrength)
 	ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, hum.Health <= 0)
-
-	if eval.burnTotalDamage > 0 and hum.Health > 0 then
-		local perTick = math.max(1, math.floor(eval.burnTotalDamage / 3 + 0.5))
-		for i = 1, 3 do
-			task.delay(i * 1.0, function()
-				if not attacker.Parent or not victim.Parent then
-					return
-				end
-				if not ArenaCycleService.canDealPvPDamage(attacker, victim) then
-					return
-				end
-				if hum.Parent and hum.Health > 0 then
-					hum.Health = math.max(0, hum.Health - perTick)
-					ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, hum.Health <= 0)
-				end
-			end)
-		end
-	end
+	schedulePvpBurnTicks(attacker, victim, hum, eval.burnTotalDamage)
 end
 
 local function resolveTrainingHit(
@@ -297,6 +306,97 @@ local function isTargetEligibleForPlayer(player: Player, target: ResolvedTarget)
 	return false
 end
 
+local function collectTrainingCandidates(
+	player: Player,
+	candidates: { CombatLogic.AutoAimCandidate },
+	resolvedById: { [string]: ResolvedTarget }
+)
+	local plot = PlotService.getPlotForPlayer(player)
+	if not plot then
+		return
+	end
+	for _, child in ipairs(plot.trainingRange:GetChildren()) do
+		if child:IsA("BasePart") then
+			local tk = child:GetAttribute("TargetKind")
+			if tk == "Static" or tk == "MovingGold" then
+				local id = child.Name
+				local kind: "GoldTarget" | "Target" = if tk == "MovingGold"
+					then "GoldTarget"
+					else "Target"
+				resolvedById[id] = { hitPart = child, hitKind = kind }
+				table.insert(candidates, {
+					id = id,
+					kind = kind,
+					x = child.Position.X,
+					y = child.Position.Y,
+					z = child.Position.Z,
+				})
+			end
+		end
+	end
+end
+
+local function collectBossRoomCandidates(
+	player: Player,
+	activeBiome: string,
+	candidates: { CombatLogic.AutoAimCandidate },
+	resolvedById: { [string]: ResolvedTarget }
+)
+	local boss = BossAIService.getActiveBoss(activeBiome)
+	if boss and boss.model.PrimaryPart then
+		local bp = boss.model.PrimaryPart
+		resolvedById.boss = { hitPart = bp, hitKind = "Boss", boss = boss }
+		table.insert(candidates, {
+			id = "boss",
+			kind = "Boss",
+			x = bp.Position.X,
+			y = bp.Position.Y,
+			z = bp.Position.Z,
+		})
+	end
+	for _, enemy in ipairs(Players:GetPlayers()) do
+		if enemy ~= player and ArenaCycleService.canDealPvPDamage(player, enemy) then
+			local eChar = enemy.Character
+			local eHrp = if eChar then eChar:FindFirstChild("HumanoidRootPart") else nil
+			local eHum = if eChar then eChar:FindFirstChildOfClass("Humanoid") else nil
+			if eHrp and eHrp:IsA("BasePart") and eHum and eHum.Health > 0 then
+				local id = `pvp_{enemy.UserId}`
+				resolvedById[id] = { hitPart = eHrp, hitKind = "PvP", victim = enemy }
+				table.insert(candidates, {
+					id = id,
+					kind = "PvP",
+					x = eHrp.Position.X,
+					y = eHrp.Position.Y,
+					z = eHrp.Position.Z,
+				})
+			end
+		end
+	end
+end
+
+local function collectBiomeMobCandidates(
+	activeBiome: string,
+	origin: Vector3,
+	maxRange: number,
+	candidates: { CombatLogic.AutoAimCandidate },
+	resolvedById: { [string]: ResolvedTarget }
+)
+	for i, mob in ipairs(BossAIService.getNearbyMobs(activeBiome, origin, maxRange, nil)) do
+		if mob.model and mob.model.PrimaryPart then
+			local mp = mob.model.PrimaryPart
+			local id = `mob_{i}`
+			resolvedById[id] = { hitPart = mp, hitKind = "Mob", mob = mob }
+			table.insert(candidates, {
+				id = id,
+				kind = "Mob",
+				x = mp.Position.X,
+				y = mp.Position.Y,
+				z = mp.Position.Z,
+			})
+		end
+	end
+end
+
 local function resolveAutoAimTarget(
 	player: Player,
 	origin: Vector3,
@@ -311,84 +411,17 @@ local function resolveAutoAimTarget(
 			end
 		end
 	end
-
 	local zone = tostring(player:GetAttribute("Zone") or "Hub")
 	local activeBiome = tostring(player:GetAttribute("ActiveBiome") or "")
 	local candidates: { CombatLogic.AutoAimCandidate } = {}
 	local resolvedById: { [string]: ResolvedTarget } = {}
-
 	if zone == "Hub" and PlotService.isPlayerOnAssignedPad(player) then
-		local plot = PlotService.getPlotForPlayer(player)
-		if plot then
-			for _, child in ipairs(plot.trainingRange:GetChildren()) do
-				if child:IsA("BasePart") then
-					local tk = child:GetAttribute("TargetKind")
-					if tk == "Static" or tk == "MovingGold" then
-						local id = child.Name
-						resolvedById[id] = {
-							hitPart = child,
-							hitKind = if tk == "MovingGold" then "GoldTarget" else "Target",
-						}
-						table.insert(candidates, {
-							id = id,
-							kind = if tk == "MovingGold" then "GoldTarget" else "Target",
-							x = child.Position.X,
-							y = child.Position.Y,
-							z = child.Position.Z,
-						})
-					end
-				end
-			end
-		end
+		collectTrainingCandidates(player, candidates, resolvedById)
 	elseif zone == "LockedBossPvP" and activeBiome ~= "" then
-		local boss = BossAIService.getActiveBoss(activeBiome)
-		if boss and boss.model.PrimaryPart then
-			local bp = boss.model.PrimaryPart
-			resolvedById.boss = { hitPart = bp, hitKind = "Boss", boss = boss }
-			table.insert(candidates, {
-				id = "boss",
-				kind = "Boss",
-				x = bp.Position.X,
-				y = bp.Position.Y,
-				z = bp.Position.Z,
-			})
-		end
-		for _, enemy in ipairs(Players:GetPlayers()) do
-			if enemy ~= player and ArenaCycleService.canDealPvPDamage(player, enemy) then
-				local eChar = enemy.Character
-				local eHrp = if eChar then eChar:FindFirstChild("HumanoidRootPart") else nil
-				local eHum = if eChar then eChar:FindFirstChildOfClass("Humanoid") else nil
-				if eHrp and eHrp:IsA("BasePart") and eHum and eHum.Health > 0 then
-					local id = `pvp_{enemy.UserId}`
-					resolvedById[id] = { hitPart = eHrp, hitKind = "PvP", victim = enemy }
-					table.insert(candidates, {
-						id = id,
-						kind = "PvP",
-						x = eHrp.Position.X,
-						y = eHrp.Position.Y,
-						z = eHrp.Position.Z,
-					})
-				end
-			end
-		end
+		collectBossRoomCandidates(player, activeBiome, candidates, resolvedById)
 	elseif zone == "BiomePvE" and activeBiome ~= "" then
-		local nearby = BossAIService.getNearbyMobs(activeBiome, origin, maxRange, nil)
-		for i, mob in ipairs(nearby) do
-			if mob.model and mob.model.PrimaryPart then
-				local mp = mob.model.PrimaryPart
-				local id = `mob_{i}`
-				resolvedById[id] = { hitPart = mp, hitKind = "Mob", mob = mob }
-				table.insert(candidates, {
-					id = id,
-					kind = "Mob",
-					x = mp.Position.X,
-					y = mp.Position.Y,
-					z = mp.Position.Z,
-				})
-			end
-		end
+		collectBiomeMobCandidates(activeBiome, origin, maxRange, candidates, resolvedById)
 	end
-
 	local chosen =
 		CombatLogic.selectAutoAimTarget(origin.X, origin.Y, origin.Z, candidates, maxRange)
 	return if chosen then resolvedById[chosen.id] else nil
@@ -477,6 +510,38 @@ local function enforcePlayerBallCap(player: Player)
 	end
 end
 
+local function broadcastBallBounce(
+	proj: ActiveProjectile,
+	now: number,
+	n: Vector3,
+	incomingIntoNormal: number,
+	hitPart: BasePart?
+)
+	local remaining = CombatLogic.getRemainingBounceTime(proj.firstBounceAt, now)
+	local shouldSurface = proj.bounceCount == 1
+		or (incomingIntoNormal >= 4.0 and (now - proj.lastSurfaceBroadcastAt) >= 0.08)
+	local shouldRoll = not shouldSurface
+		and n.Y > 0.65
+		and (now - proj.lastSurfaceBroadcastAt) >= 0.12
+	if not shouldSurface and not shouldRoll then
+		return
+	end
+	proj.lastSurfaceBroadcastAt = now
+	broadcastProjectile({
+		msgKind = "Bounce",
+		ballId = proj.id,
+		pos = proj.pos,
+		vel = proj.vel,
+		normal = n,
+		hitKind = if shouldRoll then "Roll" else "Surface",
+		hitTarget = hitPart,
+		damage = 0,
+		isCrit = false,
+		remainingLife = remaining,
+		bounceCount = proj.bounceCount,
+	})
+end
+
 local function handleProjectileCollision(
 	proj: ActiveProjectile,
 	now: number,
@@ -492,7 +557,6 @@ local function handleProjectileCollision(
 	if resolved and not isTargetEligibleForPlayer(proj.player, resolved) then
 		resolved = nil
 	end
-
 	if resolved then
 		local eval = evaluateCurrentHit(proj.profile)
 		local impactDir = if proj.vel.Magnitude > 0.1 then proj.vel.Unit else -n
@@ -509,42 +573,16 @@ local function handleProjectileCollision(
 		})
 		return false
 	end
-
-	local isFirstBounce = proj.firstBounceAt == nil
-	if isFirstBounce then
+	if proj.firstBounceAt == nil then
 		proj.firstBounceAt = now
 	end
 	proj.bounceCount += 1
-
 	local incomingIntoNormal = -(proj.vel:Dot(n))
 	local bx, by, bz =
 		CombatLogic.computeBounceVelocity(proj.vel.X, proj.vel.Y, proj.vel.Z, n.X, n.Y, n.Z)
 	proj.vel = Vector3.new(bx, by, bz)
 	proj.pos = hitCenter + n * 0.18
-
-	local remaining = CombatLogic.getRemainingBounceTime(proj.firstBounceAt, now)
-	local shouldBroadcastSurface = isFirstBounce
-		or (incomingIntoNormal >= 4.0 and (now - proj.lastSurfaceBroadcastAt) >= 0.08)
-	local shouldBroadcastRoll = not shouldBroadcastSurface
-		and n.Y > 0.65
-		and (now - proj.lastSurfaceBroadcastAt) >= 0.12
-
-	if shouldBroadcastSurface or shouldBroadcastRoll then
-		proj.lastSurfaceBroadcastAt = now
-		broadcastProjectile({
-			msgKind = "Bounce",
-			ballId = proj.id,
-			pos = proj.pos,
-			vel = proj.vel,
-			normal = n,
-			hitKind = if shouldBroadcastRoll then "Roll" else "Surface",
-			hitTarget = hitPart,
-			damage = 0,
-			isCrit = false,
-			remainingLife = remaining,
-			bounceCount = proj.bounceCount,
-		})
-	end
+	broadcastBallBounce(proj, now, n, incomingIntoNormal, hitPart)
 	return true
 end
 

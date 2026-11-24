@@ -29,13 +29,15 @@ local dataStore: DataStore? = nil
 local useMemoryFallback = false
 local serverSessionId = HttpService:GenerateGUID(false)
 local profiles: { [number]: PlayerProfile } = {}
+local leaseTokens: { [number]: string } = {}
+local firstSessionByUser: { [number]: boolean } = {}
 local memoryStore: { [string]: any } = {}
-local keyLocks: { [number]: boolean } = {}
+local saveInFlight: { [number]: boolean } = {}
 local offlineSummary: { [number]: number } = {}
 local onProfileLoadedCallbacks: { (Player, PlayerProfile) -> () } = {}
 
 local function getStore(): DataStore?
-	if useMemoryFallback then
+	if useMemoryFallback and RunService:IsStudio() then
 		return nil
 	end
 	if dataStore then
@@ -48,7 +50,9 @@ local function getStore(): DataStore?
 		dataStore = storeOrErr
 		return dataStore
 	end
-	useMemoryFallback = true
+	if RunService:IsStudio() then
+		useMemoryFallback = true
+	end
 	return nil
 end
 
@@ -186,6 +190,21 @@ function DataService.mirrorAttributes(player: Player, profile: PlayerProfile)
 	setStat("Level", profile.level)
 end
 
+local function buildClientProfileView(profile: PlayerProfile): { [string]: any }
+	local view: { [string]: any } = {}
+	for k, v in pairs(profile :: any) do
+		if k ~= "processedPurchases" and k ~= "purchaseIds" then
+			view[k] = v
+		end
+	end
+	view.purchaseIds = {}
+	return view
+end
+
+function DataService.isFirstSession(player: Player): boolean
+	return firstSessionByUser[player.UserId] == true
+end
+
 function DataService.syncToClient(player: Player)
 	local profile = profiles[player.UserId]
 	if not profile then
@@ -194,7 +213,7 @@ function DataService.syncToClient(player: Player)
 	DataService.mirrorAttributes(player, profile)
 	local remotes = Remotes.ensureServer()
 	remotes.ProfileSync:FireClient(player, {
-		profile = profile,
+		profile = buildClientProfileView(profile),
 		powerRating = computePower(profile),
 		maxHP = EconomyConfigs.getPlayerMaxHP(profile.level),
 		offlineCoinsEarned = offlineSummary[player.UserId] or 0,
@@ -213,128 +232,216 @@ function DataService.onProfileLoaded(cb: (Player, PlayerProfile) -> ())
 	table.insert(onProfileLoadedCallbacks, cb)
 end
 
-function DataService.savePlayer(userId: number, releaseLock: boolean): boolean
-	local profile = profiles[userId]
-	if not profile or keyLocks[userId] then
+local function hasCommittedReceipt(result: any, requiredPurchaseId: string?): boolean
+	if not requiredPurchaseId then
+		return true
+	end
+	local data = if type(result) == "table" then result.data else nil
+	if type(data) ~= "table" then
 		return false
 	end
-	keyLocks[userId] = true
+	if
+		type(data.processedPurchases) == "table"
+		and data.processedPurchases[requiredPurchaseId] == true
+	then
+		return true
+	end
+	return false
+end
+
+local function attemptStoreSave(
+	store: DataStore,
+	key: string,
+	leaseToken: string,
+	profile: PlayerProfile,
+	releaseLock: boolean,
+	now: number
+): (boolean, boolean, any)
+	local lostOwnership = false
+	local ok, result = pcall(function()
+		return store:UpdateAsync(key, function(oldData: any): any
+			if type(oldData) ~= "table" or oldData.sessionLock ~= leaseToken then
+				lostOwnership = true
+				return nil
+			end
+			if
+				type(oldData.data) == "table"
+				and (oldData.data.schemaVersion or 0) > EconomyLogic.CURRENT_SCHEMA_VERSION
+			then
+				return nil
+			end
+			return {
+				sessionLock = if releaseLock then nil else leaseToken,
+				lockTime = now,
+				data = profile,
+			}
+		end)
+	end)
+	return ok, lostOwnership, result
+end
+
+local function revokeSessionOnOwnershipLoss(userId: number)
+	profiles[userId] = nil
+	leaseTokens[userId] = nil
+	offlineSummary[userId] = nil
+	firstSessionByUser[userId] = nil
+	local plr = Players:GetPlayerByUserId(userId)
+	if plr then
+		plr:Kick("Session ownership moved to another server. Please rejoin.")
+	end
+end
+
+function DataService.savePlayer(
+	userId: number,
+	releaseLock: boolean,
+	requiredPurchaseId: string?
+): boolean
+	while saveInFlight[userId] do
+		task.wait(0.05)
+	end
+	local profile = profiles[userId]
+	local leaseToken = leaseTokens[userId]
+	if not profile or not leaseToken then
+		return false
+	end
+	saveInFlight[userId] = true
 	local now = os.time()
 	profile.lastLogoutTime = now
 	local key = `Player_{userId}`
 	local store = getStore()
 	local saved = false
 	if store then
-		local ok, result = pcall(function()
-			return store:UpdateAsync(key, function(oldData: any): any
-				if type(oldData) == "table" then
-					if
-						oldData.sessionLock ~= nil
-						and oldData.sessionLock ~= serverSessionId
-						and (now - (oldData.lockTime or 0)) < SESSION_LOCK_TTL
-					then
-						return nil
-					end
-					if
-						type(oldData.data) == "table"
-						and (oldData.data.schemaVersion or 0)
-							> EconomyLogic.CURRENT_SCHEMA_VERSION
-					then
-						return nil
-					end
-				end
-				return {
-					sessionLock = if releaseLock then nil else serverSessionId,
-					lockTime = now,
-					data = profile,
-				}
-			end)
-		end)
-		if ok and type(result) == "table" then
+		local ok, lostOwnership, result =
+			attemptStoreSave(store, key, leaseToken, profile, releaseLock, now)
+		if ok and type(result) == "table" and hasCommittedReceipt(result, requiredPurchaseId) then
 			saved = true
+		elseif lostOwnership then
+			saveInFlight[userId] = nil
+			revokeSessionOnOwnershipLoss(userId)
+			return false
 		elseif not ok and RunService:IsStudio() then
 			useMemoryFallback = true
 			memoryStore[key] = profile
 			saved = true
 		end
-	elseif RunService:IsStudio() or useMemoryFallback then
+	elseif RunService:IsStudio() and useMemoryFallback then
 		memoryStore[key] = profile
 		saved = true
 	end
-	keyLocks[userId] = nil
+	saveInFlight[userId] = nil
 	return saved
+end
+
+local function releaseStoreLock(store: DataStore, key: string, leaseToken: string)
+	pcall(function()
+		store:UpdateAsync(key, function(oldVal: any): any
+			if type(oldVal) ~= "table" or oldVal.sessionLock ~= leaseToken then
+				return nil
+			end
+			return {
+				sessionLock = nil,
+				lockTime = os.time(),
+				data = oldVal.data,
+			}
+		end)
+	end)
 end
 
 local function acquireProfileFromStore(
 	store: DataStore,
 	key: string,
+	leaseToken: string,
 	now: number
-): (boolean, any, boolean)
+): (boolean, any, boolean, boolean)
+	local isNew = false
 	local ok, result = pcall(function()
 		return store:UpdateAsync(key, function(oldVal: any)
 			if
 				type(oldVal) == "table"
 				and oldVal.sessionLock ~= nil
-				and oldVal.sessionLock ~= serverSessionId
+				and oldVal.sessionLock ~= leaseToken
 				and (now - (oldVal.lockTime or 0)) < SESSION_LOCK_TTL
 			then
 				return nil
 			end
 			local existing = if type(oldVal) == "table" then oldVal.data else nil
+			isNew = existing == nil
 			return {
-				sessionLock = serverSessionId,
+				sessionLock = leaseToken,
 				lockTime = now,
 				data = existing or EconomyLogic.createDefaultProfile(now),
 			}
 		end)
 	end)
-	if ok and type(result) == "table" and result.sessionLock == serverSessionId then
-		return true, result.data, false
+	if ok and type(result) == "table" and result.sessionLock == leaseToken then
+		return true, result.data, false, isNew
 	end
-	return false, nil, ok
+	return false, nil, ok, false
+end
+
+local function finalizeLoadedPlayer(
+	player: Player,
+	rawData: any,
+	leaseToken: string,
+	isNew: boolean
+)
+	local userId = player.UserId
+	local now = os.time()
+	local profile = reconcileProfile(rawData, now)
+	local lastLogout = if MathUtil.isFinite(profile.lastLogoutTime)
+		then profile.lastLogoutTime
+		else now
+	local offlineEarned = EconomyLogic.accruePedestalCoins(
+		profile,
+		math.max(0, now - lastLogout),
+		true,
+		DataService.hasPass(player, "Pass_DoubleCoinsExp")
+	)
+	profile.lastLogoutTime = now
+	profiles[userId] = profile
+	leaseTokens[userId] = leaseToken
+	firstSessionByUser[userId] = isNew
+	offlineSummary[userId] = offlineEarned
+	player:SetAttribute("IsFirstSession", isNew)
+	player:SetAttribute("Zone", "Hub")
+	DataService.syncToClient(player)
+	for _, cb in ipairs(onProfileLoadedCallbacks) do
+		task.spawn(cb, player, profile)
+	end
 end
 
 local function loadPlayer(player: Player)
 	local userId = player.UserId
 	local now = os.time()
 	local key = `Player_{userId}`
-	local rawData: any = nil
+	local leaseToken = `{serverSessionId}:{HttpService:GenerateGUID(false)}`
 	local store = getStore()
 	if store then
-		local acquired, data, canceled = acquireProfileFromStore(store, key, now)
+		local acquired, data, canceled, isNew = acquireProfileFromStore(store, key, leaseToken, now)
+		if not player.Parent then
+			if acquired then
+				releaseStoreLock(store, key, leaseToken)
+			end
+			return
+		end
 		if acquired then
-			rawData = data
+			finalizeLoadedPlayer(player, data, leaseToken, isNew)
+			return
 		elseif not canceled and RunService:IsStudio() then
 			useMemoryFallback = true
-			rawData = memoryStore[key]
 		else
 			player:Kick("Session data is locked or unavailable. Please rejoin in a moment.")
 			return
 		end
-	else
-		rawData = memoryStore[key]
 	end
-
-	local profile = reconcileProfile(rawData, now)
-	local lastLogout = if MathUtil.isFinite(profile.lastLogoutTime)
-		then profile.lastLogoutTime
-		else now
-	local elapsedOffline = math.max(0, now - lastLogout)
-	local offlineEarned = EconomyLogic.accruePedestalCoins(
-		profile,
-		elapsedOffline,
-		true,
-		DataService.hasPass(player, "Pass_DoubleCoinsExp")
-	)
-	profile.lastLogoutTime = now
-	profiles[userId] = profile
-	offlineSummary[userId] = offlineEarned
-	player:SetAttribute("Zone", "Hub")
-
-	DataService.syncToClient(player)
-	for _, cb in ipairs(onProfileLoadedCallbacks) do
-		task.spawn(cb, player, profile)
+	if not RunService:IsStudio() or not player.Parent then
+		if player.Parent then
+			player:Kick("Profile storage is temporarily unavailable. Please rejoin.")
+		end
+		return
 	end
+	local rawData = memoryStore[key]
+	finalizeLoadedPlayer(player, rawData, leaseToken, rawData == nil)
 end
 
 function DataService.init()
@@ -345,7 +452,7 @@ function DataService.init()
 			return nil
 		end
 		return {
-			profile = p,
+			profile = buildClientProfileView(p),
 			powerRating = computePower(p),
 			maxHP = EconomyConfigs.getPlayerMaxHP(p.level),
 			offlineCoinsEarned = offlineSummary[player.UserId] or 0,
@@ -364,7 +471,9 @@ function DataService.start()
 		local uid = player.UserId
 		DataService.savePlayer(uid, true)
 		profiles[uid] = nil
+		leaseTokens[uid] = nil
 		offlineSummary[uid] = nil
+		firstSessionByUser[uid] = nil
 	end)
 
 	game:BindToClose(function()

@@ -231,7 +231,7 @@ local function purchases()
 			return Economy.rerollPetTrait(p, p.pets[1].uid, 0.5)
 		end,
 	})
-	-- Collecting a corrupt stored amount must not poison either side of the transfer.
+	-- Collecting a corrupt or overflowing stored amount must not poison either side of the transfer.
 	for _, stored in { -1, 0 / 0, math.huge } do
 		local p = profileWithPup()
 		p.padStoredCoins[1] = stored
@@ -246,6 +246,31 @@ local function purchases()
 			end
 		)
 	end
+	local overflowCash = profileWithPup()
+	overflowCash.coins = 1.7e308
+	overflowCash.padStoredCoins[1] = 1e308
+	reject("cash transfer / wallet overflow", overflowCash, function()
+		return Economy.collectCashPad(overflowCash, 1) ~= 0
+	end)
+	local invalidSell = profileWithPup()
+	assert(
+		Economy.hatchEggOnPedestal(
+			(function()
+				invalidSell.eggs.EmeraldMeadow_BossEgg = 1
+				return invalidSell
+			end)(),
+			"EmeraldMeadow_BossEgg",
+			2,
+			false,
+			0.2,
+			0.2
+		).ok,
+		"Fixture needs two pets to test sell guard"
+	)
+	invalidSell.coins = math.huge
+	reject("sell pet / +inf wallet", invalidSell, function()
+		return Economy.sellPet(invalidSell, invalidSell.pets[2].uid).ok
+	end)
 end
 
 local function offlineClock()
@@ -313,12 +338,60 @@ local function rapidTraining()
 	)
 end
 
+local function roomBoundsAndPadFootprint()
+	local meadow = Arena.createBiomeState("EmeraldMeadow", 0)
+	local frost = Arena.createBiomeState("FrostbiteCavern", 0)
+	Arena.triggerOptIn(meadow, 10, false)
+	local states = { EmeraldMeadow = meadow, FrostbiteCavern = frost }
+	assert(Arena.switchOptIn(states, "EmeraldMeadow", 101, true, 50), "Initial opt-in accepted")
+	reject("rejected replacement opt-in preserves prior queue", states, function()
+		return Arena.switchOptIn(states, "FrostbiteCavern", 101, true, 50)
+	end)
+
+	assert(Arena.markOptInOffered(meadow, 101), "First offer recorded")
+	assert(not Arena.markOptInOffered(meadow, 101), "Repeated offer deduplicated")
+	assert(Arena.markOptInOffered(meadow, 202), "Second eligible offer recorded")
+	assert(Arena.setOptIn(meadow, 101, true, 50), "Toggle opt-in")
+	assert(Arena.setOptIn(meadow, 101, true, 60), "Repeated opt-in")
+	local bossEv = Arena.startBossPhase(meadow, 25)
+	local decisions = bossEv[1].payload.optInDecisions
+	assert(
+		#decisions == 2
+			and decisions[1].userId == 101
+			and decisions[1].optedIn == true
+			and decisions[2].userId == 202
+			and decisions[2].optedIn == false,
+		"Opt-in decisions emit once per eligible player including unanswered timeout"
+	)
+
+	assert(Arena.isInsideArenaBounds(10, 5, -10, 0, 0, 0, 140, 120), "In-bounds fighter admitted")
+	for _, badPos in { { 141, 0, 0 }, { 0, 121, 0 }, { 0 / 0, 0, 0 } } do
+		assert(
+			not Arena.isInsideArenaBounds(badPos[1], badPos[2], badPos[3], 0, 0, 0, 140, 120),
+			"Out-of-bounds fighter rejected"
+		)
+	end
+
+	local hx, hy, hz = 5, 0.5, 5
+	assert(
+		Combat.isWithinPadFootprint(0, hy + 3, 0, hx, hy, hz),
+		"Standing on pad surface admitted"
+	)
+	for _, off in { { 0, -hy - 1, 0 }, { 0, 0, 0 }, { hx + 2, hy + 3, 0 }, { 0, hy + 8, 0 } } do
+		assert(
+			not Combat.isWithinPadFootprint(off[1], off[2], off[3], hx, hy, hz),
+			"Off-pad position rejected"
+		)
+	end
+end
+
 malformedArgs()
 phaseAndZone()
 claimChecks()
 purchases()
 offlineClock()
 rapidTraining()
+roomBoundsAndPadFootprint()
 table.sort(failures)
 for _, failure in failures do
 	print(failure)
