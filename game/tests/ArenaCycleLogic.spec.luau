@@ -94,4 +94,119 @@ for _, id in ipairs(BiomeConfigs.ORDERED_MVP_BIOMES) do
 	)
 end
 
+-- 6. PvP_EggScramble phaseEndsAt deadline enforces ScrambleTimeout even with living survivors
+local function testScrambleDeadline()
+	local timeoutState = ArenaCycleLogic.createBiomeState("EmeraldMeadow", 0)
+	ArenaCycleLogic.triggerOptIn(timeoutState, 10, false)
+	ArenaCycleLogic.setOptIn(timeoutState, 11, true, 150)
+	ArenaCycleLogic.setOptIn(timeoutState, 12, true, 160)
+	ArenaCycleLogic.stepBiome(timeoutState, 25, nil)
+	ArenaCycleLogic.applyBossDamage(timeoutState, 11, 5000, 30)
+	local endAt = timeoutState.phaseEndsAt
+	ArenaCycleLogic.stepBiome(timeoutState, endAt - 5, nil)
+	assertTrue(
+		timeoutState.phase == "PvP_EggScramble"
+			and timeoutState.suddenDeathRadius == BiomeConfigs.SUDDEN_DEATH_MIN_RADIUS,
+		"Survivors remain in minimum storm radius before scramble deadline"
+	)
+	assertTrue(
+		ArenaCycleLogic.beginEggClaim(timeoutState, 11, 3, endAt - 2),
+		"Partial claim starts 2s before scramble deadline"
+	)
+	local timeoutEvents = ArenaCycleLogic.stepBiome(timeoutState, endAt, 3)
+	local lastEv = timeoutEvents[#timeoutEvents]
+	assertTrue(
+		lastEv ~= nil
+			and lastEv.kind == "PhaseChanged"
+			and lastEv.payload.phase == "PvE_Open"
+			and lastEv.payload.reason == "ScrambleTimeout",
+		"Scramble deadline emits ScrambleTimeout PhaseChanged to PvE_Open"
+	)
+	assertTrue(
+		timeoutState.phase == "PvE_Open"
+			and timeoutState.claim.claimerId == nil
+			and #lastEv.payload.returnPlayers == 2
+			and not ArenaCycleLogic.canDealPvPDamage(timeoutState, 11, 12, endAt),
+		"ScrambleTimeout clears claim, ejects survivors, and disables PvP"
+	)
+	assertTrue(
+		not ArenaCycleLogic.beginEggClaim(timeoutState, 11, 2, endAt),
+		"Cannot begin claim once PvE_Open resumed"
+	)
+end
+
+-- 6b. Exact deadline claim completion (finishAt == phaseEndsAt) still awards EggClaimed
+local function testExactDeadlineWin()
+	local exactState = ArenaCycleLogic.createBiomeState("EmeraldMeadow", 0)
+	ArenaCycleLogic.triggerOptIn(exactState, 10, false)
+	ArenaCycleLogic.setOptIn(exactState, 11, true, 150)
+	ArenaCycleLogic.stepBiome(exactState, 25, nil)
+	ArenaCycleLogic.applyBossDamage(exactState, 11, 5000, 30)
+	local exactEnd = exactState.phaseEndsAt
+	assertTrue(
+		not ArenaCycleLogic.canDealPvPDamage(exactState, 11, 12, exactEnd)
+			and not ArenaCycleLogic.beginEggClaim(exactState, 11, 2, exactEnd),
+		"PvP damage and new claims blocked at exact phaseEndsAt deadline"
+	)
+	assertTrue(
+		ArenaCycleLogic.beginEggClaim(exactState, 11, 2, exactEnd - 5),
+		"Claim started 5s before deadline"
+	)
+	local exactWin = ArenaCycleLogic.stepBiome(exactState, exactEnd, 2)
+	assertTrue(
+		#exactWin >= 2 and exactWin[1].kind == "EggClaimed" and exactState.phase == "PvE_Open",
+		"5s hold finishing at exact phaseEndsAt still wins egg"
+	)
+end
+
+-- 7. Authored volume/floor room bounds and BiomePvE-only opt-in modal eligibility
+local function testVolumeBoundsAndOptInEligibility()
+	assertTrue(
+		ArenaCycleLogic.isInsideVolumeBounds(10, -5, 10, 100, 60, 100, false),
+		"Inside authored box room volume"
+	)
+	assertTrue(
+		not ArenaCycleLogic.isInsideVolumeBounds(55, 0, 0, 100, 60, 100, false),
+		"Outside authored box room volume"
+	)
+	assertTrue(
+		not ArenaCycleLogic.isInsideVolumeBounds(0 / 0, 0, 0, 100, 60, 100, false)
+			and not ArenaCycleLogic.isInsideVolumeBounds(0, 0, 0, 0, 60, 100, false),
+		"Non-finite or zero-size volume bounds rejected"
+	)
+	assertTrue(
+		ArenaCycleLogic.isInsideVolumeBounds(0, 30, 40, 60, 120, 120, true),
+		"Inside upright cylinder volume (X thickness, YZ radius 60)"
+	)
+	assertTrue(
+		not ArenaCycleLogic.isInsideVolumeBounds(0, 50, 50, 60, 120, 120, true),
+		"Outside cylinder corner radius"
+	)
+	assertTrue(
+		ArenaCycleLogic.isInsideFloorFootprint(10, 10, 200, 200, 15, 10, false, 120),
+		"Standing above ArenaFloor within vertical clearance"
+	)
+	assertTrue(
+		not ArenaCycleLogic.isInsideFloorFootprint(10, 10, 200, 200, -5, 10, false, 120)
+			and not ArenaCycleLogic.isInsideFloorFootprint(10, 10, 200, 200, 131, 10, false, 120),
+		"Fallen below ArenaFloor or above ceiling rejected"
+	)
+	assertTrue(
+		ArenaCycleLogic.isZoneEligibleForOptIn("BiomePvE", "EmeraldMeadow", "EmeraldMeadow"),
+		"Matching BiomePvE player eligible for BossFightOffered"
+	)
+	assertTrue(
+		not ArenaCycleLogic.isZoneEligibleForOptIn("Hub", "", "EmeraldMeadow"),
+		"Hub player ineligible for opt-in modal offer"
+	)
+	assertTrue(
+		not ArenaCycleLogic.isZoneEligibleForOptIn("BiomePvE", "FrostbiteCavern", "EmeraldMeadow"),
+		"Other biome player ineligible for opt-in modal offer"
+	)
+end
+
+testScrambleDeadline()
+testExactDeadlineWin()
+testVolumeBoundsAndOptInEligibility()
+
 print("PASS: ArenaCycleLogic.spec.luau")

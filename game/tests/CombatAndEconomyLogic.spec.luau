@@ -289,4 +289,33 @@ assertTrue(
 	"Keeps all progress"
 )
 
+-- 8. Tightened FiringPad vertical standing bounds [0.5, 5.0] + grounded check
+local function testTightenedPadFootprint()
+	local hx, hy, hz = 5, 0.5, 5
+	assertTrue(
+		CombatLogic.isWithinPadFootprint(0, hy + 0.5, 0, hx, hy, hz, true),
+		"Lower standing height boundary (0.5 above pad top) admitted when grounded"
+	)
+	assertTrue(
+		CombatLogic.isWithinPadFootprint(0, hy + 5.0, 0, hx, hy, hz, true),
+		"Upper standing height boundary (5.0 above pad top) admitted when grounded"
+	)
+	assertTrue(
+		CombatLogic.isWithinPadFootprint(0, hy + 3.0, 0, hx, hy, hz),
+		"Legacy 6-arg call stays backward-compatible inside [0.5, 5.0]"
+	)
+	assertTrue(
+		not CombatLogic.isWithinPadFootprint(0, hy + 3.0, 0, hx, hy, hz, false),
+		"Airborne FloorMaterial == Air rejected even at standing height"
+	)
+	for _, badHeight in { -0.1, 0.49, 5.01, 6.0 } do
+		assertTrue(
+			not CombatLogic.isWithinPadFootprint(0, hy + badHeight, 0, hx, hy, hz, true),
+			`Standing height {badHeight} outside [0.5, 5.0] rejected`
+		)
+	end
+end
+
+testTightenedPadFootprint()
+
 print("PASS: CombatAndEconomyLogic.spec.luau")

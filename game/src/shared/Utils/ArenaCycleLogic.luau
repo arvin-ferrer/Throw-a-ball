@@ -295,6 +295,76 @@ function ArenaCycleLogic.pruneQueuedPlayers(state: BiomeArenaState, isEligible: 
 	end
 end
 
+function ArenaCycleLogic.isZoneEligibleForOptIn(
+	zone: string,
+	activeBiome: string,
+	targetBiomeId: string
+): boolean
+	return zone == "BiomePvE" and activeBiome == targetBiomeId
+end
+
+function ArenaCycleLogic.isInsideVolumeBounds(
+	localX: number,
+	localY: number,
+	localZ: number,
+	sizeX: number,
+	sizeY: number,
+	sizeZ: number,
+	isCylinder: boolean?
+): boolean
+	if
+		not isFiniteNumber(localX)
+		or not isFiniteNumber(localY)
+		or not isFiniteNumber(localZ)
+		or not isFiniteNumber(sizeX)
+		or not isFiniteNumber(sizeY)
+		or not isFiniteNumber(sizeZ)
+		or sizeX <= 0
+		or sizeY <= 0
+		or sizeZ <= 0
+	then
+		return false
+	end
+	local hx, hy, hz = sizeX * 0.5, sizeY * 0.5, sizeZ * 0.5
+	if isCylinder == true then
+		return math.abs(localX) <= hx and ((localY / hy) ^ 2 + (localZ / hz) ^ 2) <= 1
+	end
+	return math.abs(localX) <= hx and math.abs(localY) <= hy and math.abs(localZ) <= hz
+end
+
+function ArenaCycleLogic.isInsideFloorFootprint(
+	offsetX: number,
+	offsetZ: number,
+	spanX: number,
+	spanZ: number,
+	worldY: number,
+	floorTopY: number,
+	isCircle: boolean?,
+	maxHeightAboveFloor: number?
+): boolean
+	if
+		not isFiniteNumber(offsetX)
+		or not isFiniteNumber(offsetZ)
+		or not isFiniteNumber(spanX)
+		or not isFiniteNumber(spanZ)
+		or not isFiniteNumber(worldY)
+		or not isFiniteNumber(floorTopY)
+		or spanX <= 0
+		or spanZ <= 0
+	then
+		return false
+	end
+	local maxY = if isFiniteNumber(maxHeightAboveFloor) then maxHeightAboveFloor :: number else 120
+	if worldY < (floorTopY - 8) or worldY > (floorTopY + maxY) then
+		return false
+	end
+	local rx, rz = spanX * 0.5, spanZ * 0.5
+	if isCircle == true then
+		return ((offsetX / rx) ^ 2 + (offsetZ / rz) ^ 2) <= 1
+	end
+	return math.abs(offsetX) <= rx and math.abs(offsetZ) <= rz
+end
+
 function ArenaCycleLogic.isInsideArenaBounds(
 	px: number,
 	py: number,
@@ -424,7 +494,7 @@ function ArenaCycleLogic.canDealPvPDamage(
 	if attackerId == victimId then
 		return false
 	end
-	if now < state.pvpStartedAt then
+	if now < state.pvpStartedAt or now >= state.phaseEndsAt then
 		return false
 	end
 	return state.activePlayers[attackerId] == true and state.activePlayers[victimId] == true
@@ -442,7 +512,7 @@ function ArenaCycleLogic.beginEggClaim(
 	if not isFiniteNumber(now) or not isFiniteNumber(distanceToEgg) or distanceToEgg < 0 then
 		return false
 	end
-	if now < state.pvpStartedAt then
+	if now < state.pvpStartedAt or now >= state.phaseEndsAt then
 		return false
 	end
 	if distanceToEgg > BiomeConfigs.EGG_CLAIM_RADIUS then
@@ -498,6 +568,7 @@ function ArenaCycleLogic.removePlayerFromArena(
 	if not state.activePlayers[userId] then
 		return events
 	end
+	local prevPhase = state.phase
 	state.activePlayers[userId] = nil
 	if state.claim.claimerId == userId then
 		clearClaim(state)
@@ -510,7 +581,7 @@ function ArenaCycleLogic.removePlayerFromArena(
 	table.insert(events, {
 		kind = "PlayerEliminated",
 		biomeId = state.biomeId,
-		payload = { userId = userId, reason = reason },
+		payload = { userId = userId, reason = reason, phase = prevPhase },
 	})
 	if countMap(state.activePlayers) == 0 then
 		resetToPvE(state, now, events, "AllPlayersOut_" .. reason)
@@ -518,22 +589,13 @@ function ArenaCycleLogic.removePlayerFromArena(
 	return events
 end
 
-local function stepPvpScramble(
+local function tryCompleteEggClaim(
 	state: BiomeArenaState,
 	now: number,
+	claimer: number,
 	claimerDistance: number?,
 	events: { ArenaEvent }
-)
-	if countMap(state.activePlayers) == 0 then
-		resetToPvE(state, now, events, "EmptyPvP")
-		return
-	end
-	local pvpElapsed = math.max(0, now - state.pvpStartedAt)
-	state.suddenDeathRadius = BiomeConfigs.computeSuddenDeathRadius(pvpElapsed)
-	local claimer = state.claim.claimerId
-	if claimer == nil then
-		return
-	end
+): boolean
 	local badDist = claimerDistance ~= nil
 		and (not isFiniteNumber(claimerDistance) or (claimerDistance :: number) < 0)
 	local outOfRange = badDist
@@ -542,11 +604,12 @@ local function stepPvpScramble(
 		for _, ev in ipairs(ArenaCycleLogic.cancelEggClaim(state, claimer, "OutOfRadius")) do
 			table.insert(events, ev)
 		end
-		return
+		return false
 	end
+	local finishAt = state.claim.startedAt + BiomeConfigs.EGG_CLAIM_DURATION_SEC
 	local held = math.max(0, now - state.claim.startedAt)
 	state.claim.progress = math.clamp(held / BiomeConfigs.EGG_CLAIM_DURATION_SEC, 0, 1)
-	if held >= BiomeConfigs.EGG_CLAIM_DURATION_SEC then
+	if held >= BiomeConfigs.EGG_CLAIM_DURATION_SEC and finishAt <= state.phaseEndsAt then
 		local biome = BiomeConfigs.BIOMES[state.biomeId]
 		local eggId = if state.isOvercharged then biome.overchargedEggId else biome.standardEggId
 		table.insert(events, {
@@ -560,6 +623,41 @@ local function stepPvpScramble(
 			},
 		})
 		resetToPvE(state, now, events, "EggClaimed")
+		return true
+	end
+	return false
+end
+
+local function stepPvpScramble(
+	state: BiomeArenaState,
+	now: number,
+	claimerDistance: number?,
+	events: { ArenaEvent }
+)
+	if not isFiniteNumber(now) then
+		return
+	end
+	if countMap(state.activePlayers) == 0 then
+		resetToPvE(state, now, events, "EmptyPvP")
+		return
+	end
+	local pvpElapsed = math.max(0, now - state.pvpStartedAt)
+	state.suddenDeathRadius = BiomeConfigs.computeSuddenDeathRadius(pvpElapsed)
+	local claimer = state.claim.claimerId
+	if claimer ~= nil and tryCompleteEggClaim(state, now, claimer, claimerDistance, events) then
+		return
+	end
+	if now >= state.phaseEndsAt then
+		if state.claim.claimerId ~= nil then
+			for _, ev in
+				ipairs(
+					ArenaCycleLogic.cancelEggClaim(state, state.claim.claimerId, "ScrambleTimeout")
+				)
+			do
+				table.insert(events, ev)
+			end
+		end
+		resetToPvE(state, now, events, "ScrambleTimeout")
 	end
 end
 

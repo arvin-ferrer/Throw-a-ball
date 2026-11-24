@@ -443,7 +443,8 @@ function CombatLogic.isWithinPadFootprint(
 	dz: number,
 	halfX: number,
 	halfY: number,
-	halfZ: number
+	halfZ: number,
+	isGrounded: boolean?
 ): boolean
 	if
 		not MathUtil.isFinite(dx)
@@ -455,10 +456,14 @@ function CombatLogic.isWithinPadFootprint(
 	then
 		return false
 	end
+	if isGrounded ~= nil and isGrounded ~= true then
+		return false
+	end
 	if math.abs(dx) > halfX + 1.25 or math.abs(dz) > halfZ + 1.25 then
 		return false
 	end
-	return dy >= (halfY - 0.35) and dy <= (halfY + 6.5)
+	local abovePadTop = dy - halfY
+	return abovePadTop >= 0.5 and abovePadTop <= 5.0
 end
 
 return CombatLogic
