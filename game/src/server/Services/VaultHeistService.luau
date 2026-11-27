@@ -70,6 +70,8 @@ local runByUserId: { [number]: ActiveRunRuntime } = {}
 local runByGroupKey: { [string]: ActiveRunRuntime } = {}
 local occupiedSlots: { [number]: boolean } = {}
 local portalDebounce: { [number]: number } = {}
+local actionDebounce: { [number]: number } = {}
+local ACTION_DEBOUNCE_SEC = 0.25
 local nextRunSeq = 0
 
 local announcementHook: ((Player, string, string, { number }, boolean) -> ())? = nil
@@ -332,7 +334,7 @@ local function cloneArenaFolder(template: Folder, slotIndex: number): Instance
 			CollectionService:RemoveTag(desc, tag)
 		end
 		if desc:IsA("BasePart") then
-			desc.CFrame = desc.CFrame + Vector3.new(slotIndex * 240, 0, 0)
+			desc.CFrame = desc.CFrame + Vector3.new((slotIndex + 1) * 240, 0, 0)
 		end
 	end
 	clone.Parent = template.Parent or workspace
@@ -341,8 +343,8 @@ end
 
 local function allocateArenaRefs(slotIndex: number): VaultArenaRefs
 	local template = findVaultTemplateFolder()
-	local isClone = slotIndex > 0
-	local folder: Instance = if isClone then cloneArenaFolder(template, slotIndex) else template
+	local isClone = true
+	local folder: Instance = cloneArenaFolder(template, slotIndex)
 	local floor = resolveBasePart(folder:FindFirstChild("VaultFloor"))
 	local vSpawn = resolveBasePart(folder:FindFirstChild("VaultSpawn")) or floor
 	local bSpawn = resolveBasePart(folder:FindFirstChild("VaultBossSpawn")) or floor
@@ -1319,8 +1321,20 @@ local function handleUpgradeOrbAction(player: Player, orbId: any)
 	end
 end
 
+local function isActionRateLimited(userId: number): boolean
+	local now = os.clock()
+	if now - (actionDebounce[userId] or 0) < ACTION_DEBOUNCE_SEC then
+		return true
+	end
+	actionDebounce[userId] = now
+	return false
+end
+
 local function onVaultHeistAction(player: Player, payload: any)
 	if type(payload) ~= "table" or type(payload.action) ~= "string" then
+		return
+	end
+	if isActionRateLimited(player.UserId) then
 		return
 	end
 	local action = payload.action
@@ -1625,6 +1639,7 @@ function VaultHeistService.start()
 	end
 	Players.PlayerRemoving:Connect(function(player: Player)
 		portalDebounce[player.UserId] = nil
+		actionDebounce[player.UserId] = nil
 		handleLeaveOrDeparture(player)
 	end)
 	RunService.Heartbeat:Connect(function(rawDt: number)

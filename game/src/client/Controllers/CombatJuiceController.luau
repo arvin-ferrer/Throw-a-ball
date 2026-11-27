@@ -471,6 +471,9 @@ local function destroyPlayerHalo(player: Player)
 	local entry = activeHalos[player]
 	if entry then
 		activeHalos[player] = nil
+		if entry.motor and entry.motor.Parent then
+			entry.motor:Destroy()
+		end
 		if entry.model.Parent then
 			entry.model:Destroy()
 		end
@@ -606,7 +609,7 @@ function CombatJuiceController.handleJuiceEvent(payload: any)
 				else nil
 			if targetInst then
 				CombatJuiceController.flashInstance(targetInst, toColor3(spec.color))
-			else
+			elseif payload.killed ~= true and isNearLocalCamera(popupPos) then
 				flashNearestImpactTarget(popupPos, toColor3(spec.color))
 			end
 		end

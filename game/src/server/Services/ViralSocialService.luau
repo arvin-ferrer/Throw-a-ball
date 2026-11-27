@@ -38,6 +38,8 @@ local ViralSocialService = {}
 
 local friendCache: { [number]: { [number]: FriendEntry } } = {}
 local lastPingByUser: { [number]: number } = {}
+local lastRetentionActionByUser: { [number]: number } = {}
+local RETENTION_DEBOUNCE_SEC = 0.25
 local cachedBonuses: { [number]: ViralSocialLogic.CoOpBonusSummary } = {}
 local latestLeaderboards: ViralSocialLogic.LeaderboardBundle = {
 	power = {},
@@ -518,6 +520,11 @@ local function handleRetentionAction(player: Player, payload: any)
 	if type(payload) ~= "table" or type(payload.action) ~= "string" then
 		return
 	end
+	local nowClock = os.clock()
+	if nowClock - (lastRetentionActionByUser[player.UserId] or 0) < RETENTION_DEBOUNCE_SEC then
+		return
+	end
+	lastRetentionActionByUser[player.UserId] = nowClock
 	local profile = DataService.getProfile(player)
 	if not profile then
 		return
@@ -561,6 +568,7 @@ local function cleanupDepartingPlayer(player: Player)
 	local uid = player.UserId
 	friendCache[uid] = nil
 	lastPingByUser[uid] = nil
+	lastRetentionActionByUser[uid] = nil
 	cachedBonuses[uid] = nil
 	for _, row in pairs(friendCache) do
 		row[uid] = nil

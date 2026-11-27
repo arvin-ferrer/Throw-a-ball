@@ -1014,12 +1014,17 @@ local function applyResponsiveLayout()
 	local compact = m.isCompact
 	local narrowLandscape = compact and not m.isPortrait and m.viewport.X < 840
 	if runHeader then
-		local w = if compact then math.min(280, m.viewport.X - 180) else 340
+		local w = if m.isPortrait
+			then math.clamp(m.viewport.X - 24, 200, 320)
+			elseif compact then math.min(280, m.viewport.X - 180)
+			else 340
+		local headerY = if m.isPortrait then 128 elseif narrowLandscape then 56 else 8
 		runHeader.Size = UDim2.fromOffset(math.max(200, w), 76)
-		runHeader.Position = UDim2.new(0.5, 0, 0, if narrowLandscape then 56 else 8)
+		runHeader.Position = UDim2.new(0.5, 0, 0, headerY)
 	end
 	if promptBanner then
-		promptBanner.Position = UDim2.new(0.5, 0, 0, if narrowLandscape then 134 else 88)
+		local bannerY = if m.isPortrait then 206 elseif narrowLandscape then 134 else 88
+		promptBanner.Position = UDim2.new(0.5, 0, 0, bannerY)
 	end
 	if orbDock then
 		local yOff = if m.isPortrait then -246 elseif compact then -198 else -176
@@ -1140,6 +1145,19 @@ local function bindPhysicsLoop()
 	end)
 end
 
+local function bindResponsiveSignals(gui: ScreenGui)
+	local function hookCamera()
+		local cam = workspace.CurrentCamera
+		if cam then
+			cam:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+		end
+	end
+	hookCamera()
+	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(hookCamera)
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyResponsiveLayout)
+	applyResponsiveLayout()
+end
+
 function VaultHeistController.start()
 	local gui = Theme.createScreenGui("BallBrawl_VaultHeist", 16)
 	buildQuickBar(gui)
@@ -1150,11 +1168,7 @@ function VaultHeistController.start()
 	buildOrbDock(gui)
 	buildOrbModal(gui)
 	buildVoteModal(gui)
-	local cam = workspace.CurrentCamera
-	if cam then
-		cam:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
-	end
-	applyResponsiveLayout()
+	bindResponsiveSignals(gui)
 	localPlayer:GetAttributeChangedSignal("Coins"):Connect(refreshOrbModal)
 	bindSyncAndInputs()
 	bindPhysicsLoop()
