@@ -25,6 +25,9 @@ local ArenaHUDController = require(Controllers.ArenaHUDController)
 local HatchVFXController = require(Controllers.HatchVFXController)
 local AnimationController = require(Controllers.AnimationController)
 local OnboardingGuideController = require(Controllers.OnboardingGuideController)
+local VaultHeistController = require(Controllers.VaultHeistController)
+local ViralSocialController = require(Controllers.ViralSocialController)
+local CombatJuiceController = require(Controllers.CombatJuiceController)
 
 local function openPanel(kind: string)
 	if kind == "Pets" or kind == "TraitAltar" then
@@ -42,6 +45,10 @@ local function openPanel(kind: string)
 	elseif kind == "Codex" or kind == "CodexPavilion" then
 		HubModalsGui.close()
 		ShopCodexGui.open("Codex")
+	elseif kind == "Leaderboard" or kind == "Daily" or kind == "Quests" then
+		HubModalsGui.close()
+		ShopCodexGui.close()
+		ViralSocialController.openModal(kind)
 	end
 end
 
@@ -60,12 +67,28 @@ local function applyProfilePayload(payload: any)
 	OnboardingGuideController.updateProfile(payload.profile)
 end
 
+ViralSocialController.setTopBarVisible(false)
+VaultHeistController.setQuickBarVisible(false)
+
 HudGui.mount({
 	onThrow = BallThrowController.fireThrow,
 	onThrowHold = BallThrowController.setHoldingFire,
 	onDash = BallThrowController.triggerDash,
 	onToggleAutoAim = BallThrowController.toggleAutoAim,
 	onOpenModal = openPanel,
+	onOpenDaily = function()
+		local state = ViralSocialController.getSyncState()
+		ViralSocialController.openModal(if state.dailyClaimable then "Daily" else "Quests")
+	end,
+	onTogglePing = ViralSocialController.togglePingWheel,
+	onVaultAction = function()
+		if VaultHeistController.isRunActive() then
+			VaultHeistController.leaveVaultRun()
+		else
+			VaultHeistController.startVaultRun()
+		end
+	end,
+	onOpenOrbs = VaultHeistController.openVaultOrbModal,
 })
 HubModalsGui.mount()
 ShopCodexGui.mount()
@@ -77,6 +100,12 @@ PlotCashController.start()
 ArenaHUDController.start()
 HatchVFXController.start()
 OnboardingGuideController.start()
+VaultHeistController.start()
+ViralSocialController.start()
+CombatJuiceController.start()
+
+ViralSocialController.onSyncChanged(HudGui.updateSocialState)
+VaultHeistController.onSyncChanged(HudGui.updateVaultState)
 
 local remotes = Remotes.waitClient()
 remotes.ProfileSync.OnClientEvent:Connect(applyProfilePayload)

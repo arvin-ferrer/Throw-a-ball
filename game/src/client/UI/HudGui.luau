@@ -35,6 +35,21 @@ local currencyStack: Frame? = nil
 local coinsValLabel: TextLabel? = nil
 local gemsValLabel: TextLabel? = nil
 
+-- Top-left unified social, ping & vault bar
+local topLeftBar: Frame? = nil
+local dailyQuickBtn: TextButton? = nil
+local dailyAlertDot: Frame? = nil
+local pingQuickBtn: TextButton? = nil
+local vaultQuickBtn: TextButton? = nil
+local orbsQuickBtn: TextButton? = nil
+local streakPartyBadge: Frame? = nil
+local streakPartyLabel: TextLabel? = nil
+local cachedWinStreak = 0
+local cachedCoOpPct = 0
+local cachedPartyTag = "SOLO"
+local cachedVaultActive = false
+local cachedVaultStorm = false
+
 -- Top-right audio & hub return
 local topRightStack: Frame? = nil
 local audioBtn: TextButton? = nil
@@ -101,6 +116,10 @@ local throwHoldCallback: ((boolean) -> ())? = nil
 local dashCallback: (() -> ())? = nil
 local toggleAutoAimCallback: (() -> ())? = nil
 local openModalCallback: ((string) -> ())? = nil
+local openDailyCallback: (() -> ())? = nil
+local togglePingCallback: (() -> ())? = nil
+local vaultActionCallback: (() -> ())? = nil
+local openOrbsCallback: (() -> ())? = nil
 
 local function updateHumanoidHpBar()
 	if not hpFillBar or not hpValueLabel then
@@ -342,6 +361,172 @@ local function skinCartoonButton(btn: TextButton, top: Color3, bottom: Color3, c
 	Theme.addGradient(btn, top, bottom, 90)
 	Theme.addStroke(btn, Theme.Colors.Ink, 3)
 	Theme.attachBounce(btn)
+end
+
+local function makeTopLeftButton(
+	parent: Frame,
+	name: string,
+	text: string,
+	top: Color3,
+	bottom: Color3,
+	onClick: () -> ()
+): TextButton
+	local btn = Theme.makeButton(
+		parent,
+		name,
+		"",
+		UDim2.fromOffset(74, 44),
+		UDim2.fromOffset(0, 0),
+		Color3.new(1, 1, 1),
+		onClick
+	)
+	skinCartoonButton(btn, top, bottom, 12)
+	local lbl = Theme.makeLabel(
+		btn,
+		"Text",
+		text,
+		UDim2.new(1, -8, 1, 0),
+		UDim2.fromOffset(4, 0),
+		12,
+		Theme.Colors.Text,
+		true
+	)
+	lbl.TextXAlignment = Enum.TextXAlignment.Center
+	lbl.TextScaled = true
+	Theme.addTextStroke(lbl, 1.6)
+	local tc = Instance.new("UITextSizeConstraint")
+	tc.MinTextSize = 9
+	tc.MaxTextSize = 13
+	tc.Parent = lbl
+	return btn
+end
+
+local function refreshStreakPartyBadge()
+	if not streakPartyBadge or not streakPartyLabel then
+		return
+	end
+	local coOpText = if cachedCoOpPct > 0 then `+{cachedCoOpPct}% {cachedPartyTag}` else "SOLO"
+	streakPartyLabel.Text = `🔥 {cachedWinStreak} • 👥 {coOpText}`
+	if cachedCoOpPct > 0 then
+		Theme.addGradient(streakPartyBadge, Theme.Colors.LimeTop, Theme.Colors.LimeBot, 90)
+	elseif cachedWinStreak >= 2 then
+		Theme.addGradient(streakPartyBadge, Theme.Colors.GoldTop, Theme.Colors.GoldBot, 90)
+	else
+		Theme.addGradient(streakPartyBadge, Theme.Colors.PanelTop, Theme.Colors.PanelBottom, 90)
+	end
+end
+
+local function buildStreakPartyBadge(bar: Frame)
+	local badge = Theme.makeFrame(
+		bar,
+		"StreakPartyBadge",
+		UDim2.fromOffset(220, 24),
+		UDim2.fromOffset(0, 48),
+		Color3.new(1, 1, 1),
+		999
+	)
+	badge.BackgroundTransparency = 0
+	Theme.addGradient(badge, Theme.Colors.PanelTop, Theme.Colors.PanelBottom, 90)
+	Theme.addStroke(badge, Theme.Colors.Ink, 2.2)
+	streakPartyBadge = badge
+
+	local lbl = Theme.makeLabel(
+		badge,
+		"Label",
+		"🔥 0 • 👥 SOLO",
+		UDim2.new(1, -12, 1, 0),
+		UDim2.fromOffset(6, 0),
+		11,
+		Theme.Colors.Text,
+		true
+	)
+	lbl.TextXAlignment = Enum.TextXAlignment.Center
+	lbl.TextScaled = true
+	Theme.addTextStroke(lbl, 1.4)
+	local tc = Instance.new("UITextSizeConstraint")
+	tc.MinTextSize = 8
+	tc.MaxTextSize = 12
+	tc.Parent = lbl
+	streakPartyLabel = lbl
+end
+
+local function attachDailyAlertDot(btn: TextButton): Frame
+	local dot = Theme.makeFrame(
+		btn,
+		"AlertDot",
+		UDim2.fromOffset(12, 12),
+		UDim2.new(1, -10, 0, -2),
+		Theme.Colors.Danger,
+		999
+	)
+	dot.BackgroundTransparency = 0
+	dot.Visible = false
+	dot.ZIndex = 4
+	Theme.addStroke(dot, Theme.Colors.Ink, 2)
+	return dot
+end
+
+local function invokeOptional(cb: (() -> ())?)
+	if cb then
+		cb()
+	end
+end
+
+local function buildQuickButtons(bar: Frame)
+	local dBtn = makeTopLeftButton(
+		bar,
+		"DailyQuickBtn",
+		"DAILY",
+		Theme.Colors.GoldTop,
+		Theme.Colors.GoldBot,
+		function()
+			invokeOptional(openDailyCallback)
+		end
+	)
+	dailyQuickBtn = dBtn
+	dailyAlertDot = attachDailyAlertDot(dBtn)
+	pingQuickBtn = makeTopLeftButton(
+		bar,
+		"PingQuickBtn",
+		"PING [G]",
+		Theme.Colors.TileSkyTop,
+		Theme.Colors.TileSkyBot,
+		function()
+			invokeOptional(togglePingCallback)
+		end
+	)
+	vaultQuickBtn = makeTopLeftButton(
+		bar,
+		"VaultQuickBtn",
+		"VAULT",
+		Theme.Colors.LimeTop,
+		Theme.Colors.LimeBot,
+		function()
+			invokeOptional(vaultActionCallback)
+		end
+	)
+	orbsQuickBtn = makeTopLeftButton(
+		bar,
+		"OrbsQuickBtn",
+		"ORBS",
+		Theme.Colors.HubBlueTop,
+		Theme.Colors.HubBlueBot,
+		function()
+			invokeOptional(openOrbsCallback)
+		end
+	)
+end
+
+local function buildTopLeftActionBar(gui: ScreenGui)
+	local bar = Instance.new("Frame")
+	bar.Name = "TopLeftSocialBar"
+	bar.BackgroundTransparency = 1
+	bar.Position = UDim2.fromOffset(12, 8)
+	bar.Size = UDim2.fromOffset(390, 76)
+	bar.Parent = gui
+	topLeftBar = bar
+	buildQuickButtons(bar)
+	buildStreakPartyBadge(bar)
 end
 
 type DrawerTile = {
@@ -902,7 +1087,7 @@ local function syncNativeTouchJump()
 	end
 end
 
-local function applyDrawerResponsive(compact: boolean)
+local function applyDrawerResponsive(compact: boolean, isPortrait: boolean)
 	if not (drawerWrap and drawerPanel and drawerGrid and drawerTabBtn) then
 		return
 	end
@@ -928,7 +1113,9 @@ local function applyDrawerResponsive(compact: boolean)
 	if compact then
 		drawerWrap.AnchorPoint = Vector2.new(0, 0)
 		local height = if hudScreen then hudScreen.AbsoluteSize.Y else 0
-		local y = if height > 0 then math.clamp(height - panelS - 106, 8, 72) else 72
+		local minY = if isPortrait then 128 else 76
+		local maxY = if isPortrait then 148 else 108
+		local y = if height > 0 then math.clamp(height - panelS - 158, minY, maxY) else minY
 		drawerWrap.Position = UDim2.fromOffset(if drawerOpen then 0 else -panelS, y)
 	else
 		drawerWrap.AnchorPoint = Vector2.new(0, 0.5)
@@ -941,6 +1128,67 @@ local function applyDrawerResponsive(compact: boolean)
 			ic.Size = UDim2.fromOffset(icS, icS)
 			ic.Position = UDim2.new(0.5, 0, 0, if compact then 5 else 8)
 		end
+	end
+end
+
+local function setQuickButtonBox(btn: TextButton?, w: number, h: number, x: number, y: number)
+	if btn then
+		btn.Size = UDim2.fromOffset(w, h)
+		btn.Position = UDim2.fromOffset(x, y)
+	end
+end
+
+local TOP_LEFT_LAYOUTS = {
+	portrait = {
+		pos = { 6, 6 },
+		bar = { 170, 120 },
+		daily = { 82, 44, 0, 0 },
+		ping = { 82, 44, 88, 0 },
+		vault = { 82, 44, 0, 48 },
+		orbs = { 82, 44, 88, 48 },
+		badge = { 170, 22, 0, 96 },
+	},
+	compact = {
+		pos = { 6, 6 },
+		bar = { 286, 68 },
+		daily = { 72, 44, 0, 0 },
+		ping = { 62, 44, 76, 0 },
+		vault = { 76, 44, 142, 0 },
+		orbs = { 58, 44, 222, 0 },
+		badge = { 172, 20, 0, 46 },
+	},
+	desktop = {
+		pos = { 12, 8 },
+		bar = { 390, 76 },
+		daily = { 94, 44, 0, 0 },
+		ping = { 88, 44, 100, 0 },
+		vault = { 114, 44, 194, 0 },
+		orbs = { 72, 44, 314, 0 },
+		badge = { 220, 24, 0, 48 },
+	},
+}
+
+local function applyTopLeftResponsive(m: Theme.LayoutMetrics)
+	if not topLeftBar then
+		return
+	end
+	if pingQuickBtn then
+		local lbl = pingQuickBtn:FindFirstChild("Text")
+		if lbl and lbl:IsA("TextLabel") then
+			lbl.Text = if m.isTouch then "PING" else "PING [G]"
+		end
+	end
+	local mode = if m.isPortrait then "portrait" elseif m.isCompact then "compact" else "desktop"
+	local spec = TOP_LEFT_LAYOUTS[mode]
+	topLeftBar.Position = UDim2.fromOffset(spec.pos[1], spec.pos[2])
+	topLeftBar.Size = UDim2.fromOffset(spec.bar[1], spec.bar[2])
+	setQuickButtonBox(dailyQuickBtn, spec.daily[1], spec.daily[2], spec.daily[3], spec.daily[4])
+	setQuickButtonBox(pingQuickBtn, spec.ping[1], spec.ping[2], spec.ping[3], spec.ping[4])
+	setQuickButtonBox(vaultQuickBtn, spec.vault[1], spec.vault[2], spec.vault[3], spec.vault[4])
+	setQuickButtonBox(orbsQuickBtn, spec.orbs[1], spec.orbs[2], spec.orbs[3], spec.orbs[4])
+	if streakPartyBadge then
+		streakPartyBadge.Size = UDim2.fromOffset(spec.badge[1], spec.badge[2])
+		streakPartyBadge.Position = UDim2.fromOffset(spec.badge[3], spec.badge[4])
 	end
 end
 
@@ -1145,9 +1393,10 @@ local function applyResponsiveLayout()
 	lastIsTouch = m.isTouch
 	lastIsCompact = compact
 
+	applyTopLeftResponsive(m)
 	applyTopRightResponsive(compact)
 
-	applyDrawerResponsive(compact)
+	applyDrawerResponsive(compact, m.isPortrait)
 	applyDockAndBannersResponsive(m)
 	applyCombatButtonsResponsive(m)
 	task.defer(syncNativeTouchJump)
@@ -1265,17 +1514,26 @@ function HudGui.mount(callbacks: {
 	onDash: () -> (),
 	onToggleAutoAim: (() -> ())?,
 	onOpenModal: (string) -> (),
+	onOpenDaily: (() -> ())?,
+	onTogglePing: (() -> ())?,
+	onVaultAction: (() -> ())?,
+	onOpenOrbs: (() -> ())?,
 })
 	throwCallback = callbacks.onThrow
 	throwHoldCallback = callbacks.onThrowHold
 	dashCallback = callbacks.onDash
 	toggleAutoAimCallback = callbacks.onToggleAutoAim
 	openModalCallback = callbacks.onOpenModal
+	openDailyCallback = callbacks.onOpenDaily
+	togglePingCallback = callbacks.onTogglePing
+	vaultActionCallback = callbacks.onVaultAction
+	openOrbsCallback = callbacks.onOpenOrbs
 
 	local gui = Theme.createScreenGui("BallBrawl_HUD", 10)
 	hudScreen = gui
 
 	buildCurrencyStack(gui)
+	buildTopLeftActionBar(gui)
 	buildTopRight(gui)
 	buildMenuDrawer(gui)
 	buildHeroStatusDock(gui)
@@ -1321,6 +1579,10 @@ function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
 	if spdLabel then
 		spdLabel.Text = string.format("» SPD: %.2fx", profile.throwSpeed or 1.0)
 	end
+	if type(profile.winStreak) == "number" then
+		cachedWinStreak = math.max(0, math.floor(profile.winStreak))
+		refreshStreakPartyBadge()
+	end
 	updateHumanoidHpBar()
 
 	if guideBanner and guideFrame then
@@ -1331,6 +1593,57 @@ function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
 		else
 			guideFrame.Visible = false
 		end
+	end
+end
+
+function HudGui.updateSocialState(syncState: { [string]: any })
+	if type(syncState) ~= "table" then
+		return
+	end
+	local ready = if syncState.dailyClaimable == true then 1 else 0
+	for _, q in ipairs(syncState.quests or {}) do
+		if type(q) == "table" and not q.claimed and (q.progress or 0) >= (q.target or 1) then
+			ready += 1
+		end
+	end
+	if dailyAlertDot then
+		dailyAlertDot.Visible = ready > 0
+	end
+	local mult = tonumber(syncState.friendBonusMult) or 1.0
+	cachedCoOpPct = math.max(0, math.floor((mult - 1.0) * 100 + 0.5))
+	local pSize = tonumber(syncState.partySize) or 0
+	local fCount = tonumber(syncState.friendCount) or 0
+	cachedPartyTag = if pSize > 1 then `P{pSize}` else `{fCount}F`
+	if type(syncState.winStreak) == "number" then
+		cachedWinStreak = math.max(0, math.floor(syncState.winStreak))
+	end
+	refreshStreakPartyBadge()
+end
+
+function HudGui.updateVaultState(vaultSync: { [string]: any })
+	if type(vaultSync) ~= "table" then
+		return
+	end
+	cachedVaultActive = vaultSync.active == true
+	cachedVaultStorm = vaultSync.isHourlyStorm == true
+	if vaultQuickBtn then
+		local lbl = vaultQuickBtn:FindFirstChild("Text")
+		if lbl and lbl:IsA("TextLabel") then
+			lbl.Text = if cachedVaultActive
+				then "EXIT"
+				elseif cachedVaultStorm then "VAULT ⚡"
+				else "VAULT"
+		end
+		if cachedVaultActive then
+			Theme.addGradient(vaultQuickBtn, Theme.Colors.ShopRedTop, Theme.Colors.ShopRedBot, 90)
+		elseif cachedVaultStorm then
+			Theme.addGradient(vaultQuickBtn, Theme.Colors.GoldTop, Theme.Colors.GoldBot, 90)
+		else
+			Theme.addGradient(vaultQuickBtn, Theme.Colors.LimeTop, Theme.Colors.LimeBot, 90)
+		end
+	end
+	if orbsQuickBtn then
+		orbsQuickBtn.Visible = not cachedVaultActive
 	end
 end
 

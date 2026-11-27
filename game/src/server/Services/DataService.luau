@@ -88,6 +88,27 @@ local function sanitizeNumberField(
 	end
 end
 
+local ORB_MIN_LEVELS: { [string]: number } = {
+	Decoy = 1,
+	Freeze = 0,
+	DashBomb = 0,
+}
+
+local function sanitizeOrbLevels(raw: { [string]: any })
+	if type(raw.orbLevels) ~= "table" then
+		raw.orbLevels = { Decoy = 1, Freeze = 0, DashBomb = 0 }
+		return
+	end
+	for orbId, minLv in pairs(ORB_MIN_LEVELS) do
+		local v = raw.orbLevels[orbId]
+		if type(v) ~= "number" or not MathUtil.isFinite(v) or v < minLv then
+			raw.orbLevels[orbId] = minLv
+		else
+			raw.orbLevels[orbId] = math.clamp(math.floor(v), minLv, 6)
+		end
+	end
+end
+
 local function sanitizeProfileTables(raw: { [string]: any }, template: PlayerProfile)
 	for _, field in ipairs({
 		"pets",
@@ -96,6 +117,7 @@ local function sanitizeProfileTables(raw: { [string]: any }, template: PlayerPro
 		"ownedCosmetics",
 		"purchaseIds",
 		"processedPurchases",
+		"dailyQuests",
 	}) do
 		if type(raw[field]) ~= "table" then
 			raw[field] = {}
@@ -118,6 +140,7 @@ local function sanitizeProfileTables(raw: { [string]: any }, template: PlayerPro
 			raw.processedPurchases[pid] = true
 		end
 	end
+	sanitizeOrbLevels(raw)
 end
 
 local function reconcileProfile(raw: any, now: number): PlayerProfile
@@ -142,6 +165,15 @@ local function reconcileProfile(raw: any, now: number): PlayerProfile
 	sanitizeNumberField(raw, "activeSlotsUnlocked", template.activeSlotsUnlocked, 1, true)
 	sanitizeNumberField(raw, "lastLogoutTime", now, 0, false)
 	sanitizeNumberField(raw, "nextPetSeq", template.nextPetSeq, 1, true)
+	sanitizeNumberField(raw, "dailyLoginDay", template.dailyLoginDay, 0, true)
+	sanitizeNumberField(raw, "lastDailyClaimDay", template.lastDailyClaimDay, -1, true)
+	sanitizeNumberField(raw, "lastQuestResetDay", template.lastQuestResetDay, -1, true)
+	sanitizeNumberField(raw, "winStreak", template.winStreak, 0, true)
+	sanitizeNumberField(raw, "bestWinStreak", template.bestWinStreak, 0, true)
+	raw.bestWinStreak = math.max(raw.bestWinStreak, raw.winStreak)
+	sanitizeNumberField(raw, "totalBossWins", template.totalBossWins, 0, true)
+	sanitizeNumberField(raw, "totalVaultExtracts", template.totalVaultExtracts, 0, true)
+	sanitizeNumberField(raw, "deepestVaultChamber", template.deepestVaultChamber, 0, true)
 	sanitizeProfileTables(raw, template)
 	return raw :: PlayerProfile
 end
@@ -182,6 +214,8 @@ function DataService.mirrorAttributes(player: Player, profile: PlayerProfile)
 	player:SetAttribute("PowerRating", power)
 	player:SetAttribute("TargetTier", profile.targetTierId)
 	player:SetAttribute("BallTier", profile.ballTierId)
+	player:SetAttribute("WinStreak", profile.winStreak)
+	player:SetAttribute("BestWinStreak", profile.bestWinStreak)
 
 	local ls = player:FindFirstChild("leaderstats")
 	if not ls then

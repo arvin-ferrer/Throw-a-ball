@@ -29,6 +29,14 @@ export type RemoteBundle = {
 	BossTelegraph: RemoteEvent,
 	HatchReveal: RemoteEvent,
 	ToastNotify: RemoteEvent,
+	-- Vault Heist, Viral Social & Combat Juice
+	VaultHeistAction: RemoteEvent,
+	VaultHeistSync: RemoteEvent,
+	QuickPing: RemoteEvent,
+	RetentionAction: RemoteEvent,
+	RetentionSync: RemoteEvent,
+	GlobalAnnouncement: RemoteEvent,
+	CombatJuiceEvent: RemoteEvent,
 	-- Server -> Client Queries
 	GetInitialState: RemoteFunction,
 }
@@ -55,6 +63,13 @@ local EVENT_NAMES = {
 	"BossTelegraph",
 	"HatchReveal",
 	"ToastNotify",
+	"VaultHeistAction",
+	"VaultHeistSync",
+	"QuickPing",
+	"RetentionAction",
+	"RetentionSync",
+	"GlobalAnnouncement",
+	"CombatJuiceEvent",
 }
 
 local cached: RemoteBundle? = nil
