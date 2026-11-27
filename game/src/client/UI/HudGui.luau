@@ -1,11 +1,10 @@
 --!strict
 --[[
 	HudGui.luau
-	Responsive mobile-first HUD matching the obsidian-slate glass layout:
-	- Top-Left: Stacked Coins & Gems capsules with crisp vector icons
+	Responsive cartoon HUD:
+	- Bottom-Center: Stacked Gems and Coins pills, HP, stats and level progress
 	- Top-Right: Compact Audio pill + contextual Hub Plot return pill
 	- Mid-Left: Collapsible 2x2 tile drawer (Shop, Pets, Upgrades, Codex) with < / > tab
-	- Bottom-Center: Hero Status Dock (LV, live Humanoid HP bar, PWR / DMG / SPD pills)
 	- Bottom-Right: Ergonomic thumb-arc (AUTO AIM toggle, DASH circle, THROW hero circle, JUMP circle)
 ]]
 
@@ -20,6 +19,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MathUtil = require(Shared.Utils.MathUtil)
 local AudioCatalog = require(Shared.Utils.AudioCatalog)
 local OnboardingLogic = require(Shared.Utils.OnboardingLogic)
+local EconomyConfigs = require(Shared.Configs.EconomyConfigs)
 local Remotes = require(Shared.Net.Remotes)
 
 local Theme = require(script.Parent.Theme)
@@ -30,7 +30,7 @@ local HudGui = {}
 local localPlayer = Players.LocalPlayer
 local hudScreen: ScreenGui? = nil
 
--- Top-left currency labels
+-- Bottom-center currency labels
 local currencyStack: Frame? = nil
 local coinsValLabel: TextLabel? = nil
 local gemsValLabel: TextLabel? = nil
@@ -54,6 +54,8 @@ local drawerTileButtons: { TextButton } = {}
 -- Bottom-center Hero Status Dock
 local statusDock: Frame? = nil
 local levelLabel: TextLabel? = nil
+local expFillBar: Frame? = nil
+local expValueLabel: TextLabel? = nil
 local hpFillBar: Frame? = nil
 local hpFillGrad: UIGradient? = nil
 local hpValueLabel: TextLabel? = nil
@@ -148,52 +150,80 @@ local function bindCharacterHealth(char: Model?)
 	end
 end
 
+local function makeCurrencyPill(
+	stack: Frame,
+	name: string,
+	order: number,
+	size: Vector2,
+	top: Color3,
+	bottom: Color3,
+	iconMaker: (Instance, number) -> Frame
+): TextLabel
+	local pill = Theme.makeFrame(
+		stack,
+		name,
+		UDim2.fromOffset(size.X, size.Y),
+		UDim2.fromOffset(0, 0),
+		Color3.new(1, 1, 1),
+		999
+	)
+	pill.LayoutOrder = order
+	pill.BackgroundTransparency = 0
+	Theme.addGradient(pill, top, bottom, 90)
+	Theme.addStroke(pill, Theme.Colors.Ink, 3)
+	local icon = iconMaker(pill, size.Y - 10)
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 8, 0.5, 0)
+	local val = Theme.makeLabel(
+		pill,
+		"Value",
+		"0",
+		UDim2.new(1, -54, 1, 0),
+		UDim2.fromOffset(27, 0),
+		if order == 1 then 14 else 19,
+		Theme.Colors.Text,
+		true
+	)
+	val.TextXAlignment = Enum.TextXAlignment.Center
+	val.TextTruncate = Enum.TextTruncate.AtEnd
+	Theme.addTextStroke(val, 2.2)
+	return val
+end
+
 local function buildCurrencyStack(gui: ScreenGui)
 	local stack = Instance.new("Frame")
 	stack.Name = "CurrencyStack"
 	stack.BackgroundTransparency = 1
-	stack.Position = UDim2.fromOffset(14, 8)
-	stack.Size = UDim2.fromOffset(140, 80)
+	stack.AnchorPoint = Vector2.new(0.5, 1)
+	stack.Position = UDim2.new(0.5, 0, 1, -100)
+	stack.Size = UDim2.fromOffset(152, 60)
 	stack.Parent = gui
 	currencyStack = stack
 
 	local list = Instance.new("UIListLayout")
-	list.Padding = UDim.new(0, 6)
+	list.Padding = UDim.new(0, 5)
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	list.SortOrder = Enum.SortOrder.LayoutOrder
 	list.Parent = stack
 
-	local function makePill(
-		name: string,
-		order: number,
-		color: Color3,
-		iconMaker: (Instance, number) -> Frame
-	): TextLabel
-		local pill = Theme.makeGlossyPanel(
-			stack,
-			name,
-			UDim2.fromOffset(132, 34),
-			UDim2.fromOffset(0, 0),
-			999
-		)
-		pill.LayoutOrder = order
-		local icon = iconMaker(pill, 22)
-		icon.AnchorPoint = Vector2.new(0, 0.5)
-		icon.Position = UDim2.new(0, 7, 0.5, 0)
-		local val = Theme.makeLabel(
-			pill,
-			"Value",
-			"0",
-			UDim2.new(1, -38, 1, 0),
-			UDim2.fromOffset(34, 0),
-			17,
-			color,
-			true
-		)
-		return val
-	end
-
-	coinsValLabel = makePill("CoinsPill", 1, Theme.Colors.Coins, HudIcons.createCoinIcon)
-	gemsValLabel = makePill("GemsPill", 2, Theme.Colors.Gems, HudIcons.createGemIcon)
+	gemsValLabel = makeCurrencyPill(
+		stack,
+		"GemsPill",
+		1,
+		Vector2.new(112, 24),
+		Color3.fromRGB(67, 48, 114),
+		Color3.fromRGB(41, 30, 77),
+		HudIcons.createGemIcon
+	)
+	coinsValLabel = makeCurrencyPill(
+		stack,
+		"CoinsPill",
+		2,
+		Vector2.new(152, 31),
+		Theme.Colors.LimeTop,
+		Theme.Colors.LimeBot,
+		HudIcons.createCoinIcon
+	)
 end
 
 local function buildTopRight(gui: ScreenGui)
@@ -304,23 +334,146 @@ local function updateDrawerSlide(instant: boolean)
 	end
 end
 
+local function skinCartoonButton(btn: TextButton, top: Color3, bottom: Color3, corner: number)
+	btn.BackgroundColor3 = Color3.new(1, 1, 1)
+	btn.BackgroundTransparency = 0
+	btn.AutoButtonColor = false
+	Theme.addCorner(btn, corner)
+	Theme.addGradient(btn, top, bottom, 90)
+	Theme.addStroke(btn, Theme.Colors.Ink, 3)
+	Theme.attachBounce(btn)
+end
+
+type DrawerTile = {
+	id: string,
+	label: string,
+	top: Color3,
+	bottom: Color3,
+	icon: (Instance, number) -> Frame,
+}
+
+local DRAWER_TILES: { DrawerTile } = {
+	{
+		id = "Shop",
+		label = "SHOP",
+		top = Theme.Colors.ShopRedTop,
+		bottom = Theme.Colors.ShopRedBot,
+		icon = HudIcons.createShopIcon,
+	},
+	{
+		id = "Pets",
+		label = "PETS",
+		top = Color3.fromRGB(255, 163, 54),
+		bottom = Color3.fromRGB(238, 91, 19),
+		icon = HudIcons.createPetsIcon,
+	},
+	{
+		id = "Upgrades",
+		label = "UPGRADES",
+		top = Theme.Colors.LimeTop,
+		bottom = Theme.Colors.LimeBot,
+		icon = HudIcons.createUpgradesIcon,
+	},
+	{
+		id = "Codex",
+		label = "CODEX",
+		top = Theme.Colors.TilePurpleTop,
+		bottom = Theme.Colors.HubBlueBot,
+		icon = HudIcons.createCodexIcon,
+	},
+}
+
+local function buildDrawerTile(panel: Frame, order: number, tileSpec: DrawerTile)
+	local tile = Theme.makeButton(
+		panel,
+		tileSpec.id .. "Btn",
+		"",
+		UDim2.fromOffset(74, 74),
+		UDim2.fromOffset(0, 0),
+		Color3.new(1, 1, 1),
+		function()
+			if openModalCallback then
+				openModalCallback(tileSpec.id)
+			end
+		end
+	)
+	tile.LayoutOrder = order
+	skinCartoonButton(tile, tileSpec.top, tileSpec.bottom, 12)
+	local icon = tileSpec.icon(tile, 36)
+	icon.Name = "TileIcon"
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.new(0.5, 0, 0, 8)
+
+	local lbl = Theme.makeLabel(
+		tile,
+		"TileText",
+		tileSpec.label,
+		UDim2.new(1, -6, 0, 18),
+		UDim2.new(0, 3, 1, -21),
+		11,
+		Theme.Colors.Text,
+		true
+	)
+	lbl.TextXAlignment = Enum.TextXAlignment.Center
+	lbl.TextScaled = true
+	Theme.addTextStroke(lbl, 1.5)
+	local constraint = Instance.new("UITextSizeConstraint")
+	constraint.MaxTextSize = 12
+	constraint.MinTextSize = 9
+	constraint.Parent = lbl
+	table.insert(drawerTileButtons, tile)
+end
+
+local function buildDrawerTab(wrap: Frame)
+	local tab = Theme.makeButton(
+		wrap,
+		"CollapseTab",
+		"",
+		UDim2.fromOffset(48, 52),
+		UDim2.new(0, 174, 0.5, 0),
+		Color3.new(1, 1, 1),
+		function()
+			drawerOpen = not drawerOpen
+			updateDrawerSlide(false)
+		end
+	)
+	tab.AnchorPoint = Vector2.new(0, 0.5)
+	skinCartoonButton(tab, Theme.Colors.HubBlueTop, Theme.Colors.CodexPurpleBot, 12)
+	local label = Theme.makeLabel(
+		tab,
+		"Arrow",
+		"<",
+		UDim2.fromScale(1, 1),
+		UDim2.fromOffset(0, 0),
+		24,
+		Theme.Colors.Text,
+		true
+	)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	Theme.addTextStroke(label, 2.1)
+	drawerTabLbl = label
+	drawerTabBtn = tab
+end
+
 local function buildMenuDrawer(gui: ScreenGui)
 	local wrap = Instance.new("Frame")
 	wrap.Name = "MenuDrawerWrap"
 	wrap.BackgroundTransparency = 1
 	wrap.AnchorPoint = Vector2.new(0, 0.5)
 	wrap.Position = UDim2.fromScale(0, 0.44)
-	wrap.Size = UDim2.fromOffset(204, 178)
+	wrap.Size = UDim2.fromOffset(224, 178)
 	wrap.Parent = gui
 	drawerWrap = wrap
 
-	local panel = Theme.makeGlossyPanel(
+	local panel = Theme.makeCartoonWindow(
 		wrap,
 		"MenuPanel",
 		UDim2.fromOffset(176, 178),
 		UDim2.fromOffset(0, 0),
 		16
 	)
+	-- Keep the tile outlines visible through hover bounce.
+	panel.ClipsDescendants = false
 	drawerPanel = panel
 	Theme.addPadding(panel, 10)
 
@@ -332,309 +485,239 @@ local function buildMenuDrawer(gui: ScreenGui)
 	grid.Parent = panel
 	drawerGrid = grid
 
-	local tiles = {
-		{
-			id = "Shop",
-			label = "SHOP",
-			top = Color3.fromRGB(168, 130, 42),
-			bot = Color3.fromRGB(98, 72, 20),
-			stroke = Color3.fromRGB(238, 196, 86),
-			icon = HudIcons.createShopIcon,
-		},
-		{
-			id = "Pets",
-			label = "PETS",
-			top = Color3.fromRGB(46, 152, 88),
-			bot = Color3.fromRGB(24, 92, 54),
-			stroke = Color3.fromRGB(94, 232, 146),
-			icon = HudIcons.createPetsIcon,
-		},
-		{
-			id = "Upgrades",
-			label = "UPGRADES",
-			top = Color3.fromRGB(44, 118, 194),
-			bot = Color3.fromRGB(24, 68, 128),
-			stroke = Color3.fromRGB(98, 192, 255),
-			icon = HudIcons.createUpgradesIcon,
-		},
-		{
-			id = "Codex",
-			label = "CODEX",
-			top = Color3.fromRGB(124, 72, 194),
-			bot = Color3.fromRGB(70, 36, 128),
-			stroke = Color3.fromRGB(186, 128, 255),
-			icon = HudIcons.createCodexIcon,
-		},
-	}
-
 	table.clear(drawerTileButtons)
-	for i, t in ipairs(tiles) do
-		local tile = Instance.new("TextButton")
-		tile.Name = t.id .. "Btn"
-		tile.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		tile.Text = ""
-		tile.BorderSizePixel = 0
-		tile.AutoButtonColor = true
-		tile.LayoutOrder = i
-		tile.Parent = panel
-		Theme.addCorner(tile, 12)
-		Theme.addGradient(tile, t.top, t.bot, 90)
-		Theme.addStroke(tile, t.stroke, 2.0, 0.1)
-
-		local ic = t.icon(tile, 36)
-		ic.Name = "TileIcon"
-		ic.AnchorPoint = Vector2.new(0.5, 0)
-		ic.Position = UDim2.new(0.5, 0, 0, 8)
-
-		local lbl = Theme.makeLabel(
-			tile,
-			"TileText",
-			t.label,
-			UDim2.new(1, -6, 0, 18),
-			UDim2.new(0, 3, 1, -21),
-			11,
-			Theme.Colors.Text,
-			true
-		)
-		lbl.TextXAlignment = Enum.TextXAlignment.Center
-		lbl.TextScaled = true
-		local tc = Instance.new("UITextSizeConstraint")
-		tc.MaxTextSize = 12
-		tc.MinTextSize = 9
-		tc.Parent = lbl
-
-		tile.Activated:Connect(function()
-			if openModalCallback then
-				openModalCallback(t.id)
-			end
-		end)
-		table.insert(drawerTileButtons, tile)
+	for order, tileSpec in ipairs(DRAWER_TILES) do
+		buildDrawerTile(panel, order, tileSpec)
 	end
-
-	local tab = Instance.new("TextButton")
-	tab.Name = "CollapseTab"
-	tab.AnchorPoint = Vector2.new(0, 0.5)
-	tab.Position = UDim2.new(0, 174, 0.5, 0)
-	tab.Size = UDim2.fromOffset(26, 52)
-	tab.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	tab.BackgroundTransparency = 0.05
-	tab.Text = ""
-	tab.BorderSizePixel = 0
-	tab.AutoButtonColor = true
-	tab.AutoLocalize = false
-	tab.Parent = wrap
-	Theme.addCorner(tab, 10)
-	Theme.addGradient(tab, Theme.Colors.PanelTop, Theme.Colors.PanelBottom, 90)
-	Theme.addStroke(tab, Theme.Colors.Stroke, 1.5, 0.08)
-
-	local tabLbl = Theme.makeLabel(
-		tab,
-		"Arrow",
-		"<",
-		UDim2.fromScale(1, 1),
-		UDim2.fromOffset(0, 0),
-		20,
-		Theme.Colors.Text,
-		true
-	)
-	tabLbl.TextXAlignment = Enum.TextXAlignment.Center
-	drawerTabLbl = tabLbl
-
-	tab.Activated:Connect(function()
-		drawerOpen = not drawerOpen
-		updateDrawerSlide(false)
-	end)
-	drawerTabBtn = tab
+	buildDrawerTab(wrap)
 end
 
-local function buildHeroStatusDock(gui: ScreenGui)
-	local dock = Theme.makeGlossyPanel(
-		gui,
-		"HeroStatusDock",
-		UDim2.fromOffset(420, 84),
-		UDim2.new(0.5, 0, 1, -14),
-		16
-	)
-	dock.AnchorPoint = Vector2.new(0.5, 1)
-	statusDock = dock
-
-	-- Top Row: LV badge + Live HP bar
-	local topRow = Instance.new("Frame")
-	topRow.Name = "TopRow"
-	topRow.BackgroundTransparency = 1
-	topRow.Position = UDim2.fromOffset(12, 6)
-	topRow.Size = UDim2.new(1, -24, 0, 28)
-	topRow.Parent = dock
-
-	local lv = Theme.makeLabel(
-		topRow,
-		"LevelLabel",
-		"LV 1",
-		UDim2.fromOffset(66, 28),
-		UDim2.fromOffset(0, 0),
-		21,
-		Theme.Colors.Text,
-		true
-	)
-	levelLabel = lv
-
-	local hpTrack = Theme.makeFrame(
-		topRow,
+local function buildHeroHpTrack(dock: Frame)
+	local track = Theme.makeFrame(
+		dock,
 		"HpTrack",
-		UDim2.new(1, -72, 0, 24),
-		UDim2.new(0, 72, 0.5, -12),
-		Theme.Colors.Card,
-		9
+		UDim2.new(1, -16, 0, 18),
+		UDim2.fromOffset(8, 6),
+		Theme.Colors.Ink,
+		7
 	)
-	hpTrack.ClipsDescendants = true
-	Theme.addStroke(hpTrack, Theme.Colors.Stroke, 1.4, 0.15)
-
-	local fill = Instance.new("Frame")
-	fill.Name = "HpFill"
-	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	fill.BorderSizePixel = 0
-	fill.Parent = hpTrack
-	Theme.addCorner(fill, 8)
-	hpFillGrad =
-		Theme.addGradient(fill, Color3.fromRGB(112, 244, 134), Color3.fromRGB(46, 196, 82), 90)
+	track.ClipsDescendants = true
+	Theme.addStroke(track, Theme.Colors.Ink, 2)
+	local fill = Theme.makeFrame(
+		track,
+		"HpFill",
+		UDim2.fromScale(1, 1),
+		UDim2.fromOffset(0, 0),
+		Color3.new(1, 1, 1),
+		6
+	)
+	fill.BackgroundTransparency = 0
+	Theme.addStroke(fill, Theme.Colors.Ink, 0)
+	hpFillGrad = Theme.addGradient(fill, Color3.fromRGB(112, 244, 134), Color3.fromRGB(46, 196, 82))
 	hpFillBar = fill
-
-	local hpLbl = Theme.makeLabel(
-		hpTrack,
+	local label = Theme.makeLabel(
+		track,
 		"HpText",
 		"100 / 100 HP",
 		UDim2.fromScale(1, 1),
 		UDim2.fromOffset(0, 0),
-		14,
+		13,
 		Theme.Colors.Text,
 		true
 	)
-	hpLbl.TextXAlignment = Enum.TextXAlignment.Center
-	hpLbl.ZIndex = 3
-	local hpStroke = Instance.new("UIStroke")
-	hpStroke.Color = Color3.fromRGB(12, 20, 14)
-	hpStroke.Thickness = 1.6
-	hpStroke.Transparency = 0.25
-	hpStroke.Parent = hpLbl
-	hpValueLabel = hpLbl
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.ZIndex = 3
+	Theme.addTextStroke(label, 1.7)
+	hpValueLabel = label
+end
 
-	-- Bottom Row: PWR / DMG / SPD pills
-	local botRow = Instance.new("Frame")
-	botRow.Name = "StatRow"
-	botRow.BackgroundTransparency = 1
-	botRow.Position = UDim2.new(0, 12, 1, -33)
-	botRow.Size = UDim2.new(1, -24, 0, 26)
-	botRow.Parent = dock
-
-	local rowLayout = Instance.new("UIListLayout")
-	rowLayout.FillDirection = Enum.FillDirection.Horizontal
-	rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	rowLayout.Padding = UDim.new(0, 6)
-	rowLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	rowLayout.Parent = botRow
-
-	local function makeStatPill(
-		order: number,
-		name: string,
-		text: string,
-		strokeCol: Color3,
-		textCol: Color3
-	): TextLabel
-		local pill = Theme.makeFrame(
-			botRow,
-			name,
-			UDim2.fromScale(0.32, 1),
-			UDim2.fromOffset(0, 0),
-			Theme.Colors.Card,
-			8
-		)
-		pill.LayoutOrder = order
-		Theme.addStroke(pill, strokeCol, 1.4, 0.15)
-		local flex = Instance.new("UIFlexItem")
-		flex.FlexMode = Enum.UIFlexMode.Fill
-		flex.Parent = pill
-
-		local lbl = Theme.makeLabel(
-			pill,
-			"Value",
-			text,
-			UDim2.new(1, -8, 1, 0),
-			UDim2.fromOffset(4, 0),
-			13,
-			textCol,
-			true
-		)
-		lbl.TextXAlignment = Enum.TextXAlignment.Center
-		lbl.TextScaled = true
-		local tc = Instance.new("UITextSizeConstraint")
-		tc.MaxTextSize = 14
-		tc.MinTextSize = 9
-		tc.Parent = lbl
-		return lbl
-	end
-
-	pwrLabel =
-		makeStatPill(1, "PwrPill", "⚡ PWR: 10", Color3.fromRGB(58, 154, 192), Theme.Colors.Frost)
-	dmgLabel =
-		makeStatPill(2, "DmgPill", "⚔ DMG: 5", Color3.fromRGB(194, 108, 48), Theme.Colors.Molten)
-	spdLabel = makeStatPill(
-		3,
-		"SpdPill",
-		"» SPD: 1.00x",
-		Color3.fromRGB(112, 124, 146),
-		Theme.Colors.Text
+local function buildHeroExpTrack(dock: Frame)
+	local level = Theme.makeLabel(
+		dock,
+		"LevelLabel",
+		"Lvl 1",
+		UDim2.new(0.48, -8, 0, 15),
+		UDim2.new(0, 8, 1, -25),
+		12,
+		Theme.Colors.Text,
+		true
 	)
+	levelLabel = level
+	Theme.addTextStroke(level, 1.5)
+	local xp = Theme.makeLabel(
+		dock,
+		"ExpText",
+		"0 / 60 EXP",
+		UDim2.new(0.52, -8, 0, 15),
+		UDim2.new(0.48, 0, 1, -25),
+		11,
+		Theme.Colors.Text,
+		true
+	)
+	expValueLabel = xp
+	xp.TextXAlignment = Enum.TextXAlignment.Right
+	Theme.addTextStroke(xp, 1.5)
+	local track = Theme.makeFrame(
+		dock,
+		"ExpTrack",
+		UDim2.new(1, -16, 0, 6),
+		UDim2.new(0, 8, 1, -8),
+		Theme.Colors.Ink,
+		4
+	)
+	track.ClipsDescendants = true
+	Theme.addStroke(track, Theme.Colors.Ink, 2)
+	local fill = Theme.makeFrame(
+		track,
+		"ExpFill",
+		UDim2.fromScale(0, 1),
+		UDim2.fromOffset(0, 0),
+		Color3.new(1, 1, 1),
+		4
+	)
+	fill.BackgroundTransparency = 0
+	Theme.addStroke(fill, Theme.Colors.Ink, 0)
+	Theme.addGradient(fill, Theme.Colors.MintTop, Theme.Colors.MintBot)
+	expFillBar = fill
+end
+
+local function makeStatPill(
+	row: Frame,
+	order: number,
+	name: string,
+	text: string,
+	tint: Color3
+): TextLabel
+	local pill =
+		Theme.makeFrame(row, name, UDim2.fromScale(0.30, 1), UDim2.fromOffset(0, 0), tint, 7)
+	pill.LayoutOrder = order
+	Theme.addStroke(pill, Theme.Colors.Ink, 1.7)
+	local flex = Instance.new("UIFlexItem")
+	flex.FlexMode = Enum.UIFlexMode.Fill
+	flex.Parent = pill
+
+	local label = Theme.makeLabel(
+		pill,
+		"Value",
+		text,
+		UDim2.new(1, -6, 1, 0),
+		UDim2.fromOffset(3, 0),
+		12,
+		Theme.Colors.Text,
+		true
+	)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextScaled = true
+	Theme.addTextStroke(label, 1.4)
+	local constraint = Instance.new("UITextSizeConstraint")
+	constraint.MaxTextSize = 12
+	constraint.MinTextSize = 8
+	constraint.Parent = label
+	return label
+end
+
+local function buildHeroStats(dock: Frame)
+	local row = Instance.new("Frame")
+	row.Name = "StatRow"
+	row.BackgroundTransparency = 1
+	row.Position = UDim2.fromOffset(8, 29)
+	row.Size = UDim2.new(1, -16, 0, 18)
+	row.Parent = dock
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 5)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Parent = row
+
+	pwrLabel = makeStatPill(row, 1, "PwrPill", "⚡ PWR: 10", Color3.fromRGB(46, 123, 194))
+	dmgLabel = makeStatPill(row, 2, "DmgPill", "⚔ DMG: 5", Color3.fromRGB(211, 89, 34))
+	spdLabel = makeStatPill(row, 3, "SpdPill", "» SPD: 1.00x", Color3.fromRGB(120, 77, 180))
+end
+
+local function buildHeroStatusDock(gui: ScreenGui)
+	local dock = Theme.makeFrame(
+		gui,
+		"HeroStatusDock",
+		UDim2.fromOffset(360, 76),
+		UDim2.new(0.5, 0, 1, -14),
+		Color3.fromRGB(38, 33, 64),
+		11
+	)
+	dock.BackgroundTransparency = 0
+	dock.AnchorPoint = Vector2.new(0.5, 1)
+	Theme.addStroke(dock, Theme.Colors.Ink, 3)
+	statusDock = dock
+	buildHeroHpTrack(dock)
+	buildHeroStats(dock)
+	buildHeroExpTrack(dock)
+end
+
+local function makeCombatButton(holder: Frame, name: string, size: UDim2, pos: UDim2): TextButton
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.AnchorPoint = Vector2.new(1, 1)
+	btn.Position = pos
+	btn.Size = size
+	btn.Text = ""
+	btn.BorderSizePixel = 0
+	btn.AutoLocalize = false
+	btn.Parent = holder
+	return btn
+end
+
+local function makeControlCaption(
+	btn: TextButton,
+	name: string,
+	text: string,
+	size: UDim2,
+	pos: UDim2,
+	textSize: number,
+	color: Color3?
+): TextLabel
+	local caption =
+		Theme.makeLabel(btn, name, text, size, pos, textSize, color or Theme.Colors.Text, true)
+	caption.TextXAlignment = Enum.TextXAlignment.Center
+	Theme.addTextStroke(caption, 1.6)
+	return caption
+end
+
+local function setAimButtonPalette(btn: TextButton, enabled: boolean)
+	local top = if enabled then Color3.fromRGB(57, 146, 142) else Theme.Colors.CodexPurpleTop
+	local bottom = if enabled then Color3.fromRGB(34, 90, 108) else Theme.Colors.CodexPurpleBot
+	Theme.addGradient(btn, top, bottom, 90)
 end
 
 local function buildAutoAimButton(holder: Frame)
-	local aimBtn = Instance.new("TextButton")
-	aimBtn.Name = "AutoAimBtn"
-	aimBtn.AnchorPoint = Vector2.new(1, 1)
-	aimBtn.Position = UDim2.new(1, -66, 1, -12)
-	aimBtn.Size = UDim2.fromOffset(88, 44)
-	aimBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	aimBtn.BackgroundTransparency = 0.05
-	aimBtn.Text = ""
-	aimBtn.BorderSizePixel = 0
-	aimBtn.AutoButtonColor = true
-	aimBtn.Parent = holder
-	Theme.addCorner(aimBtn, 12)
-	Theme.addGradient(aimBtn, Theme.Colors.PanelTop, Theme.Colors.PanelBottom, 90)
-	Theme.addStroke(aimBtn, Theme.Colors.Stroke, 1.5, 0.1)
-
-	local reticle = HudIcons.createReticleIcon(aimBtn, 24, Theme.Colors.Danger)
+	local btn =
+		makeCombatButton(holder, "AutoAimBtn", UDim2.fromOffset(88, 48), UDim2.new(1, -66, 1, -12))
+	skinCartoonButton(btn, Theme.Colors.CodexPurpleTop, Theme.Colors.CodexPurpleBot, 12)
+	local reticle = HudIcons.createReticleIcon(btn, 24, Theme.Colors.Danger)
 	reticle.AnchorPoint = Vector2.new(0, 0.5)
 	reticle.Position = UDim2.new(0, 8, 0.5, 0)
 	autoAimReticle = reticle
 
-	local aimTitle = Theme.makeLabel(
-		aimBtn,
+	autoAimTitleLbl = makeControlCaption(
+		btn,
 		"AimTitle",
 		"AUTO AIM",
 		UDim2.new(1, -38, 0, 17),
-		UDim2.fromOffset(36, 5),
-		10,
-		Theme.Colors.Text,
-		true
+		UDim2.fromOffset(36, 6),
+		10
 	)
-	aimTitle.TextXAlignment = Enum.TextXAlignment.Center
-	autoAimTitleLbl = aimTitle
-	local aimState = Theme.makeLabel(
-		aimBtn,
+	autoAimStateLbl = makeControlCaption(
+		btn,
 		"AimState",
 		"OFF",
 		UDim2.new(1, -38, 0, 17),
-		UDim2.fromOffset(36, 22),
+		UDim2.fromOffset(36, 23),
 		12,
-		Theme.Colors.Danger,
-		true
+		Theme.Colors.Danger
 	)
-	aimState.TextXAlignment = Enum.TextXAlignment.Center
-	autoAimStateLbl = aimState
-	autoAimBtn = aimBtn
-	aimBtn.Activated:Connect(function()
+	autoAimBtn = btn
+	btn.Activated:Connect(function()
 		if toggleAutoAimCallback then
 			toggleAutoAimCallback()
 		end
@@ -642,124 +725,46 @@ local function buildAutoAimButton(holder: Frame)
 end
 
 local function buildDashButton(holder: Frame)
-	local dBtn = Instance.new("TextButton")
-	dBtn.Name = "DashBtn"
-	dBtn.AnchorPoint = Vector2.new(1, 1)
-	dBtn.Position = UDim2.new(1, 0, 1, -8)
-	dBtn.Size = UDim2.fromOffset(66, 66)
-	dBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	dBtn.Text = ""
-	dBtn.BorderSizePixel = 0
-	dBtn.AutoButtonColor = true
-	dBtn.AutoLocalize = false
-	dBtn.Parent = holder
-	Theme.addCorner(dBtn, 999)
-	Theme.addGradient(dBtn, Color3.fromRGB(122, 206, 255), Color3.fromRGB(58, 146, 228), 90)
-	Theme.addStroke(dBtn, Color3.fromRGB(196, 238, 255), 2.2, 0.1)
+	local btn =
+		makeCombatButton(holder, "DashBtn", UDim2.fromOffset(66, 66), UDim2.new(1, 0, 1, -8))
+	skinCartoonButton(btn, Theme.Colors.TileSkyTop, Theme.Colors.TileSkyBot, 999)
+	local icon = HudIcons.createDashIcon(btn, 22)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.new(0.5, 0, 0, 6)
+	dashIconFrame = icon
 
-	local dIcon = HudIcons.createDashIcon(dBtn, 22)
-	dIcon.AnchorPoint = Vector2.new(0.5, 0)
-	dIcon.Position = UDim2.new(0.5, 0, 0, 6)
-	dashIconFrame = dIcon
-
-	local dLbl = Theme.makeLabel(
-		dBtn,
+	dashTextLbl = makeControlCaption(
+		btn,
 		"DashText",
 		"DASH",
 		UDim2.new(1, -6, 0, 15),
 		UDim2.new(0, 3, 1, -21),
-		11,
-		Theme.Colors.Text,
-		true
+		11
 	)
-	dLbl.TextXAlignment = Enum.TextXAlignment.Center
-	local dStroke = Instance.new("UIStroke")
-	dStroke.Color = Color3.fromRGB(18, 56, 98)
-	dStroke.Thickness = 1.6
-	dStroke.Transparency = 0.25
-	dStroke.Parent = dLbl
-	dashTextLbl = dLbl
-
-	local qHint = Theme.makeLabel(
-		dBtn,
+	dashSubLbl = makeControlCaption(
+		btn,
 		"KeyHint",
 		"[Q]",
 		UDim2.new(1, 0, 0, 13),
 		UDim2.new(0, 0, 1, -15),
-		10,
-		Color3.fromRGB(232, 248, 255),
-		true
+		10
 	)
-	qHint.TextXAlignment = Enum.TextXAlignment.Center
-	dashSubLbl = qHint
-	dashBtn = dBtn
-	dBtn.Activated:Connect(function()
+	dashBtn = btn
+	btn.Activated:Connect(function()
 		if dashCallback then
 			dashCallback()
 		end
 	end)
 end
 
-local function buildShootButton(holder: Frame)
-	local tBtn = Instance.new("TextButton")
-	tBtn.Name = "ThrowBtn"
-	tBtn.AnchorPoint = Vector2.new(1, 1)
-	tBtn.Position = UDim2.new(1, -68, 1, -68)
-	tBtn.Size = UDim2.fromOffset(78, 78)
-	tBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	tBtn.Text = ""
-	tBtn.BorderSizePixel = 0
-	tBtn.AutoButtonColor = true
-	tBtn.AutoLocalize = false
-	tBtn.Parent = holder
-	Theme.addCorner(tBtn, 999)
-	Theme.addGradient(tBtn, Color3.fromRGB(248, 138, 48), Color3.fromRGB(206, 82, 18), 90)
-	Theme.addStroke(tBtn, Color3.fromRGB(255, 204, 134), 2.5, 0.08)
-
-	local sIcon = HudIcons.createShootIcon(tBtn, 28)
-	sIcon.AnchorPoint = Vector2.new(0.5, 0)
-	sIcon.Position = UDim2.new(0.5, 0, 0, 9)
-	shootIconFrame = sIcon
-
-	local tLbl = Theme.makeLabel(
-		tBtn,
-		"ThrowText",
-		"SHOOT",
-		UDim2.new(1, -8, 0, 18),
-		UDim2.new(0, 4, 1, -26),
-		13,
-		Theme.Colors.Text,
-		true
-	)
-	tLbl.TextXAlignment = Enum.TextXAlignment.Center
-	local tStroke = Instance.new("UIStroke")
-	tStroke.Color = Color3.fromRGB(112, 38, 8)
-	tStroke.Thickness = 1.8
-	tStroke.Transparency = 0.22
-	tStroke.Parent = tLbl
-	throwTextLbl = tLbl
-
-	local hint = Theme.makeLabel(
-		tBtn,
-		"KeyHint",
-		"[LMB]",
-		UDim2.new(1, 0, 0, 13),
-		UDim2.new(0, 0, 1, -15),
-		10,
-		Color3.fromRGB(255, 236, 208),
-		true
-	)
-	hint.TextXAlignment = Enum.TextXAlignment.Center
-	throwHintLbl = hint
-	throwBtn = tBtn
-
+local function bindShootButton(btn: TextButton)
 	local activeInput: InputObject? = nil
-	tBtn.Activated:Connect(function()
+	btn.Activated:Connect(function()
 		if throwCallback then
 			throwCallback()
 		end
 	end)
-	tBtn.InputBegan:Connect(function(inp: InputObject)
+	btn.InputBegan:Connect(function(inp: InputObject)
 		if
 			inp.UserInputType == Enum.UserInputType.Touch
 			or inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -778,6 +783,35 @@ local function buildShootButton(holder: Frame)
 			end
 		end
 	end)
+end
+
+local function buildShootButton(holder: Frame)
+	local btn =
+		makeCombatButton(holder, "ThrowBtn", UDim2.fromOffset(78, 78), UDim2.new(1, -68, 1, -68))
+	skinCartoonButton(btn, Color3.fromRGB(255, 183, 60), Color3.fromRGB(236, 89, 19), 999)
+	local icon = HudIcons.createShootIcon(btn, 28)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.new(0.5, 0, 0, 9)
+	shootIconFrame = icon
+
+	throwTextLbl = makeControlCaption(
+		btn,
+		"ThrowText",
+		"SHOOT",
+		UDim2.new(1, -8, 0, 18),
+		UDim2.new(0, 4, 1, -26),
+		13
+	)
+	throwHintLbl = makeControlCaption(
+		btn,
+		"KeyHint",
+		"[LMB]",
+		UDim2.new(1, 0, 0, 13),
+		UDim2.new(0, 0, 1, -15),
+		10
+	)
+	throwBtn = btn
+	bindShootButton(btn)
 end
 
 local function triggerJumpNow()
@@ -800,43 +834,10 @@ local function triggerJumpNow()
 	end
 end
 
-local function buildJumpButton(holder: Frame)
-	local jBtn = Instance.new("TextButton")
-	jBtn.Name = "JumpActionBtn"
-	jBtn.AnchorPoint = Vector2.new(1, 1)
-	jBtn.Position = UDim2.new(1, 0, 1, -76)
-	jBtn.Size = UDim2.fromOffset(54, 54)
-	jBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	jBtn.Text = ""
-	jBtn.BorderSizePixel = 0
-	jBtn.AutoButtonColor = true
-	jBtn.Parent = holder
-	Theme.addCorner(jBtn, 999)
-	Theme.addGradient(jBtn, Color3.fromRGB(248, 138, 48), Color3.fromRGB(202, 78, 18), 90)
-	Theme.addStroke(jBtn, Color3.fromRGB(255, 204, 134), 2.2, 0.1)
-
-	local jIcon = HudIcons.createJumpIcon(jBtn, 24)
-	jIcon.AnchorPoint = Vector2.new(0.5, 0)
-	jIcon.Position = UDim2.new(0.5, 0, 0, 6)
-	jumpIconFrame = jIcon
-
-	local jLbl = Theme.makeLabel(
-		jBtn,
-		"JumpText",
-		"JUMP",
-		UDim2.new(1, -6, 0, 13),
-		UDim2.new(0, 3, 1, -17),
-		10,
-		Theme.Colors.Text,
-		true
-	)
-	jLbl.TextXAlignment = Enum.TextXAlignment.Center
-	jumpTextLbl = jLbl
-	jumpActionBtn = jBtn
-
+local function bindJumpButton(btn: TextButton)
 	local activeJumpInput: InputObject? = nil
-	jBtn.Activated:Connect(triggerJumpNow)
-	jBtn.InputBegan:Connect(function(inp: InputObject)
+	btn.Activated:Connect(triggerJumpNow)
+	btn.InputBegan:Connect(function(inp: InputObject)
 		if
 			inp.UserInputType == Enum.UserInputType.Touch
 			or inp.UserInputType == Enum.UserInputType.MouseButton1
@@ -852,6 +853,26 @@ local function buildJumpButton(holder: Frame)
 			isJumpHeld = false
 		end
 	end)
+end
+
+local function buildJumpButton(holder: Frame)
+	local btn =
+		makeCombatButton(holder, "JumpActionBtn", UDim2.fromOffset(54, 54), UDim2.new(1, 0, 1, -76))
+	skinCartoonButton(btn, Theme.Colors.GoldTop, Theme.Colors.GoldBot, 999)
+	local icon = HudIcons.createJumpIcon(btn, 24)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.new(0.5, 0, 0, 6)
+	jumpIconFrame = icon
+	jumpTextLbl = makeControlCaption(
+		btn,
+		"JumpText",
+		"JUMP",
+		UDim2.new(1, -6, 0, 13),
+		UDim2.new(0, 3, 1, -17),
+		10
+	)
+	jumpActionBtn = btn
+	bindJumpButton(btn)
 end
 
 local function buildCombatButtons(gui: ScreenGui)
@@ -889,8 +910,8 @@ local function applyDrawerResponsive(compact: boolean)
 	local pad = if compact then 8 else 10
 	local gap = if compact then 6 else 8
 	local panelS = tileS * 2 + gap + pad * 2 + 2
-	local tabW = if compact then 22 else 26
-	local tabH = if compact then 42 else 52
+	local tabW = 48
+	local tabH = if compact then 48 else 52
 	local padding = drawerPanel:FindFirstChildOfClass("UIPadding")
 	if padding then
 		padding.PaddingTop = UDim.new(0, pad)
@@ -902,11 +923,13 @@ local function applyDrawerResponsive(compact: boolean)
 	drawerGrid.CellPadding = UDim2.fromOffset(gap, gap)
 	drawerPanel.Size = UDim2.fromOffset(panelS, panelS)
 	drawerTabBtn.Size = UDim2.fromOffset(tabW, tabH)
-	drawerTabBtn.Position = UDim2.new(0, panelS - 2, 0.5, 0)
+	drawerTabBtn.Position = UDim2.new(0, panelS - 1, 0.5, 0)
 	drawerWrap.Size = UDim2.fromOffset(panelS + tabW, panelS)
 	if compact then
 		drawerWrap.AnchorPoint = Vector2.new(0, 0)
-		drawerWrap.Position = UDim2.fromOffset(if drawerOpen then 0 else -panelS, 72)
+		local height = if hudScreen then hudScreen.AbsoluteSize.Y else 0
+		local y = if height > 0 then math.clamp(height - panelS - 106, 8, 72) else 72
+		drawerWrap.Position = UDim2.fromOffset(if drawerOpen then 0 else -panelS, y)
 	else
 		drawerWrap.AnchorPoint = Vector2.new(0, 0.5)
 		drawerWrap.Position = UDim2.new(0, if drawerOpen then 0 else -panelS, 0.44, 0)
@@ -998,7 +1021,7 @@ local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		throwBtn.Position =
 			UDim2.new(1, if compact then -68 else -84, 1, if compact then -68 else -85)
-		autoAimBtn.Size = UDim2.fromOffset(if compact then 88 else 112, if compact then 44 else 48)
+		autoAimBtn.Size = UDim2.fromOffset(if compact then 88 else 112, 48)
 		autoAimBtn.Position =
 			UDim2.new(1, if compact then -66 else -82, 1, if compact then -12 else -21)
 	else
@@ -1009,42 +1032,82 @@ local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		throwBtn.Position =
 			UDim2.new(1, if compact then -24 else -28, 1, if compact then -74 else -92)
-		autoAimBtn.Size = UDim2.fromOffset(if compact then 104 else 122, if compact then 44 else 48)
+		autoAimBtn.Size = UDim2.fromOffset(if compact then 104 else 122, 48)
 		autoAimBtn.Position =
 			UDim2.new(1, if compact then -68 else -82, 1, if compact then -14 else -22)
 	end
 	applyCombatButtonTypography(compact, m.isTouch)
 end
 
-local function applyDockAndBannersResponsive(m: Theme.LayoutMetrics)
-	local compact = m.isCompact
-	if statusDock and levelLabel then
-		if m.isPortrait then
-			local dockW = math.clamp(math.floor(m.viewport.X - 24), 256, 360)
-			statusDock.Size = UDim2.fromOffset(dockW, 68)
-			statusDock.Position = UDim2.new(0.5, 0, 1, -174)
-			levelLabel.TextSize = 16
-		elseif compact then
-			local dockW = math.clamp(math.floor(m.viewport.X * 0.38), 236, 290)
-			statusDock.Size = UDim2.fromOffset(dockW, 68)
-			statusDock.Position = UDim2.new(0.5, 0, 1, -8)
-			levelLabel.TextSize = 16
-		else
-			statusDock.Size = UDim2.fromOffset(420, 84)
-			statusDock.Position = UDim2.new(0.5, 0, 1, -14)
-			levelLabel.TextSize = 21
-		end
+local function getUsableViewport(m: Theme.LayoutMetrics): Vector2
+	local viewport = if hudScreen then hudScreen.AbsoluteSize else m.viewport
+	return if viewport.X > 0 and viewport.Y > 0 then viewport else m.viewport
+end
+
+local function measureDock(m: Theme.LayoutMetrics, width: number): (number, number, number)
+	if m.isPortrait then
+		return math.clamp(width - 24, 1, 340), 160, 0
 	end
-	local dockTopOffset = if m.isPortrait then -250 elseif compact then -82 else -106
+	if width < 560 then
+		-- A shallow landscape phone needs more space for the combat arc than the thumbstick.
+		return math.max(1, width - 317), 8, -23
+	end
+	local preferredWidth = if m.isCompact then math.floor(width * 0.38) else 360
+	local reserved = if m.isCompact then 182 else 234
+	return math.min(preferredWidth, width - 2 * reserved), if m.isCompact then 8 else 14, 0
+end
+
+local function placeStatusBanner(
+	frame: Frame,
+	m: Theme.LayoutMetrics,
+	viewport: Vector2,
+	width: number,
+	bottom: number,
+	centerOffset: number
+): number
+	local height = 32
+	local drawer = drawerWrap
+	local drawerBottom = if drawer then drawer.Position.Y.Offset + drawer.Size.Y.Offset else 0
+	if m.isPortrait and drawer and viewport.Y - bottom - height < drawerBottom + 4 then
+		local left = drawer.Size.X.Offset + 6
+		width = math.max(1, math.min(width, viewport.X - left - 8))
+		height = 44
+		frame.Position = UDim2.new(0, left + width / 2, 1, -bottom)
+	else
+		frame.Position = UDim2.new(0.5, centerOffset, 1, -bottom)
+	end
+	frame.Size = UDim2.fromOffset(width, height)
+	return height
+end
+
+local function applyDockAndBannersResponsive(m: Theme.LayoutMetrics)
+	local viewport = getUsableViewport(m)
+	local dockWidth, dockBottom, centerOffset = measureDock(m, viewport.X)
+	local dockHeight = 76
+	if statusDock then
+		statusDock.Size = UDim2.fromOffset(dockWidth, dockHeight)
+		statusDock.Position = UDim2.new(0.5, centerOffset, 1, -dockBottom)
+	end
+	local stackBottom = dockBottom + dockHeight + 6
+	if currencyStack then
+		currencyStack.Position = UDim2.new(0.5, centerOffset, 1, -stackBottom)
+	end
+	local guideBottom = stackBottom + 68
+	local guideHeight = 32
 	if guideFrame then
-		local gw = if compact then math.min(340, m.viewport.X - 28) else 440
-		guideFrame.Size = UDim2.fromOffset(gw, if compact then 28 else 32)
-		guideFrame.Position = UDim2.new(0.5, 0, 1, dockTopOffset)
+		local width = if m.isCompact then dockWidth else 420
+		guideHeight = placeStatusBanner(guideFrame, m, viewport, width, guideBottom, centerOffset)
 	end
 	if afkBadgeFrame then
-		local aw = if compact then 260 else 320
-		afkBadgeFrame.Size = UDim2.fromOffset(aw, if compact then 28 else 32)
-		afkBadgeFrame.Position = UDim2.new(0.5, 0, 1, dockTopOffset - 36)
+		local width = if m.isCompact then math.min(260, dockWidth) else 320
+		placeStatusBanner(
+			afkBadgeFrame,
+			m,
+			viewport,
+			width,
+			guideBottom + guideHeight + 4,
+			centerOffset
+		)
 	end
 end
 
@@ -1082,23 +1145,6 @@ local function applyResponsiveLayout()
 	lastIsTouch = m.isTouch
 	lastIsCompact = compact
 
-	if currencyStack then
-		currencyStack.Position =
-			UDim2.fromOffset(if compact then 10 else 14, if compact then 6 else 8)
-		local pillW = if compact then 104 else 132
-		local pillH = if compact then 28 else 34
-		for _, ch in ipairs(currencyStack:GetChildren()) do
-			if ch:IsA("Frame") then
-				ch.Size = UDim2.fromOffset(pillW, pillH)
-			end
-		end
-	end
-	if coinsValLabel then
-		coinsValLabel.TextSize = if compact then 14 else 17
-	end
-	if gemsValLabel then
-		gemsValLabel.TextSize = if compact then 14 else 17
-	end
 	applyTopRightResponsive(compact)
 
 	applyDrawerResponsive(compact)
@@ -1107,28 +1153,7 @@ local function applyResponsiveLayout()
 	task.defer(syncNativeTouchJump)
 end
 
-function HudGui.mount(callbacks: {
-	onThrow: () -> (),
-	onThrowHold: ((boolean) -> ())?,
-	onDash: () -> (),
-	onToggleAutoAim: (() -> ())?,
-	onOpenModal: (string) -> (),
-})
-	throwCallback = callbacks.onThrow
-	throwHoldCallback = callbacks.onThrowHold
-	dashCallback = callbacks.onDash
-	toggleAutoAimCallback = callbacks.onToggleAutoAim
-	openModalCallback = callbacks.onOpenModal
-
-	local gui = Theme.createScreenGui("BallBrawl_HUD", 10)
-	hudScreen = gui
-
-	buildCurrencyStack(gui)
-	buildTopRight(gui)
-	buildMenuDrawer(gui)
-	buildHeroStatusDock(gui)
-	buildCombatButtons(gui)
-
+local function buildGuideBanner(gui: ScreenGui)
 	local bannerFrame = Theme.makeGlossyPanel(
 		gui,
 		"OnboardingGuide",
@@ -1158,7 +1183,9 @@ function HudGui.mount(callbacks: {
 		tc.MinTextSize = 9
 		tc.Parent = guideBanner
 	end
+end
 
+local function buildAfkBadge(gui: ScreenGui)
 	local afkFrame = Theme.makeGlossyPanel(
 		gui,
 		"AfkTrainingBadge",
@@ -1181,7 +1208,15 @@ function HudGui.mount(callbacks: {
 		true
 	)
 	afkLbl.TextXAlignment = Enum.TextXAlignment.Center
+	afkLbl.TextScaled = true
+	afkLbl.TextWrapped = true
+	local constraint = Instance.new("UITextSizeConstraint")
+	constraint.MaxTextSize = 12
+	constraint.MinTextSize = 9
+	constraint.Parent = afkLbl
+end
 
+local function bindHudEvents()
 	-- Live Humanoid HP binding across respawns
 	task.spawn(bindCharacterHealth, localPlayer.Character)
 	localPlayer.CharacterAdded:Connect(function(char: Model)
@@ -1222,8 +1257,50 @@ function HudGui.mount(callbacks: {
 			end
 		end
 	end)
+end
 
+function HudGui.mount(callbacks: {
+	onThrow: () -> (),
+	onThrowHold: ((boolean) -> ())?,
+	onDash: () -> (),
+	onToggleAutoAim: (() -> ())?,
+	onOpenModal: (string) -> (),
+})
+	throwCallback = callbacks.onThrow
+	throwHoldCallback = callbacks.onThrowHold
+	dashCallback = callbacks.onDash
+	toggleAutoAimCallback = callbacks.onToggleAutoAim
+	openModalCallback = callbacks.onOpenModal
+
+	local gui = Theme.createScreenGui("BallBrawl_HUD", 10)
+	hudScreen = gui
+
+	buildCurrencyStack(gui)
+	buildTopRight(gui)
+	buildMenuDrawer(gui)
+	buildHeroStatusDock(gui)
+	buildCombatButtons(gui)
+	buildGuideBanner(gui)
+	buildAfkBadge(gui)
+	bindHudEvents()
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyResponsiveLayout)
 	applyResponsiveLayout()
+end
+
+local function updateLevelProgress(rawLevel: any, rawExp: any)
+	local level = if MathUtil.isFinite(rawLevel) then math.max(1, math.floor(rawLevel)) else 1
+	local exp = if MathUtil.isFinite(rawExp) then math.max(0, math.floor(rawExp)) else 0
+	local cap = EconomyConfigs.getExpForNextLevel(level)
+	local shownExp = math.min(exp, cap)
+	if levelLabel then
+		levelLabel.Text = `Lvl {level}`
+	end
+	if expValueLabel then
+		expValueLabel.Text = `{MathUtil.formatNumber(shownExp)} / {MathUtil.formatNumber(cap)} EXP`
+	end
+	if expFillBar then
+		expFillBar.Size = UDim2.fromScale(shownExp / cap, 1)
+	end
 end
 
 function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
@@ -1234,9 +1311,7 @@ function HudGui.updateProfile(profile: any, powerRating: number, maxHP: number)
 	if gemsValLabel then
 		gemsValLabel.Text = MathUtil.formatNumber(profile.bossGems or 0)
 	end
-	if levelLabel then
-		levelLabel.Text = `LV {profile.level or 1}`
-	end
+	updateLevelProgress(profile.level, profile.exp)
 	if pwrLabel then
 		pwrLabel.Text = `⚡ PWR: {MathUtil.formatNumber(powerRating or 0)}`
 	end
@@ -1276,17 +1351,11 @@ function HudGui.setAutoAimEnabled(enabled: boolean)
 	if not autoAimBtn or not autoAimStateLbl then
 		return
 	end
-	if enabled then
-		autoAimStateLbl.Text = "ON"
-		autoAimStateLbl.TextColor3 = Theme.Colors.Emerald
-		HudIcons.setReticleColor(autoAimReticle, Theme.Colors.Emerald)
-		Theme.addStroke(autoAimBtn, Theme.Colors.Emerald, 2.0, 0.05)
-	else
-		autoAimStateLbl.Text = "OFF"
-		autoAimStateLbl.TextColor3 = Theme.Colors.Danger
-		HudIcons.setReticleColor(autoAimReticle, Theme.Colors.Danger)
-		Theme.addStroke(autoAimBtn, Theme.Colors.Stroke, 1.5, 0.1)
-	end
+	local stateColor = if enabled then Theme.Colors.Emerald else Theme.Colors.Danger
+	autoAimStateLbl.Text = if enabled then "ON" else "OFF"
+	autoAimStateLbl.TextColor3 = stateColor
+	HudIcons.setReticleColor(autoAimReticle, stateColor)
+	setAimButtonPalette(autoAimBtn, enabled)
 end
 
 function HudGui.setDashCooldown(remaining: number)
@@ -1297,7 +1366,6 @@ function HudGui.setDashCooldown(remaining: number)
 		if not isDashOnCooldown then
 			isDashOnCooldown = true
 			Theme.addGradient(dashBtn, Theme.Colors.CardAlt, Theme.Colors.PanelBottom, 90)
-			Theme.addStroke(dashBtn, Theme.Colors.Stroke, 1.8, 0.2)
 			if dashIconFrame then
 				dashIconFrame.Visible = false
 			end
@@ -1311,8 +1379,7 @@ function HudGui.setDashCooldown(remaining: number)
 		dashTextLbl.Text = string.format("%.1fs", remaining)
 	elseif isDashOnCooldown then
 		isDashOnCooldown = false
-		Theme.addGradient(dashBtn, Color3.fromRGB(122, 206, 255), Color3.fromRGB(58, 146, 228), 90)
-		Theme.addStroke(dashBtn, Color3.fromRGB(196, 238, 255), 2.2, 0.1)
+		Theme.addGradient(dashBtn, Theme.Colors.TileSkyTop, Theme.Colors.TileSkyBot, 90)
 		applyDashReadyLayout()
 	end
 end

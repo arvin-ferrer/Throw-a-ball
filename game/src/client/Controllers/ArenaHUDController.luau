@@ -38,6 +38,7 @@ local bossBarText: TextLabel? = nil
 local optInModal: Frame? = nil
 local optInInfo: TextLabel? = nil
 local optInBiomeId = ""
+local dismissedOptInBiomeId = ""
 local optedInState = false
 local claimFrame: Frame? = nil
 local claimFill: Frame? = nil
@@ -56,6 +57,22 @@ local function applyTextConstraint(lbl: TextLabel, minSize: number, maxSize: num
 	tc.MinTextSize = minSize
 	tc.MaxTextSize = maxSize
 	tc.Parent = lbl
+end
+
+local function makeOutlinedGradient(
+	parent: Instance,
+	name: string,
+	size: UDim2,
+	position: UDim2,
+	radius: number,
+	top: Color3,
+	bottom: Color3
+): Frame
+	local panel = Theme.makeFrame(parent, name, size, position, Color3.new(1, 1, 1), radius)
+	panel.BackgroundTransparency = 0
+	Theme.addGradient(panel, top, bottom, 90)
+	Theme.addStroke(panel, Theme.Colors.Ink, 3)
+	return panel
 end
 
 local function applyBiomeLighting(zone: string, biomeId: string, overchargedActive: boolean)
@@ -86,18 +103,17 @@ local function applyBiomeLighting(zone: string, biomeId: string, overchargedActi
 end
 
 local function buildOverchargedPill(stack: Frame)
-	local ovPill = Theme.makeFrame(
+	local ovPill = makeOutlinedGradient(
 		stack,
 		"OverchargedPill",
 		UDim2.fromOffset(216, 20),
 		UDim2.new(0.5, 0, 0, 38),
-		Color3.fromRGB(255, 255, 255),
-		8
+		999,
+		Theme.Colors.CodexPurpleTop,
+		Theme.Colors.OverchargedBgBot
 	)
 	ovPill.AnchorPoint = Vector2.new(0.5, 0)
 	ovPill.ZIndex = 1
-	Theme.addGradient(ovPill, Theme.Colors.OverchargedBgTop, Theme.Colors.OverchargedBgBot, 90)
-	Theme.addStroke(ovPill, Theme.Colors.OverchargedStroke, 1.5, 0.1)
 	overchargedPill = ovPill
 
 	local ovLbl = Theme.makeLabel(
@@ -107,22 +123,51 @@ local function buildOverchargedPill(stack: Frame)
 		UDim2.new(1, -10, 1, 0),
 		UDim2.fromOffset(5, 0),
 		10,
-		Color3.fromRGB(255, 150, 198),
+		Theme.Colors.Text,
 		true
 	)
 	ovLbl.RichText = true
 	ovLbl.TextXAlignment = Enum.TextXAlignment.Center
+	Theme.addTextStroke(ovLbl, 1.2)
 	applyTextConstraint(ovLbl, 7, 10)
 	overchargedChip = ovLbl
 end
 
+local function makePhaseLabel(
+	banner: Frame,
+	name: string,
+	message: string,
+	height: number,
+	y: number,
+	textSize: number,
+	color: Color3
+): TextLabel
+	local label = Theme.makeLabel(
+		banner,
+		name,
+		message,
+		UDim2.new(1, -44, 0, height),
+		UDim2.fromOffset(36, y),
+		textSize,
+		color,
+		true
+	)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.ZIndex = 3
+	Theme.addTextStroke(label, 1.4)
+	applyTextConstraint(label, 7, textSize)
+	return label
+end
+
 local function buildPhaseBanner(stack: Frame)
-	local banner = Theme.makeGlossyPanel(
+	local banner = makeOutlinedGradient(
 		stack,
 		"PhaseBanner",
 		UDim2.fromOffset(236, 40),
 		UDim2.fromScale(0.5, 0),
-		12
+		12,
+		Theme.Colors.HubBlueTop,
+		Theme.Colors.HubBlueBot
 	)
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.ZIndex = 2
@@ -134,60 +179,59 @@ local function buildPhaseBanner(stack: Frame)
 	sh.ZIndex = 3
 	shieldIcon = sh
 
-	local title = Theme.makeLabel(
+	phaseTitle = makePhaseLabel(
 		banner,
 		"PhaseTitle",
 		"HUB PLAZA • PvE SAFE",
-		UDim2.new(1, -44, 0, 18),
-		UDim2.fromOffset(36, 4),
-		14,
-		Theme.Colors.Emerald,
-		true
+		18,
+		4,
+		13,
+		Theme.Colors.Emerald
 	)
-	title.TextXAlignment = Enum.TextXAlignment.Center
-	title.ZIndex = 3
-	applyTextConstraint(title, 7, 13)
-	phaseTitle = title
-
-	local sub = Theme.makeLabel(
+	phaseSubtitle = makePhaseLabel(
 		banner,
 		"PhaseSubtitle",
 		"(Walk through Portals to Fight!)",
-		UDim2.new(1, -44, 0, 14),
-		UDim2.fromOffset(36, 22),
+		14,
+		22,
 		10,
-		Color3.fromRGB(218, 226, 240),
-		false
+		Theme.Colors.Text
 	)
-	sub.TextXAlignment = Enum.TextXAlignment.Center
-	sub.ZIndex = 3
-	applyTextConstraint(sub, 7, 10)
-	phaseSubtitle = sub
 end
 
 local function buildBossHpBar(gui: ScreenGui)
-	local bar = Theme.makeGlossyPanel(
+	local bar = Theme.makeFrame(
 		gui,
 		"BossHPBar",
 		UDim2.fromOffset(370, 30),
 		UDim2.new(0.5, 0, 0, 90),
-		10
+		Theme.Colors.CardAlt,
+		999
 	)
 	bar.AnchorPoint = Vector2.new(0.5, 0)
-	bar.ClipsDescendants = true
 	bar.Visible = false
+	Theme.addStroke(bar, Theme.Colors.Ink, 3)
 	bossBarFrame = bar
 
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	fill.BorderSizePixel = 0
-	fill.Parent = bar
-	Theme.addCorner(fill, 9)
-	Theme.addGradient(fill, Color3.fromRGB(255, 92, 82), Color3.fromRGB(196, 32, 42), 90)
+	local track = Theme.makeFrame(
+		bar,
+		"Track",
+		UDim2.new(1, -6, 1, -6),
+		UDim2.fromOffset(3, 3),
+		Theme.Colors.Ink,
+		999
+	)
+	track.ClipsDescendants = true
+	local fill = makeOutlinedGradient(
+		track,
+		"Fill",
+		UDim2.fromScale(1, 1),
+		UDim2.fromOffset(0, 0),
+		999,
+		Theme.Colors.ShopRedTop,
+		Theme.Colors.ShopRedBot
+	)
 	bossBarFill = fill
-
 	local lbl = Theme.makeLabel(
 		bar,
 		"Label",
@@ -200,6 +244,8 @@ local function buildBossHpBar(gui: ScreenGui)
 	)
 	lbl.TextXAlignment = Enum.TextXAlignment.Center
 	lbl.ZIndex = 3
+	Theme.addTextStroke(lbl, 1.8)
+	applyTextConstraint(lbl, 9, 14)
 	bossBarText = lbl
 end
 
@@ -217,45 +263,48 @@ local function buildTopBanner(gui: ScreenGui)
 	buildBossHpBar(gui)
 end
 
+local function submitOptIn(wantsIn: boolean)
+	optedInState = wantsIn
+	Remotes.waitClient().OptInBoss:FireServer(optInBiomeId, wantsIn)
+end
+
 local function buildOptInButtons(modal: Frame)
 	local btnRow = Instance.new("Frame")
 	btnRow.Name = "ButtonRow"
 	btnRow.BackgroundTransparency = 1
-	btnRow.Position = UDim2.new(0, 14, 1, -54)
-	btnRow.Size = UDim2.new(1, -28, 0, 44)
+	btnRow.Position = UDim2.new(0, 14, 1, -58)
+	btnRow.Size = UDim2.new(1, -28, 0, 48)
 	btnRow.Parent = modal
 	local rl = Instance.new("UIListLayout")
 	rl.FillDirection = Enum.FillDirection.Horizontal
 	rl.Padding = UDim.new(0, 10)
 	rl.Parent = btnRow
 
-	local joinBtn = Theme.makeButton(
+	local joinBtn = Theme.makeGoldPillButton(
 		btnRow,
 		"JoinBtn",
 		"JOIN BOSS",
 		UDim2.fromScale(0.48, 1),
 		UDim2.fromOffset(0, 0),
-		Theme.Colors.Emerald,
 		function()
-			optedInState = true
-			Remotes.waitClient().OptInBoss:FireServer(optInBiomeId, true)
+			submitOptIn(true)
 		end
 	)
 	local jf = Instance.new("UIFlexItem")
 	jf.FlexMode = Enum.UIFlexMode.Fill
 	jf.Parent = joinBtn
 
-	local stayBtn = Theme.makeButton(
+	local stayBtn = Theme.makeGoldPillButton(
 		btnRow,
 		"StayBtn",
 		"STAY IN PvE",
 		UDim2.fromScale(0.48, 1),
 		UDim2.fromOffset(0, 0),
-		Theme.Colors.CardAlt,
 		function()
-			optedInState = false
-			Remotes.waitClient().OptInBoss:FireServer(optInBiomeId, false)
-		end
+			submitOptIn(false)
+		end,
+		Theme.Colors.HubBlueTop,
+		Theme.Colors.HubBlueBot
 	)
 	local sf = Instance.new("UIFlexItem")
 	sf.FlexMode = Enum.UIFlexMode.Fill
@@ -263,7 +312,7 @@ local function buildOptInButtons(modal: Frame)
 end
 
 local function buildOptInModal(gui: ScreenGui)
-	local modal = Theme.makeGlossyPanel(
+	local modal = Theme.makeCartoonWindow(
 		gui,
 		"OptInModal",
 		UDim2.fromScale(0.86, 0.46),
@@ -272,50 +321,50 @@ local function buildOptInModal(gui: ScreenGui)
 	)
 	modal.AnchorPoint = Vector2.new(0.5, 0.5)
 	modal.Visible = false
-	Theme.addStroke(modal, Theme.Colors.Coins, 2)
 	local sc = Instance.new("UISizeConstraint")
-	sc.MaxSize = Vector2.new(390, 192)
-	sc.MinSize = Vector2.new(280, 158)
+	sc.MaxSize = Vector2.new(390, 198)
+	sc.MinSize = Vector2.new(280, 174)
 	sc.Parent = modal
 	optInModal = modal
 
-	local heading = Theme.makeLabel(
+	local _, heading, closeBtn = Theme.makeHeaderBanner(
 		modal,
-		"Heading",
 		"BOSS PHASE OPT-IN!",
-		UDim2.new(1, -20, 0, 28),
-		UDim2.fromOffset(10, 10),
-		19,
-		Theme.Colors.Coins,
-		true
+		Theme.Colors.ShopRedTop,
+		Theme.Colors.ShopRedBot,
+		function()
+			dismissedOptInBiomeId = optInBiomeId
+			modal.Visible = false
+			submitOptIn(false)
+		end
 	)
-	heading.TextXAlignment = Enum.TextXAlignment.Center
+	applyTextConstraint(heading, 16, 22)
+	closeBtn.Size = UDim2.fromOffset(48, 48)
 
-	optInInfo = Theme.makeLabel(
+	local info = Theme.makeLabel(
 		modal,
 		"Info",
 		"",
-		UDim2.new(1, -24, 1, -104),
-		UDim2.fromOffset(12, 40),
+		UDim2.new(1, -24, 1, -122),
+		UDim2.fromOffset(12, 58),
 		13,
-		Theme.Colors.Text,
-		false
+		Theme.Colors.TextDark,
+		true
 	)
-	if optInInfo then
-		optInInfo.TextWrapped = true
-		optInInfo.TextXAlignment = Enum.TextXAlignment.Center
-	end
+	info.TextWrapped = true
+	info.TextXAlignment = Enum.TextXAlignment.Center
+	applyTextConstraint(info, 10, 13)
+	optInInfo = info
 	buildOptInButtons(modal)
 end
 
 local function buildClaimHoldButton(frame: Frame)
-	local holdBtn = Theme.makeButton(
+	local holdBtn = Theme.makeGoldPillButton(
 		frame,
 		"HoldClaimBtn",
 		"HOLD TO CLAIM EGG",
-		UDim2.new(1, -24, 0, 44),
+		UDim2.new(1, -24, 0, 48),
 		UDim2.fromOffset(12, 50),
-		Theme.Colors.Molten,
 		function() end
 	)
 	holdBtn.InputBegan:Connect(function(inp: InputObject)
@@ -342,16 +391,17 @@ local function buildClaimHoldButton(frame: Frame)
 end
 
 local function buildClaimBar(gui: ScreenGui)
-	local frame = Theme.makeGlossyPanel(
+	local frame = makeOutlinedGradient(
 		gui,
 		"EggClaimPanel",
 		UDim2.fromOffset(320, 102),
 		UDim2.fromScale(0.5, 0.48),
-		14
+		14,
+		Theme.Colors.PanelTop,
+		Theme.Colors.PanelBottom
 	)
 	frame.AnchorPoint = Vector2.new(0.5, 0.5)
 	frame.Visible = false
-	Theme.addStroke(frame, Theme.Colors.Coins, 2)
 	claimFrame = frame
 
 	local lbl = Theme.makeLabel(
@@ -365,6 +415,7 @@ local function buildClaimBar(gui: ScreenGui)
 		true
 	)
 	lbl.TextXAlignment = Enum.TextXAlignment.Center
+	Theme.addTextStroke(lbl, 1.4)
 	applyTextConstraint(lbl, 9, 12)
 	claimLabel = lbl
 
@@ -373,27 +424,30 @@ local function buildClaimBar(gui: ScreenGui)
 		"BarBg",
 		UDim2.new(1, -24, 0, 14),
 		UDim2.fromOffset(12, 30),
-		Theme.Colors.Card,
+		Theme.Colors.Ink,
 		8
 	)
 	local fill = Instance.new("Frame")
 	fill.Size = UDim2.fromScale(0, 1)
-	fill.BackgroundColor3 = Theme.Colors.Emerald
+	fill.BackgroundColor3 = Color3.new(1, 1, 1)
 	fill.BorderSizePixel = 0
 	fill.Parent = barBg
 	Theme.addCorner(fill, 8)
+	Theme.addGradient(fill, Theme.Colors.MintTop, Theme.Colors.MintBot, 90)
 	claimFill = fill
 
 	buildClaimHoldButton(frame)
 end
 
 local function buildToast(gui: ScreenGui)
-	local f = Theme.makeGlossyPanel(
+	local f = makeOutlinedGradient(
 		gui,
 		"ToastBanner",
 		UDim2.fromOffset(440, 36),
 		UDim2.new(0.5, 0, 0, 124),
-		12
+		999,
+		Theme.Colors.CodexPurpleBot,
+		Theme.Colors.PanelBottom
 	)
 	f.AnchorPoint = Vector2.new(0.5, 0)
 	f.Visible = false
@@ -409,6 +463,8 @@ local function buildToast(gui: ScreenGui)
 		true
 	)
 	lbl.TextXAlignment = Enum.TextXAlignment.Center
+	lbl.TextWrapped = true
+	Theme.addTextStroke(lbl, 1.6)
 	applyTextConstraint(lbl, 9, 14)
 	toastLabel = lbl
 end
@@ -448,19 +504,36 @@ local function applyArenaResponsive()
 	local m = Theme.getLayoutMetrics()
 	local compact = m.isCompact
 	applyTopBannerResponsive(m)
+	local root = if topStack then topStack.Parent else nil
+	local width = if root
+			and root:IsA("ScreenGui")
+			and root.AbsoluteSize.X > 0
+		then root.AbsoluteSize.X
+		else m.viewport.X
+	local narrowLandscape = compact and not m.isPortrait and width < 630
 	if bossBarFrame then
-		local barY = if m.isPortrait then 92 elseif compact then 8 else 10
+		local barY = if m.isPortrait
+			then 92
+			elseif narrowLandscape then 57
+			elseif compact then 8
+			else 10
 		local bossW = if m.isPortrait
 			then math.clamp(m.viewport.X - 28, 220, 320)
+			elseif narrowLandscape then math.clamp(width - 360, 144, 210)
 			elseif compact then math.clamp(m.viewport.X - 410, 210, 260)
 			else 340
 		bossBarFrame.Size = UDim2.fromOffset(bossW, if compact then 24 else 28)
 		bossBarFrame.Position = UDim2.new(0.5, 0, 0, barY)
 	end
 	if toastFrame then
-		local toastY = if m.isPortrait then 122 elseif compact then 38 else 46
+		local toastY = if m.isPortrait
+			then 122
+			elseif narrowLandscape then 88
+			elseif compact then 38
+			else 46
 		local toastW = if m.isPortrait
 			then math.min(320, m.viewport.X - 24)
+			elseif narrowLandscape then math.clamp(width - 360, 144, 220)
 			elseif compact then math.clamp(m.viewport.X - 410, 220, 280)
 			else 380
 		toastFrame.Size = UDim2.fromOffset(toastW, if compact then 28 else 32)
@@ -553,8 +626,11 @@ local function updateOptInModal(zone: string, activeBiome: string, st: any)
 		return
 	end
 	if zone == "BiomePvE" and st and st.phase == "OptIn_Window" then
+		if optInBiomeId ~= activeBiome then
+			dismissedOptInBiomeId = ""
+		end
 		optInBiomeId = activeBiome
-		optInModal.Visible = true
+		optInModal.Visible = dismissedOptInBiomeId ~= activeBiome
 		local statusTxt = if optedInState then "[QUEUED!]" else "[NOT QUEUED]"
 		optInInfo.Text = string.format(
 			"%s\nTime Left: %ds | Queued Fighters: %d | Top Power: %s\nStatus: %s",
@@ -568,6 +644,7 @@ local function updateOptInModal(zone: string, activeBiome: string, st: any)
 		)
 	else
 		optInModal.Visible = false
+		dismissedOptInBiomeId = ""
 		optedInState = false
 	end
 end
@@ -618,13 +695,7 @@ local function onArenaStateSync(snapshot: any)
 	updateClaimBar(zone, st)
 end
 
-function ArenaHUDController.start()
-	local gui = Theme.createScreenGui("BallBrawl_ArenaHUD", 15)
-	buildTopBanner(gui)
-	buildOptInModal(gui)
-	buildClaimBar(gui)
-	buildToast(gui)
-
+local function bindArenaResponsive(gui: ScreenGui)
 	local function hookCamera()
 		local cam = workspace.CurrentCamera
 		if cam then
@@ -633,7 +704,17 @@ function ArenaHUDController.start()
 	end
 	hookCamera()
 	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(hookCamera)
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyArenaResponsive)
 	applyArenaResponsive()
+end
+
+function ArenaHUDController.start()
+	local gui = Theme.createScreenGui("BallBrawl_ArenaHUD", 15)
+	buildTopBanner(gui)
+	buildOptInModal(gui)
+	buildClaimBar(gui)
+	buildToast(gui)
+	bindArenaResponsive(gui)
 
 	local remotes = Remotes.waitClient()
 	remotes.ArenaStateSync.OnClientEvent:Connect(onArenaStateSync)
