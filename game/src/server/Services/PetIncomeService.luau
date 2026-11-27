@@ -19,11 +19,37 @@ local Remotes = require(Shared.Net.Remotes)
 
 local DataService = require(script.Parent.DataService)
 local PlotService = require(script.Parent.PlotService)
+local ViralSocialService = require(script.Parent.ViralSocialService)
 
 local PetIncomeService = {}
 
 local activeHatchLock: { [number]: boolean } = {}
 local telemetryHook: ((string, { [string]: any }) -> ())? = nil
+
+local function applyCashSweepSocialAndJuice(
+	player: Player,
+	profile: EconomyLogic.PlayerProfile,
+	baseGained: number,
+	worldPos: Vector3?
+): number
+	local mult = ViralSocialService.getFriendBonusMultiplier(player)
+	local totalGained = baseGained
+	if mult > 1 then
+		local bonus = math.floor(baseGained * (mult - 1) + 0.5)
+		if bonus > 0 and MathUtil.isFinite(profile.coins + bonus) then
+			profile.coins += bonus
+			totalGained += bonus
+		end
+	end
+	Remotes.ensureServer().CombatJuiceEvent:FireClient(player, {
+		kind = "Coins",
+		worldPos = worldPos,
+		amount = totalGained,
+		accent = { 252, 208, 56 },
+	})
+	ViralSocialService.recordProgress(player, "CashSweep", 1)
+	return totalGained
+end
 
 local function canReachPad(player: Player, pedestalIndex: number): boolean
 	if DataService.hasPass(player, "Pass_MagnetCollect") then
@@ -59,20 +85,23 @@ function PetIncomeService.collectPad(player: Player, pedestalIndex: number)
 	if gained <= 0 then
 		return
 	end
+	local padPos: Vector3? = nil
 	local plot = PlotService.getPlotForPlayer(player)
 	if plot and plot.pedestals[pedestalIndex] then
 		local pad = plot.pedestals[pedestalIndex]:FindFirstChild("CashPad")
 		if pad and pad:IsA("BasePart") then
+			padPos = pad.Position
 			pad:SetAttribute("StoredCoins", 0)
 			pad.Color = Color3.fromRGB(56, 72, 92)
 			pad.Material = Enum.Material.SmoothPlastic
 		end
 	end
+	local totalGained = applyCashSweepSocialAndJuice(player, profile, gained, padPos)
 	DataService.syncToClient(player)
 	if telemetryHook then
 		telemetryHook(
 			"CashPadSweep",
-			{ userId = player.UserId, pedestalIndex = pedestalIndex, coins = gained }
+			{ userId = player.UserId, pedestalIndex = pedestalIndex, coins = totalGained }
 		)
 	end
 end
@@ -90,10 +119,14 @@ function PetIncomeService.collectAllPadsMagnet(player: Player)
 		total += EconomyLogic.collectCashPad(profile, idx)
 	end
 	if total > 0 then
+		local char = player.Character
+		local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+		local pos = if hrp and hrp:IsA("BasePart") then hrp.Position else nil
+		local totalGained = applyCashSweepSocialAndJuice(player, profile, total, pos)
 		PlotService.refreshPlotVisuals(player, profile)
 		DataService.syncToClient(player)
 		if telemetryHook then
-			telemetryHook("CashPadSweep", { userId = player.UserId, coins = total })
+			telemetryHook("CashPadSweep", { userId = player.UserId, coins = totalGained })
 		end
 	end
 end
@@ -141,8 +174,11 @@ local function broadcastHatchReveal(
 		activeHatchLock[player.UserId] = nil
 		if player.Parent then
 			PlotService.refreshPlotVisuals(player, profile)
-			DataService.syncToClient(player)
 			local label = if spec then spec.displayName else newPet.speciesId
+			if spec and spec.rarity == "Mythic" then
+				ViralSocialService.recordProgress(player, "MythicHatch", 1, { speciesName = label })
+			end
+			DataService.syncToClient(player)
 			remotes.ToastNotify:FireClient(
 				player,
 				buildRevealToastText(newPet, label, bundleBallSkin),

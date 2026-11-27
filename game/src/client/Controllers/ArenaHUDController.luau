@@ -510,7 +510,7 @@ local function applyArenaResponsive()
 			and root.AbsoluteSize.X > 0
 		then root.AbsoluteSize.X
 		else m.viewport.X
-	local narrowLandscape = compact and not m.isPortrait and width < 630
+	local narrowLandscape = compact and not m.isPortrait and width < 760
 	if bossBarFrame then
 		local barY = if m.isPortrait
 			then 92

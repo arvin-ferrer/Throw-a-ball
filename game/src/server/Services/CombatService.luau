@@ -22,6 +22,7 @@ local DataService = require(script.Parent.DataService)
 local PlotService = require(script.Parent.PlotService)
 local ArenaCycleService = require(script.Parent.ArenaCycleService)
 local BossAIService = require(script.Parent.BossAIService)
+local ViralSocialService = require(script.Parent.ViralSocialService)
 
 type ResolvedTarget = {
 	hitPart: BasePart,
@@ -108,6 +109,15 @@ local function getPlayerRootPosition(player: Player): Vector3?
 	return if hrp and hrp:IsA("BasePart") then hrp.Position else nil
 end
 
+local function emitCombatJuice(targetPlayer: Player?, payload: { [string]: any })
+	local remote = Remotes.ensureServer().CombatJuiceEvent
+	if targetPlayer then
+		remote:FireClient(targetPlayer, payload)
+	else
+		remote:FireAllClients(payload)
+	end
+end
+
 local function broadcastPvPElimination(attacker: Player, pos: Vector3?)
 	if not pos then
 		return
@@ -189,6 +199,12 @@ local function applyPvPDamage(
 	end
 	applyPvPKnockback(victim, hitDir, eval.knockbackStrength)
 	local lethal = hum.Health <= 0
+	emitCombatJuice(nil, {
+		kind = if eval.isCrit then "Crit" else "Damage",
+		worldPos = koPos or getPlayerRootPosition(victim),
+		amount = eval.damage,
+		hitTarget = victim.Character,
+	})
 	ArenaCycleService.onPlayerDamagedInPvP(victim, attacker, lethal)
 	if lethal then
 		broadcastPvPElimination(attacker, koPos)
@@ -199,7 +215,8 @@ end
 local function resolveTrainingHit(
 	player: Player,
 	profile: EconomyLogic.PlayerProfile,
-	hitPart: BasePart
+	hitPart: BasePart,
+	eval: CombatLogic.DamageEvalResult
 )
 	local plot = PlotService.getPlotForPlayer(player)
 	if not plot or not hitPart:IsDescendantOf(plot.trainingRange) then
@@ -225,6 +242,37 @@ local function resolveTrainingHit(
 	profile.ballDamage += res.ballDamageGain
 	profile.throwSpeed += res.throwSpeedGain
 	DataService.syncToClient(player)
+	ViralSocialService.recordProgress(player, "TargetHit", 1)
+	local gainText = math.max(0.1, math.floor(res.ballDamageGain * 10 + 0.5) / 10)
+	emitCombatJuice(player, {
+		kind = if eval.isCrit then "Crit" else "Damage",
+		worldPos = hitPart.Position,
+		amount = eval.damage,
+		hitTarget = hitPart,
+		label = if kind == "MovingGold" then `GOLD +{gainText} DMG` else `+{gainText} DMG`,
+		accent = if kind == "MovingGold" then { 250, 204, 21 } else { 74, 222, 128 },
+	})
+end
+
+local function applyAreaMobDamage(
+	attacker: Player,
+	mob: BossAIService.ActiveMob,
+	dmg: number,
+	slowDuration: number
+)
+	local pos = if mob.model and mob.model.PrimaryPart then mob.model.PrimaryPart.Position else nil
+	local killed = BossAIService.damageMob(mob, attacker, dmg, slowDuration, 0)
+	if killed then
+		ViralSocialService.recordProgress(attacker, "MobKill", 1)
+		emitCombatJuice(nil, {
+			kind = "Kill",
+			worldPos = pos,
+			killerName = attacker.DisplayName,
+			victimName = mob.mobType,
+			label = `{attacker.DisplayName} KO'd {mob.mobType}!`,
+			accent = { 255, 84, 112 },
+		})
+	end
 end
 
 local function applySecondaryAreaPerks(
@@ -238,14 +286,14 @@ local function applySecondaryAreaPerks(
 	if splashFrac > 0 then
 		local splashDmg = math.max(1, math.floor(eval.damage * splashFrac + 0.5))
 		for _, m in ipairs(BossAIService.getNearbyMobs(biomeId, hitPos, 16, primaryMob)) do
-			BossAIService.damageMob(m, attacker, splashDmg, eval.slowDuration, 0)
+			applyAreaMobDamage(attacker, m, splashDmg, eval.slowDuration)
 		end
 	end
 	if eval.ricochetFraction > 0 then
 		local near = BossAIService.getNearbyMobs(biomeId, hitPos, 28, primaryMob)
 		if #near > 0 then
 			local bounceDmg = math.max(1, math.floor(eval.damage * eval.ricochetFraction + 0.5))
-			BossAIService.damageMob(near[1], attacker, bounceDmg, eval.slowDuration, 0)
+			applyAreaMobDamage(attacker, near[1], bounceDmg, eval.slowDuration)
 		end
 	end
 end
@@ -461,6 +509,40 @@ local function resolveAutoAimTarget(
 	return if chosen then resolvedById[chosen.id] else nil
 end
 
+local function resolveMobImpact(
+	player: Player,
+	target: ResolvedTarget,
+	eval: CombatLogic.DamageEvalResult
+)
+	local mob = target.mob
+	if not mob or not mob.alive then
+		return
+	end
+	local hitPos = target.hitPart.Position
+	local mobModel = mob.model
+	local killed =
+		BossAIService.damageMob(mob, player, eval.damage, eval.slowDuration, eval.miniStunDuration)
+	emitCombatJuice(nil, {
+		kind = if eval.isCrit then "Crit" else "Damage",
+		worldPos = hitPos,
+		amount = eval.damage,
+		hitTarget = mobModel,
+	})
+	if killed then
+		ViralSocialService.recordProgress(player, "MobKill", 1)
+		emitCombatJuice(nil, {
+			kind = "Kill",
+			worldPos = hitPos,
+			killerName = player.DisplayName,
+			victimName = mob.mobType,
+			label = `{player.DisplayName} KO'd {mob.mobType}!`,
+			accent = { 255, 84, 112 },
+		})
+	end
+	applyHeal(player, eval.leechHeal)
+	applySecondaryAreaPerks(player, mob.biomeId, hitPos, eval, mob)
+end
+
 local function applyResolvedImpact(
 	player: Player,
 	profile: EconomyLogic.PlayerProfile,
@@ -472,24 +554,12 @@ local function applyResolvedImpact(
 		return
 	end
 	if target.hitKind == "Target" or target.hitKind == "GoldTarget" then
-		resolveTrainingHit(player, profile, target.hitPart)
+		resolveTrainingHit(player, profile, target.hitPart, eval)
 	elseif target.mob and target.mob.alive then
-		BossAIService.damageMob(
-			target.mob,
-			player,
-			eval.damage,
-			eval.slowDuration,
-			eval.miniStunDuration
-		)
-		applyHeal(player, eval.leechHeal)
-		applySecondaryAreaPerks(
-			player,
-			target.mob.biomeId,
-			target.hitPart.Position,
-			eval,
-			target.mob
-		)
+		resolveMobImpact(player, target, eval)
 	elseif target.boss then
+		local bossPos = target.hitPart.Position
+		local bossModel = target.boss.model
 		local hitAccepted = BossAIService.damageBoss(
 			target.boss,
 			player,
@@ -499,6 +569,12 @@ local function applyResolvedImpact(
 		)
 		if hitAccepted then
 			applyHeal(player, eval.leechHeal)
+			emitCombatJuice(nil, {
+				kind = if eval.isCrit then "Crit" else "BossHit",
+				worldPos = bossPos,
+				amount = eval.damage,
+				hitTarget = bossModel,
+			})
 		end
 	elseif target.victim and ArenaCycleService.canDealPvPDamage(player, target.victim) then
 		applyPvPDamage(player, target.victim, eval.damage, impactDir, eval)

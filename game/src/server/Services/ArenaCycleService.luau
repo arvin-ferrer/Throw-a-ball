@@ -21,6 +21,7 @@ local Remotes = require(Shared.Net.Remotes)
 
 local DataService = require(script.Parent.DataService)
 local PlotService = require(script.Parent.PlotService)
+local ViralSocialService = require(script.Parent.ViralSocialService)
 
 type ArenaRefs = {
 	biomeId: string,
@@ -184,14 +185,16 @@ local function payoutSingleParticipant(
 	if not plr or not profile then
 		return
 	end
-	local mult = if DataService.hasPass(plr, "Pass_DoubleCoinsExp") then 2 else 1
-	local coins = bossCfg.participationCoins * mult
-	local exp = bossCfg.participationExp * mult
+	local passMult = if DataService.hasPass(plr, "Pass_DoubleCoinsExp") then 2 else 1
+	local friendMult = ViralSocialService.getFriendBonusMultiplier(plr)
+	local mult = passMult * friendMult
+	local coins = math.floor(bossCfg.participationCoins * mult + 0.5)
+	local exp = math.floor(bossCfg.participationExp * mult + 0.5)
 	local gems = bossCfg.participationGems
 	local wonEgg = winnerId == userId and eggId ~= nil
 	local remotes = Remotes.ensureServer()
 	if wonEgg and eggId then
-		coins += bossCfg.winnerBonusCoins * mult
+		coins += math.floor(bossCfg.winnerBonusCoins * mult + 0.5)
 		gems += bossCfg.winnerBonusGems
 		profile.eggs[eggId] = (profile.eggs[eggId] or 0) + 1
 		remotes.ToastNotify:FireClient(
@@ -297,14 +300,22 @@ local function recordOptInOffers(biomeId: string)
 end
 
 local function emitOptInDecisions(decisions: any)
-	if type(decisions) ~= "table" or not telemetryCallback then
+	if type(decisions) ~= "table" then
 		return
 	end
 	for _, d in ipairs(decisions) do
-		local val = if d.optedIn then 1 else 0
-		telemetryCallback("BossOptInDecision", { userId = d.userId, value = val })
+		if telemetryCallback then
+			local val = if d.optedIn then 1 else 0
+			telemetryCallback("BossOptInDecision", { userId = d.userId, value = val })
+			if d.optedIn then
+				telemetryCallback("BossOptInAccepted", { userId = d.userId, value = 1 })
+			end
+		end
 		if d.optedIn then
-			telemetryCallback("BossOptInAccepted", { userId = d.userId, value = 1 })
+			local plr = Players:GetPlayerByUserId(d.userId)
+			if plr then
+				ViralSocialService.recordProgress(plr, "BossOptIn", 1)
+			end
 		end
 	end
 end
@@ -365,12 +376,52 @@ local function onBossDefeatedEvent(biomeId: string, payload: { [string]: any })
 	end
 end
 
+local function notifyEggClaimedSocial(biomeId: string, payload: { [string]: any }, ref: ArenaRefs?)
+	local winner = Players:GetPlayerByUserId(payload.winnerId)
+	if not winner then
+		return
+	end
+	local bossCfg = BiomeConfigs.getBossForBiome(biomeId)
+	local isOver = payload.isOvercharged == true
+	local evType = if isOver then "OverchargedWin" else "BossWin"
+	ViralSocialService.recordProgress(winner, evType, 1, {
+		isOvercharged = isOver,
+		bossName = if bossCfg then bossCfg.displayName else biomeId,
+	})
+	DataService.syncToClient(winner)
+	local remotes = Remotes.ensureServer()
+	remotes.CombatJuiceEvent:FireAllClients({
+		kind = "EggClaim",
+		worldPos = if ref then ref.eggPedestal.Position else nil,
+		killerName = winner.DisplayName,
+		label = `{winner.DisplayName} claimed {tostring(payload.eggId or "Boss Egg")}!`,
+		accent = { 84, 242, 152 },
+	})
+	local prof = DataService.getProfile(winner)
+	remotes.CombatJuiceEvent:FireAllClients({
+		kind = "StreakUpdate",
+		userId = winner.UserId,
+		killerName = winner.DisplayName,
+		streak = if prof then prof.winStreak else 0,
+	})
+end
+
 local function onPlayerEliminatedEvent(biomeId: string, payload: { [string]: any })
 	local uid = payload.userId
 	playerArenaBiome[uid] = nil
 	local plr = Players:GetPlayerByUserId(uid)
 	if not plr then
 		return
+	end
+	if payload.reason == "Died" then
+		ViralSocialService.recordProgress(plr, "BossLoss", 1)
+		DataService.syncToClient(plr)
+		Remotes.ensureServer().CombatJuiceEvent:FireAllClients({
+			kind = "StreakUpdate",
+			userId = plr.UserId,
+			killerName = plr.DisplayName,
+			streak = 0,
+		})
 	end
 	if payload.reason ~= "OutOfBounds" or payload.phase == "PvP_EggScramble" then
 		awardParticipation(biomeId, { uid }, nil, nil)
@@ -401,6 +452,7 @@ local function handleArenaEvents(events: { ArenaCycleLogic.ArenaEvent })
 				ev.payload.winnerId,
 				ev.payload.eggId
 			)
+			notifyEggClaimedSocial(biomeId, ev.payload, ref)
 			if telemetryCallback then
 				telemetryCallback("EggClaimed", {
 					userId = ev.payload.winnerId,
@@ -619,6 +671,36 @@ function ArenaCycleService.damageBoss(biomeId: string, attacker: Player, damage:
 	return ok
 end
 
+local function handlePvpLethalSocial(victim: Player, attacker: Player?, koPos: Vector3?)
+	local remotes = Remotes.ensureServer()
+	ViralSocialService.recordProgress(victim, "PvPLoss", 1)
+	DataService.syncToClient(victim)
+	remotes.CombatJuiceEvent:FireAllClients({
+		kind = "StreakUpdate",
+		userId = victim.UserId,
+		killerName = victim.DisplayName,
+		streak = 0,
+	})
+	remotes.CombatJuiceEvent:FireAllClients({
+		kind = "Kill",
+		worldPos = koPos,
+		killerName = if attacker then attacker.DisplayName else nil,
+		victimName = victim.DisplayName,
+		accent = { 255, 84, 112 },
+	})
+	if attacker then
+		ViralSocialService.recordProgress(attacker, "PvPWin", 1)
+		DataService.syncToClient(attacker)
+		local prof = DataService.getProfile(attacker)
+		remotes.CombatJuiceEvent:FireAllClients({
+			kind = "StreakUpdate",
+			userId = attacker.UserId,
+			killerName = attacker.DisplayName,
+			streak = if prof then prof.winStreak else 0,
+		})
+	end
+end
+
 function ArenaCycleService.onPlayerDamagedInPvP(victim: Player, attacker: Player?, lethal: boolean)
 	local biomeId = playerArenaBiome[victim.UserId]
 	if not biomeId then
@@ -631,12 +713,14 @@ function ArenaCycleService.onPlayerDamagedInPvP(victim: Player, attacker: Player
 	local intEv = ArenaCycleLogic.onPlayerDamagedInPvP(st, victim.UserId)
 	handleArenaEvents(intEv)
 	if lethal then
+		local char = victim.Character
+		local hrp = if char then char:FindFirstChild("HumanoidRootPart") else nil
+		local koPos = if hrp and hrp:IsA("BasePart") then hrp.Position else nil
 		if attacker then
 			local bossCfg = BiomeConfigs.getBossForBiome(biomeId)
 			local attackerProfile = DataService.getProfile(attacker)
 			if bossCfg and attackerProfile then
 				attackerProfile.bossGems += bossCfg.pvpKillGems
-				DataService.syncToClient(attacker)
 				Remotes.ensureServer().ToastNotify
 					:FireClient(
 						attacker,
@@ -645,6 +729,7 @@ function ArenaCycleService.onPlayerDamagedInPvP(victim: Player, attacker: Player
 					)
 			end
 		end
+		handlePvpLethalSocial(victim, attacker, koPos)
 		local remEv =
 			ArenaCycleLogic.removePlayerFromArena(st, victim.UserId, os.clock(), "Eliminated")
 		handleArenaEvents(remEv)

@@ -70,6 +70,16 @@ export type PlayerProfile = {
 	processedPurchases: { [string]: boolean }?,
 	lastLogoutTime: number,
 	nextPetSeq: number,
+	dailyLoginDay: number,
+	lastDailyClaimDay: number,
+	dailyQuests: { any },
+	lastQuestResetDay: number,
+	winStreak: number,
+	bestWinStreak: number,
+	totalBossWins: number,
+	totalVaultExtracts: number,
+	deepestVaultChamber: number,
+	orbLevels: { [string]: number },
 }
 
 export type TxResult = {
@@ -133,6 +143,16 @@ function EconomyLogic.createDefaultProfile(now: number): PlayerProfile
 		processedPurchases = {},
 		lastLogoutTime = now,
 		nextPetSeq = 1,
+		dailyLoginDay = 0,
+		lastDailyClaimDay = -1,
+		dailyQuests = {},
+		lastQuestResetDay = -1,
+		winStreak = 0,
+		bestWinStreak = 0,
+		totalBossWins = 0,
+		totalVaultExtracts = 0,
+		deepestVaultChamber = 0,
+		orbLevels = { Decoy = 1, Freeze = 0, DashBomb = 0 },
 	}
 end
 

@@ -7,6 +7,7 @@
 	- Flagship Hero Banner Cards + Color-Coded Tile Grid for Game Passes & Boss Gem Cosmetics
 ]]
 
+local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -16,6 +17,7 @@ local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local PetConfigs = require(Shared.Configs.PetConfigs)
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
 local PolicyLogic = require(Shared.Utils.PolicyLogic)
+local PriceFormatter = require(Shared.Utils.PriceFormatter)
 local Remotes = require(Shared.Net.Remotes)
 
 local HudIcons = require(script.Parent.HudIcons)
@@ -45,6 +47,87 @@ local scrollBody: ScrollingFrame? = nil
 local tabButtons: { [string]: TextButton } = {}
 local activeTab = "Shop"
 local latestProfile: any = nil
+local priceCache: { [string]: PriceFormatter.CacheEntry } = {}
+local inFlightPrices: { [string]: boolean } = {}
+local rerenderPending = false
+local rerenderFn: (() -> ())? = nil
+
+local function fetchProductInfoRaw(
+	infoTypeName: PriceFormatter.ProductInfoTypeName,
+	productId: number
+): (boolean, any)
+	local infoType = if infoTypeName == "GamePass"
+		then Enum.InfoType.GamePass
+		else Enum.InfoType.Product
+	return pcall(function()
+		return MarketplaceService:GetProductInfoAsync(productId, infoType)
+	end)
+end
+
+local function scheduleShopRefresh()
+	if not rootFrame or not rootFrame.Visible or activeTab ~= "Shop" or rerenderPending then
+		return
+	end
+	rerenderPending = true
+	task.defer(function()
+		rerenderPending = false
+		if rerenderFn and rootFrame and rootFrame.Visible and activeTab == "Shop" then
+			rerenderFn()
+		end
+	end)
+end
+
+local function requestProductPrice(
+	infoTypeName: PriceFormatter.ProductInfoTypeName,
+	productId: number
+): PriceFormatter.CacheEntry?
+	if type(productId) ~= "number" or productId <= 0 then
+		return nil
+	end
+	local key = PriceFormatter.makeCacheKey(infoTypeName, productId)
+	local existing = priceCache[key]
+	if PriceFormatter.isCacheEntryFresh(existing, os.clock()) then
+		return existing
+	end
+	if not inFlightPrices[key] then
+		inFlightPrices[key] = true
+		task.spawn(function()
+			local ok, info = fetchProductInfoRaw(infoTypeName, productId)
+			inFlightPrices[key] = nil
+			priceCache[key] = {
+				quote = PriceFormatter.parseProductInfo(if ok then info else nil),
+				fetchedAt = os.clock(),
+				ok = ok,
+			}
+			if ok then
+				scheduleShopRefresh()
+			end
+		end)
+	end
+	return existing
+end
+
+local function resolveDynamicPriceText(
+	actionLabel: string,
+	fallbackLabel: string,
+	infoTypeName: PriceFormatter.ProductInfoTypeName,
+	productId: number,
+	compact: boolean?
+): string
+	local entry = requestProductPrice(infoTypeName, productId)
+	local quote = if entry then entry.quote else nil
+	return PriceFormatter.formatActionLabel(actionLabel, quote, compact, fallbackLabel)
+end
+
+local function prefetchShopPrices()
+	local restricted = localPlayer:GetAttribute("ArePaidRandomItemsRestricted") ~= false
+	for _, offer in ipairs(PolicyLogic.buildShopOfferings(restricted)) do
+		requestProductPrice("Product", offer.devProductId)
+	end
+	for _, pass in pairs(MonetizationConfigs.GAME_PASSES) do
+		requestProductPrice("GamePass", pass.passId)
+	end
+end
 
 local function applyTextConstraint(lbl: TextLabel | TextButton, minSize: number, maxSize: number)
 	lbl.TextScaled = true
@@ -259,10 +342,12 @@ local function renderOfferCard(
 	local topCol = if useMint then Theme.Colors.MintTop else Theme.Colors.LimeTop
 	local botCol = if useMint then Theme.Colors.MintBot else Theme.Colors.LimeBot
 	local _, content = makeAutoHeroCard(parent, "Offer_" .. item.id, topCol, botCol, order)
+	local btnText =
+		resolveDynamicPriceText("BUY", "BUY (ROBUX)", "Product", item.devProductId, false)
 	local row = buildHeroTopRow(
 		content,
 		item.displayName,
-		"BUY (ROBUX)",
+		btnText,
 		Theme.Colors.GoldTop,
 		Theme.Colors.GoldBot,
 		function()
@@ -312,18 +397,14 @@ local function renderFlagshipPassCard(
 	local btnTop = if owned then MUTED_TOP else Theme.Colors.GoldTop
 	local btnBot = if owned then MUTED_BOT else Theme.Colors.GoldBot
 	local _, content = makeAutoHeroCard(parent, "Pass_" .. pass.key, topCol, botCol, order)
-	local row = buildHeroTopRow(
-		content,
-		pass.displayName,
-		if owned then "OWNED" else "GET PASS",
-		btnTop,
-		btnBot,
-		function()
-			if not owned then
-				remotes.ShopRequest:FireServer("GamePass", pass.key)
-			end
+	local btnText = if owned
+		then "OWNED"
+		else resolveDynamicPriceText("GET", "GET PASS", "GamePass", pass.passId, false)
+	local row = buildHeroTopRow(content, pass.displayName, btnText, btnTop, btnBot, function()
+		if not owned then
+			remotes.ShopRequest:FireServer("GamePass", pass.key)
 		end
-	)
+	end)
 	local icon = if isCoins
 		then HudIcons.createCashStackIcon(row, 50)
 		else HudIcons.createStarBurstIcon(row, 50)
@@ -463,13 +544,16 @@ local function renderPassTile(
 	idx: number
 )
 	local owned = localPlayer:GetAttribute(pass.attributeName) == true
+	local btnText = if owned
+		then "OWNED"
+		else resolveDynamicPriceText("GET", "GET PASS", "GamePass", pass.passId, true)
 	renderTileCard(grid, {
 		name = "Pass_" .. pass.key,
 		title = pass.displayName,
 		sub = pass.description,
 		iconKind = getPassTileIconKind(pass.key),
 		paletteIdx = idx,
-		btnText = if owned then "OWNED" else "GET PASS",
+		btnText = btnText,
 		btnTop = if owned then MUTED_TOP else Theme.Colors.GoldTop,
 		btnBot = if owned then MUTED_BOT else Theme.Colors.GoldBot,
 		order = idx,
@@ -802,6 +886,7 @@ local function rerender()
 		renderCodexTab()
 	end
 end
+rerenderFn = rerender
 
 local function buildTabButton(
 	tabRow: Frame,
@@ -910,6 +995,7 @@ function ShopCodexGui.mount()
 	buildHeaderAndTabs(panel)
 	buildScrollContainer(panel)
 	localPlayer:GetAttributeChangedSignal("ArePaidRandomItemsRestricted"):Connect(rerender)
+	prefetchShopPrices()
 end
 
 function ShopCodexGui.open(tabName: string)
