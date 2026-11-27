@@ -228,7 +228,7 @@ local function buildHeroTopRow(
 		rightCol,
 		"BuyBtn",
 		btnText,
-		UDim2.fromOffset(132, 44),
+		UDim2.fromOffset(132, 48),
 		UDim2.fromOffset(0, 0),
 		onClick,
 		btnTop,
@@ -417,7 +417,7 @@ type TileCardSpec = {
 
 local function renderTileCard(grid: Frame, spec: TileCardSpec)
 	local pal = TILE_PALETTES[((spec.paletteIdx - 1) % #TILE_PALETTES) + 1]
-	local tile = Theme.makeTileCard(grid, spec.name, UDim2.fromOffset(140, 166), pal.top, pal.bot)
+	local tile = Theme.makeTileCard(grid, spec.name, UDim2.fromOffset(140, 172), pal.top, pal.bot)
 	tile.LayoutOrder = spec.order
 	createTileIcon(tile, spec.iconKind, nil)
 	addTileLabels(tile, spec.title, spec.sub)
@@ -426,8 +426,8 @@ local function renderTileCard(grid: Frame, spec: TileCardSpec)
 		tile,
 		"BuyBtn",
 		spec.btnText,
-		UDim2.new(1, -12, 0, 44),
-		UDim2.new(0, 6, 1, -50),
+		UDim2.new(1, -12, 0, 48),
+		UDim2.new(0, 6, 1, -54),
 		spec.onClick,
 		spec.btnTop,
 		spec.btnBot
@@ -508,7 +508,7 @@ local function renderGamePassSection(
 		end
 	end
 
-	local grid = createTileGrid(parent, "PassTileGrid", 168, order)
+	local grid = createTileGrid(parent, "PassTileGrid", 172, order)
 	order += 1
 	for idx, pass in ipairs(tilePasses) do
 		renderPassTile(grid, remotes, pass, idx)
@@ -591,7 +591,7 @@ local function renderCosmeticSection(
 	order += 1
 
 	local ownedCos = if latestProfile then (latestProfile.ownedCosmetics or {}) else {}
-	local grid = createTileGrid(parent, "CosTileGrid", 162, order)
+	local grid = createTileGrid(parent, "CosTileGrid", 172, order)
 	order += 1
 	for idx, cos in ipairs(getSortedCosmetics()) do
 		local isOwned = ownedCos[cos.id] == true

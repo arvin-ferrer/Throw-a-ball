@@ -279,6 +279,20 @@ function Theme.makeButton(
 end
 
 local BOUNCE_TWEEN = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local MIN_TOUCH_TARGET = 44
+
+-- Clamp press UIScale so >=44px touch targets never shrink below 44px while held.
+local function computeSafePressScale(btn: GuiButton): number
+	local abs = btn.AbsoluteSize
+	local baseW = if abs.X > 0 then abs.X else btn.Size.X.Offset
+	local baseH = if abs.Y > 0 then abs.Y else btn.Size.Y.Offset
+	local minDim =
+		math.min(if baseW > 0 then baseW else math.huge, if baseH > 0 then baseH else math.huge)
+	if minDim == math.huge or minDim <= MIN_TOUCH_TARGET then
+		return 1
+	end
+	return math.clamp(MIN_TOUCH_TARGET / minDim, 0.94, 1)
+end
 
 function Theme.attachBounce(btn: GuiButton)
 	if btn:GetAttribute("HasBounce") == true then
@@ -304,7 +318,7 @@ function Theme.attachBounce(btn: GuiButton)
 		tweenTo(1)
 	end)
 	btn.MouseButton1Down:Connect(function()
-		tweenTo(0.94)
+		tweenTo(computeSafePressScale(btn))
 	end)
 	btn.MouseButton1Up:Connect(function()
 		tweenTo(if isHovering then 1.04 else 1)
@@ -335,9 +349,9 @@ end
 local function makeBannerCloseButton(bar: Frame, onClose: () -> ()): TextButton
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Name = "CloseBtn"
-	closeBtn.Size = UDim2.fromOffset(44, 44)
+	closeBtn.Size = UDim2.fromOffset(48, 48)
 	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Position = UDim2.new(1, -8, 0.5, -1)
+	closeBtn.Position = UDim2.new(1, -6, 0.5, -1)
 	closeBtn.BackgroundTransparency = 1
 	closeBtn.BorderSizePixel = 0
 	closeBtn.Text = "X"

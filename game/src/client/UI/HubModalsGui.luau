@@ -179,7 +179,7 @@ local function addPetActionButton(
 		btnRow,
 		btnName,
 		txt,
-		UDim2.new(0.18, 0, 0, 44),
+		UDim2.new(0.18, 0, 0, 48),
 		UDim2.fromOffset(0, 0),
 		cb,
 		topCol,
@@ -355,7 +355,7 @@ local function renderPetCard(
 	btnRow.Name = "ActionRow"
 	btnRow.LayoutOrder = 3
 	btnRow.BackgroundTransparency = 1
-	btnRow.Size = UDim2.new(1, 0, 0, 44)
+	btnRow.Size = UDim2.new(1, 0, 0, 48)
 	btnRow.Parent = card
 	local rl = Instance.new("UIListLayout")
 	rl.FillDirection = Enum.FillDirection.Horizontal
@@ -474,7 +474,7 @@ local function buildActionRowCard(parent: ScrollingFrame, spec: ActionCardSpec):
 			card,
 			"Btn",
 			spec.btnText,
-			UDim2.new(1, 0, 0, 44),
+			UDim2.new(1, 0, 0, 48),
 			UDim2.fromOffset(0, 0),
 			spec.onClick,
 			spec.btnTop,
@@ -489,8 +489,8 @@ local function buildActionRowCard(parent: ScrollingFrame, spec: ActionCardSpec):
 		card,
 		"Btn",
 		spec.btnText,
-		UDim2.fromOffset(140, 44),
-		UDim2.new(1, -140, 0.5, -22),
+		UDim2.fromOffset(140, 48),
+		UDim2.new(1, -140, 0.5, -24),
 		spec.onClick,
 		spec.btnTop,
 		spec.btnBot
