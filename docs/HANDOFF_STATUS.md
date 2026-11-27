@@ -1,6 +1,6 @@
 # Ball Brawl: Boss Eggs — Team Handoff & Project Status
 
-**Last Updated:** 2026-11-24 (`main @ ce78a7f` + `chore/19-studio-qa-and-handoff`, PRs `#21`–`#44` merged; synced & saved to Team Create `placeId: 76642126183926` v`73`)
+**Last Updated:** 2026-11-28 (`main @ 7ebbccc`, PRs `#21`–`#52` merged; reconciled 51/51 scripts with live Team Create `placeId: 76642126183926`, `v84+`)
 
 **Canonical Design Spec:** [GameIdea_Evolved_GDD.md](GameIdea_Evolved_GDD.md) (`v1.1`)
 
@@ -12,10 +12,10 @@ This document is the single source of truth for **what is merged and verified on
 
 ## 1. Executive Summary — Where the Game Stands Today
 
-- **Server Authority, Economy & Telemetry (`#1`, `#4`, `#5`, `#9`, `#10`, `#14`, `#15`, `#18`): Complete on `main` (P1 Audit Hardened in PRs `#42`–`#44`)**
-  All 9 server services (`DataService`, `PolicyGuardService`, `PlotService`, `ArenaCycleService`, `BossAIService`, `CombatService`, `PetIncomeService`, `EconomyService`, `TelemetryService`) are merged on `main` (`ce78a7f`) with `--!strict`, lease-token DataStore session locking with departure retry & `BindToClose` hardening, fail-closed Roblox 2026 `PolicyService` compliance (including owned paid-egg hatch fallback), atomic `ProcessReceipt` handling, locked-room PvP containment with scramble deadline & authored room bounds, homing world sweep, 8-plot capacity + vertical pad alignment, and first-session/offer cohort telemetry (`TelemetryLogic`, PR `#37` & `#44`).
-- **Client UI, Combat, Shop & 0–5m Onboarding (`#2`, `#6`, `#7`, `#11`, `#12`, `#16`, `#19`): Merged & Studio QA Verified on `chore/19-studio-qa-and-handoff` (`#19` Ready to Close)**
-  Following PRs `#36`, `#38`, `#39`, `#40`, and `#42` (9 joint Pet × Mutation `100.00%` odds disclosure in `ShopCodexGui`), all 6 client controllers (`AnimationController`, `ArenaHUDController`, `BallThrowController`, `HatchVFXController`, `OnboardingGuideController`, `PlotCashController`) and 5 UI modules (`HudGui`, `HudIcons`, `HubModalsGui`, `ShopCodexGui`, `Theme`) are synced (`38/38` SHA-256 parity) into Studio Team Create (`v73`). Live Studio Device Simulator & `PolicyService` QA on `chore/19-studio-qa-and-handoff` resolved 5 mobile/modal layout bugs (`HudGui` `2x2` drawer padding + `HeroStatusDock` vertical clearance + `44px` `AutoAimBtn`; `HubModalsGui` & `ShopCodexGui` `LayoutOrder` sorting, wrapped upgrade text, and `44x44` close button) and passed across `667x375` iPhone 7, `874x402` iPhone 17 Pro, `1376x1032` iPad Pro M5, and PC.
+- **Server Authority, Economy, Telemetry & Co-Op / Social Expansion (`#1`, `#4`, `#5`, `#9`, `#10`, `#14`, `#15`, `#18`, PR `#52`): Complete on `main` (`7ebbccc`)**
+  All 12 server services (`ArenaCycleService`, `BossAIService`, `CombatService`, `DataService`, `EconomyService`, `PetIncomeService`, `PlotService`, `PolicyGuardService`, `TelemetryService`, plus `v84` additions `VaultHeistService`, `ViralSocialService`, and `WorldMapBootstrapService`) are merged on `main` (`7ebbccc`) with `--!strict`, lease-token DataStore session locking with departure retry & `BindToClose` hardening, fail-closed Roblox 2026 `PolicyService` compliance (including owned paid-egg hatch fallback), atomic `ProcessReceipt` handling, locked-room PvP containment, per-run cloned Vault Heist instances with `0.25s` remote debounces, and first-session/offer cohort telemetry (`TelemetryLogic`, PR `#37` & `#44`).
+- **Client UI Kit, Combat Juice, Shop & 0–5m Onboarding (`#2`, `#6`, `#7`, `#11`, `#12`, `#16`, `#19`, PRs `#45`–`#52`): Merged & Reconciled on `main`**
+  Following PRs `#45`–`#52` (mobile `2x2` drawer & FPS control arc, compact top-right phase header, RBLX Essentials cartoon UI Kit with `>=44px` pressed hit targets, and `v84` `VaultHeistController`, `ViralSocialController`, `CombatJuiceController`), all 9 client controllers and 5 UI modules are synced (`51/51` total game scripts) with Team Create (`SyncedFrom = "main@7ebbccc"`). Issue `#19` is **Closed** (PR `#45`).
 - **3D Assets & Launch Art (`#3`, `#8`, `#13`, `#17`, `#20`): Blender Exports & Launch Art Merged; Open Cloud Upload & Biome 2–3 Studio Art Open**
   All 39 Blender 5.x scripts (`game/assets/blender/`), 35 `.fbx` / 36 `.glb` exports (`game/assets/exports/`), 40 preview/QA renders (`game/assets/renders/`), and 13 Cycles launch UI assets (`game/assets/ui/`: 3 × 16:9 thumbnails, 512×512 game icon, 5 Game Pass icons, and 4 Badge icons) are merged on `main` (PR `#29`, PR `#32`, PR `#36`, PR `#40`). Issues `#13` and `#17` remain open solely for Roblox Open Cloud asset upload (blocked until `~/.config/roblox/opencloud.key` is configured) and interactive Roblox Studio Hub / Biome 2–3 map art finishing.
 
@@ -43,7 +43,7 @@ This document is the single source of truth for **what is merged and verified on
 | **16** | P3 | Client | Codex UI, Overcharged Lighting & Policy-Aware Shop UI | **Closed (PR #38, #42)** | Smooth Overcharged lighting tween, fail-closed `ShopCodexGui` direct bundles, 9 joint `100.00%` odds disclosure (`PR #42`), and `LayoutOrder` fix (`#19` QA). |
 | **17** | P3 | 3D/Map | Biome 2–3 Maps, Glacier Yeti, Obsidian Wyrm & 8 Pets | **Open (Exports Merged)** | Blender exports/renders merged (`PR #29` / `PR #32`). **Remaining:** Open Cloud upload, `rbxassetid://` binding, & Frostbite/Caldera Studio maps. |
 | **18** | P4 | Server | Launch Telemetry Hooks & Anti-Exploit Fuzz Test Suite | **Closed (PR #37, #44)** | Added `TelemetryLogic`, `TelemetryService` onboarding/bounce/opt-in/shop events + first-session cohort hardening (`PR #44`), and `SecurityInvariants.spec.luau`. |
-| **19** | P4 | Client | Mobile 60 FPS Ergonomics Pass, Audio Mixing & Onboarding | **QA Verified (Ready to Close)** | Live Studio QA passed on `chore/19-studio-qa-and-handoff` (`667x375` iPhone 7, `874x402` iPhone 17 Pro, `1376x1032` iPad Pro M5, PC): fixed `HudGui` `2x2` drawer + dock overlap + `44px` `AutoAimBtn`, `HubModalsGui`/`ShopCodexGui` `LayoutOrder` + wrapping, verified `OnboardingGuideBeam`, `AudioCatalog`, `1.20ms` heartbeat, and restricted/unrestricted `PolicyService`. |
+| **19** | P4 | Client | Mobile 60 FPS Ergonomics Pass, Audio Mixing & Onboarding | **Closed (PR #45, #48–#52)** | Mobile ergonomics, RBLX Essentials cartoon UI Kit (`>=44px` pressed hit targets in PR `#51`), FPS control arc (`PR #46`), compact phase header (`PR #47`), and VaultHeist portrait HUD offsets (`PR #52`) merged on `main`. |
 | **20** | P4 | 3D/Map | Launch Art Package (Thumbnails, Icon, Cosmetics & Plot Themes) | **Closed (PR #40)** | Merged 13 UI PNGs (`game/assets/ui/`), 4 cosmetic QA renders (`game/assets/renders/`), cosmetic VFX, `RoyalMarblePlot`, and `CosmeticsAndThemes.spec.luau`. |
 
 ---
@@ -92,19 +92,19 @@ python3 scripts/blender_run.py game/assets/blender/<script>.py
 
 ## 5. Architecture Reference — What Lives Where on `main`
 
-- **Shared Configs (`game/src/shared/Configs/`, 6 modules):**
-  `BiomeConfigs`, `EconomyConfigs`, `EggConfigs`, `MonetizationConfigs`, `PetConfigs`, `TraitConfigs`
+- **Shared Configs (`game/src/shared/Configs/`, 8 modules):**
+  `BiomeConfigs`, `EconomyConfigs`, `EggConfigs`, `MonetizationConfigs`, `PetConfigs`, `RetentionConfigs`, `TraitConfigs`, `VaultHeistConfigs`
 - **Shared Net (`game/src/shared/Net/`, 1 module):**
-  `Remotes.luau` (`BallBrawlRemotes`: 17 `RemoteEvent`s + `GetInitialState` `RemoteFunction`)
-- **Shared Utils (`game/src/shared/Utils/`, 9 modules):**
-  - 7 pure Lune-testable logic modules: `ArenaCycleLogic`, `CombatLogic`, `EconomyLogic`, `MathUtil`, `OnboardingLogic`, `PolicyLogic`, `TelemetryLogic`
+  `Remotes.luau` (`BallBrawlRemotes`: typed `RemoteEvent`s + `GetInitialState` `RemoteFunction`, including VaultHeist, ViralSocial/Retention, and CombatJuice remotes)
+- **Shared Utils (`game/src/shared/Utils/`, 14 modules):**
+  - 12 pure Lune-testable logic modules: `ArenaCycleLogic`, `CombatJuiceLogic`, `CombatLogic`, `EconomyLogic`, `MathUtil`, `OnboardingLogic`, `PolicyLogic`, `PriceFormatter`, `TelemetryLogic`, `VaultHeistLogic`, `ViralSocialLogic`, `WorldMapLayout`
   - 2 Roblox client/asset helpers: `AudioCatalog`, `ProceduralModels`
-- **Server (`game/src/server/init.server.luau` + 9 Services in `game/src/server/Services/`):**
-  `ArenaCycleService`, `BossAIService`, `CombatService`, `DataService`, `EconomyService`, `PetIncomeService`, `PlotService`, `PolicyGuardService`, `TelemetryService`
-- **Client (`game/src/client/init.client.luau` + 6 Controllers + 5 UI modules):**
-  - **Controllers (`game/src/client/Controllers/`):** `AnimationController`, `ArenaHUDController`, `BallThrowController`, `HatchVFXController`, `OnboardingGuideController`, `PlotCashController`
+- **Server (`game/src/server/init.server.luau` + 12 Services in `game/src/server/Services/`):**
+  `ArenaCycleService`, `BossAIService`, `CombatService`, `DataService`, `EconomyService`, `PetIncomeService`, `PlotService`, `PolicyGuardService`, `TelemetryService`, `VaultHeistService`, `ViralSocialService`, `WorldMapBootstrapService`
+- **Client (`game/src/client/init.client.luau` + 9 Controllers + 5 UI modules):**
+  - **Controllers (`game/src/client/Controllers/`):** `AnimationController`, `ArenaHUDController`, `BallThrowController`, `CombatJuiceController`, `HatchVFXController`, `OnboardingGuideController`, `PlotCashController`, `VaultHeistController`, `ViralSocialController`
   - **UI (`game/src/client/UI/`):** `HubModalsGui`, `HudGui`, `HudIcons`, `ShopCodexGui`, `Theme`
-- **Lune Unit Specs (`game/tests/`, 9 passing `*.spec.luau` suites):**
-  `ArenaCycleLogic.spec.luau`, `CombatAndEconomyLogic.spec.luau`, `ConfigsAndPolicy.spec.luau`, `CosmeticsAndThemes.spec.luau`, `EconomyConfigs.spec.luau`, `OnboardingLogic.spec.luau`, `SecurityFuzz.spec.luau`, `SecurityInvariants.spec.luau`, `TelemetryLogic.spec.luau`
+- **Lune Unit Specs (`game/tests/`, 14 passing `*.spec.luau` suites):**
+  `ArenaCycleLogic.spec.luau`, `CombatAndEconomyLogic.spec.luau`, `CombatJuiceLogic.spec.luau`, `ConfigsAndPolicy.spec.luau`, `CosmeticsAndThemes.spec.luau`, `EconomyConfigs.spec.luau`, `OnboardingLogic.spec.luau`, `PriceFormatter.spec.luau`, `SecurityFuzz.spec.luau`, `SecurityInvariants.spec.luau`, `TelemetryLogic.spec.luau`, `VaultHeistLogic.spec.luau`, `ViralSocialLogic.spec.luau`, `WorldMapLayout.spec.luau`
 - **Python Tooling Tests (`scripts/tests/`):**
   `test_cross_platform_scripts.py` (7 passing tests)
