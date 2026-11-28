@@ -1,0 +1,611 @@
+{
+  "palette": {
+    "SlimeGreen": {
+      "srgb": [
+        64,
+        198,
+        92
+      ],
+      "rough": 0.28,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "SlimeDeep": {
+      "srgb": [
+        30,
+        136,
+        66
+      ],
+      "rough": 0.24,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "MossLeaf": {
+      "srgb": [
+        54,
+        152,
+        68
+      ],
+      "rough": 0.72,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "MossBright": {
+      "srgb": [
+        96,
+        214,
+        98
+      ],
+      "rough": 0.62,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "JadeGlow": {
+      "srgb": [
+        34,
+        238,
+        128
+      ],
+      "rough": 0.14,
+      "metal": 0.0,
+      "em": 2.3,
+      "rbx_mat": "Neon"
+    },
+    "GoldMetal": {
+      "srgb": [
+        240,
+        194,
+        58
+      ],
+      "rough": 0.26,
+      "metal": 0.88,
+      "em": 0.0,
+      "rbx_mat": "Metal"
+    },
+    "LotusPetal": {
+      "srgb": [
+        246,
+        214,
+        96
+      ],
+      "rough": 0.42,
+      "metal": 0.0,
+      "em": 0.3,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "SnapperTeal": {
+      "srgb": [
+        46,
+        136,
+        128
+      ],
+      "rough": 0.48,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "SnapperDeep": {
+      "srgb": [
+        26,
+        86,
+        90
+      ],
+      "rough": 0.56,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "SnapperBelly": {
+      "srgb": [
+        218,
+        214,
+        182
+      ],
+      "rough": 0.66,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "AquaGlow": {
+      "srgb": [
+        56,
+        224,
+        248
+      ],
+      "rough": 0.16,
+      "metal": 0.0,
+      "em": 2.2,
+      "rbx_mat": "Neon"
+    },
+    "BoarHide": {
+      "srgb": [
+        108,
+        70,
+        48
+      ],
+      "rough": 0.78,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Fabric"
+    },
+    "BoarDark": {
+      "srgb": [
+        68,
+        44,
+        32
+      ],
+      "rough": 0.84,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Fabric"
+    },
+    "Ivory": {
+      "srgb": [
+        236,
+        228,
+        206
+      ],
+      "rough": 0.42,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "AmberGlow": {
+      "srgb": [
+        255,
+        190,
+        48
+      ],
+      "rough": 0.16,
+      "metal": 0.0,
+      "em": 2.1,
+      "rbx_mat": "Neon"
+    },
+    "WitchCloak": {
+      "srgb": [
+        42,
+        78,
+        62
+      ],
+      "rough": 0.76,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Fabric"
+    },
+    "WitchPlum": {
+      "srgb": [
+        86,
+        44,
+        100
+      ],
+      "rough": 0.68,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Fabric"
+    },
+    "WitchCrimson": {
+      "srgb": [
+        176,
+        46,
+        52
+      ],
+      "rough": 0.58,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Fabric"
+    },
+    "WitchSkin": {
+      "srgb": [
+        196,
+        216,
+        192
+      ],
+      "rough": 0.58,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "StaffWood": {
+      "srgb": [
+        92,
+        58,
+        36
+      ],
+      "rough": 0.8,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Wood"
+    },
+    "HexGlow": {
+      "srgb": [
+        198,
+        72,
+        255
+      ],
+      "rough": 0.14,
+      "metal": 0.0,
+      "em": 2.5,
+      "rbx_mat": "Neon"
+    },
+    "StoneBase": {
+      "srgb": [
+        96,
+        108,
+        100
+      ],
+      "rough": 0.84,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Cobblestone"
+    },
+    "StoneDark": {
+      "srgb": [
+        56,
+        64,
+        60
+      ],
+      "rough": 0.88,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Rock"
+    },
+    "StoneObsidian": {
+      "srgb": [
+        40,
+        44,
+        52
+      ],
+      "rough": 0.74,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Slate"
+    },
+    "EyeDark": {
+      "srgb": [
+        18,
+        20,
+        24
+      ],
+      "rough": 0.08,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Glass"
+    },
+    "EyeWhite": {
+      "srgb": [
+        255,
+        255,
+        255
+      ],
+      "rough": 0.08,
+      "metal": 0.0,
+      "em": 0.9,
+      "rbx_mat": "Neon"
+    }
+  },
+  "mobs": {
+    "MossSlime": {
+      "glb": "EM_Mob_MossSlime.glb",
+      "fbx": "EM_Mob_MossSlime_Rigged.fbx",
+      "is_elite": false,
+      "anim_style": "MeadowSlime",
+      "tris": 1056,
+      "size_studs": [
+        3.38,
+        3.2,
+        3.35
+      ],
+      "ground_offset_y": 1.6,
+      "health_bar_offset_y": 3.4,
+      "submeshes": [
+        "MossSlime__Body__SlimeGreen",
+        "MossSlime__Legs__MossLeaf",
+        "MossSlime__Body__EyeDark",
+        "MossSlime__Body__EyeWhite",
+        "MossSlime__Crown__MossLeaf",
+        "MossSlime__Crown__MossBright"
+      ]
+    },
+    "ElderMossSlime": {
+      "glb": "EM_Mob_ElderMossSlime.glb",
+      "fbx": "EM_Mob_ElderMossSlime_Rigged.fbx",
+      "is_elite": true,
+      "anim_style": "MeadowSlime",
+      "tris": 1524,
+      "size_studs": [
+        4.76,
+        4.2,
+        4.55
+      ],
+      "ground_offset_y": 2.1,
+      "health_bar_offset_y": 3.9,
+      "submeshes": [
+        "ElderMossSlime__Body__SlimeDeep",
+        "ElderMossSlime__Legs__MossLeaf",
+        "ElderMossSlime__Body__EyeDark",
+        "ElderMossSlime__Body__EyeWhite",
+        "ElderMossSlime__Crown__MossBright",
+        "ElderMossSlime__Crown__LotusPetal",
+        "ElderMossSlime__Crown__JadeGlow",
+        "ElderMossSlime__Crown__GoldMetal",
+        "ElderMossSlime__Orbit__StoneBase",
+        "ElderMossSlime__Orbit__JadeGlow"
+      ]
+    },
+    "RiverSnapper": {
+      "glb": "EM_Mob_RiverSnapper.glb",
+      "fbx": "EM_Mob_RiverSnapper_Rigged.fbx",
+      "is_elite": false,
+      "anim_style": "MeadowSnapper",
+      "tris": 1094,
+      "size_studs": [
+        3.95,
+        3.1,
+        6.39
+      ],
+      "ground_offset_y": 1.55,
+      "health_bar_offset_y": 3.35,
+      "submeshes": [
+        "RiverSnapper__Body__SnapperTeal",
+        "RiverSnapper__Tail__SnapperTeal",
+        "RiverSnapper__Body__SnapperBelly",
+        "RiverSnapper__Head__SnapperTeal",
+        "RiverSnapper__Jaw__SnapperBelly",
+        "RiverSnapper__Head__Ivory",
+        "RiverSnapper__Head__AquaGlow",
+        "RiverSnapper__Head__AmberGlow",
+        "RiverSnapper__Legs__SnapperTeal",
+        "RiverSnapper__Legs__SnapperDeep",
+        "RiverSnapper__Body__MossBright"
+      ]
+    },
+    "TidecrestSnapper": {
+      "glb": "EM_Mob_TidecrestSnapper.glb",
+      "fbx": "EM_Mob_TidecrestSnapper_Rigged.fbx",
+      "is_elite": true,
+      "anim_style": "MeadowSnapper",
+      "tris": 1302,
+      "size_studs": [
+        4.4,
+        4.0,
+        7.12
+      ],
+      "ground_offset_y": 2.0,
+      "health_bar_offset_y": 3.8,
+      "submeshes": [
+        "TidecrestSnapper__Body__SnapperDeep",
+        "TidecrestSnapper__Tail__SnapperDeep",
+        "TidecrestSnapper__Body__SnapperBelly",
+        "TidecrestSnapper__Head__SnapperDeep",
+        "TidecrestSnapper__Jaw__SnapperBelly",
+        "TidecrestSnapper__Head__Ivory",
+        "TidecrestSnapper__Head__AquaGlow",
+        "TidecrestSnapper__Head__AmberGlow",
+        "TidecrestSnapper__Legs__SnapperDeep",
+        "TidecrestSnapper__Body__AquaGlow",
+        "TidecrestSnapper__Body__StoneDark",
+        "TidecrestSnapper__Tail__AquaGlow",
+        "TidecrestSnapper__Head__GoldMetal"
+      ]
+    },
+    "BrambleBoar": {
+      "glb": "EM_Mob_BrambleBoar.glb",
+      "fbx": "EM_Mob_BrambleBoar_Rigged.fbx",
+      "is_elite": false,
+      "anim_style": "MeadowBoar",
+      "tris": 752,
+      "size_studs": [
+        2.8,
+        3.8,
+        4.62
+      ],
+      "ground_offset_y": 1.9,
+      "health_bar_offset_y": 3.7,
+      "submeshes": [
+        "BrambleBoar__Body__BoarHide",
+        "BrambleBoar__Head__BoarHide",
+        "BrambleBoar__Head__Ivory",
+        "BrambleBoar__Head__AmberGlow",
+        "BrambleBoar__Legs__BoarHide",
+        "BrambleBoar__Legs__StoneDark",
+        "BrambleBoar__Body__MossLeaf",
+        "BrambleBoar__Body__MossBright",
+        "BrambleBoar__Body__JadeGlow"
+      ]
+    },
+    "ThornbackAlpha": {
+      "glb": "EM_Mob_ThornbackAlpha.glb",
+      "fbx": "EM_Mob_ThornbackAlpha_Rigged.fbx",
+      "is_elite": true,
+      "anim_style": "MeadowBoar",
+      "tris": 828,
+      "size_studs": [
+        3.08,
+        4.8,
+        5.09
+      ],
+      "ground_offset_y": 2.4,
+      "health_bar_offset_y": 4.2,
+      "submeshes": [
+        "ThornbackAlpha__Body__BoarDark",
+        "ThornbackAlpha__Head__BoarDark",
+        "ThornbackAlpha__Head__BoarHide",
+        "ThornbackAlpha__Head__GoldMetal",
+        "ThornbackAlpha__Head__AmberGlow",
+        "ThornbackAlpha__Legs__BoarDark",
+        "ThornbackAlpha__Legs__StoneDark",
+        "ThornbackAlpha__Body__MossLeaf",
+        "ThornbackAlpha__Body__StoneBase",
+        "ThornbackAlpha__Body__JadeGlow"
+      ]
+    },
+    "MeadowWitch": {
+      "glb": "EM_Mob_MeadowWitch.glb",
+      "fbx": "EM_Mob_MeadowWitch_Rigged.fbx",
+      "is_elite": false,
+      "anim_style": "MeadowWitch",
+      "tris": 556,
+      "size_studs": [
+        2.88,
+        5.6,
+        2.74
+      ],
+      "ground_offset_y": 2.8,
+      "health_bar_offset_y": 4.6,
+      "submeshes": [
+        "MeadowWitch__Body__WitchCloak",
+        "MeadowWitch__Head__WitchSkin",
+        "MeadowWitch__Head__JadeGlow",
+        "MeadowWitch__Head__WitchCloak",
+        "MeadowWitch__Head__GoldMetal",
+        "MeadowWitch__Staff__WitchCloak",
+        "MeadowWitch__Staff__StaffWood",
+        "MeadowWitch__Staff__HexGlow"
+      ]
+    },
+    "CovenArchWitch": {
+      "glb": "EM_Mob_CovenArchWitch.glb",
+      "fbx": "EM_Mob_CovenArchWitch_Rigged.fbx",
+      "is_elite": true,
+      "anim_style": "MeadowWitch",
+      "tris": 740,
+      "size_studs": [
+        3.37,
+        6.1,
+        3.16
+      ],
+      "ground_offset_y": 3.05,
+      "health_bar_offset_y": 4.85,
+      "submeshes": [
+        "CovenArchWitch__Body__WitchPlum",
+        "CovenArchWitch__Body__WitchCloak",
+        "CovenArchWitch__Body__WitchCrimson",
+        "CovenArchWitch__Orbit__JadeGlow",
+        "CovenArchWitch__Head__WitchSkin",
+        "CovenArchWitch__Head__HexGlow",
+        "CovenArchWitch__Head__WitchCrimson",
+        "CovenArchWitch__Head__GoldMetal",
+        "CovenArchWitch__Staff__WitchPlum",
+        "CovenArchWitch__Staff__StaffWood",
+        "CovenArchWitch__Staff__HexGlow",
+        "CovenArchWitch__Staff__GoldMetal"
+      ]
+    },
+    "RuinSentinel": {
+      "glb": "EM_Mob_RuinSentinel.glb",
+      "fbx": "EM_Mob_RuinSentinel_Rigged.fbx",
+      "is_elite": false,
+      "anim_style": "MeadowSentinel",
+      "tris": 676,
+      "size_studs": [
+        5.48,
+        6.0,
+        2.69
+      ],
+      "ground_offset_y": 3.0,
+      "health_bar_offset_y": 4.8,
+      "submeshes": [
+        "RuinSentinel__Legs__StoneDark",
+        "RuinSentinel__Legs__StoneBase",
+        "RuinSentinel__Body__StoneBase",
+        "RuinSentinel__Body__JadeGlow",
+        "RuinSentinel__Body__StoneDark",
+        "RuinSentinel__Arms__StoneBase",
+        "RuinSentinel__Arms__MossLeaf",
+        "RuinSentinel__Arms__StoneDark",
+        "RuinSentinel__Head__StoneBase",
+        "RuinSentinel__Head__JadeGlow"
+      ]
+    },
+    "AncientWarden": {
+      "glb": "EM_Mob_AncientWarden.glb",
+      "fbx": "EM_Mob_AncientWarden_Rigged.fbx",
+      "is_elite": true,
+      "anim_style": "MeadowSentinel",
+      "tris": 880,
+      "size_studs": [
+        5.87,
+        6.8,
+        2.54
+      ],
+      "ground_offset_y": 3.4,
+      "health_bar_offset_y": 5.2,
+      "submeshes": [
+        "AncientWarden__Legs__StoneDark",
+        "AncientWarden__Legs__StoneObsidian",
+        "AncientWarden__Body__StoneObsidian",
+        "AncientWarden__Body__JadeGlow",
+        "AncientWarden__Body__GoldMetal",
+        "AncientWarden__Arms__StoneObsidian",
+        "AncientWarden__Arms__MossLeaf",
+        "AncientWarden__Arms__StoneDark",
+        "AncientWarden__Arms__GoldMetal",
+        "AncientWarden__Head__StoneObsidian",
+        "AncientWarden__Head__JadeGlow",
+        "AncientWarden__Head__GoldMetal",
+        "AncientWarden__Orbit__JadeGlow",
+        "AncientWarden__Orbit__GoldMetal"
+      ]
+    }
+  },
+  "projectiles": {
+    "Proj_SporeGlob": {
+      "glb": "EM_Proj_SporeGlob.glb",
+      "tris": 144,
+      "size_studs": [
+        2.16,
+        1.8,
+        2.16
+      ],
+      "submeshes": [
+        "Proj_SporeGlob__Core__SlimeGreen",
+        "Proj_SporeGlob__Core__JadeGlow"
+      ]
+    },
+    "Proj_AquaGlob": {
+      "glb": "EM_Proj_AquaGlob.glb",
+      "tris": 160,
+      "size_studs": [
+        1.89,
+        1.8,
+        2.0
+      ],
+      "submeshes": [
+        "Proj_AquaGlob__Core__AquaGlow",
+        "Proj_AquaGlob__Core__SnapperTeal"
+      ]
+    },
+    "Proj_ArcaneHexOrb": {
+      "glb": "EM_Proj_ArcaneHexOrb.glb",
+      "tris": 272,
+      "size_studs": [
+        2.84,
+        2.2,
+        2.63
+      ],
+      "submeshes": [
+        "Proj_ArcaneHexOrb__Core__HexGlow",
+        "Proj_ArcaneHexOrb__Core__GoldMetal",
+        "Proj_ArcaneHexOrb__Core__JadeGlow"
+      ]
+    },
+    "Proj_RuneBoulder": {
+      "glb": "EM_Proj_RuneBoulder.glb",
+      "tris": 132,
+      "size_studs": [
+        2.99,
+        3.0,
+        3.0
+      ],
+      "submeshes": [
+        "Proj_RuneBoulder__Core__StoneDark",
+        "Proj_RuneBoulder__Core__JadeGlow",
+        "Proj_RuneBoulder__Core__MossLeaf"
+      ]
+    }
+  }
+}

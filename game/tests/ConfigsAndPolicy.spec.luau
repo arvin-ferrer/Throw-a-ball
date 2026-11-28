@@ -39,40 +39,60 @@ assertNear(
 	"Overcharged Solo Meadow Boss HP"
 )
 
--- 1b. Biome-themed Monster variants and biome-scaled HP progression across all 3 biomes
+-- 1b. Emerald Meadow 10-mob roster (5 Base + 5 Natural Area Elites) & biome-scaled HP progression
+assertTrue(BiomeConfigs.MOBS.MossSlime.displayName == "Moss Slime", "Base Meadow Slime name")
+assertTrue(BiomeConfigs.MOBS.BrambleBoar.displayName == "Bramble Boar", "Base Meadow Boar name")
 assertTrue(
-	BiomeConfigs.MOBS.MossSlime.displayName == "Forest Monster",
-	"Tier-1 Meadow display name"
+	BiomeConfigs.MOBS.MeadowWitch.rangedAttack ~= nil
+		and BiomeConfigs.MOBS.MeadowWitch.rangedAttack.gravity == 42,
+	"MeadowWitch has non-homing ballistic ranged spec"
 )
 assertTrue(
-	BiomeConfigs.MOBS.BrambleBoar.displayName == "Elder Forest Monster",
-	"Tier-2 Meadow display name"
+	BiomeConfigs.MOBS.CovenArchWitch.isElite == true
+		and BiomeConfigs.MOBS.CovenArchWitch.rangedAttack ~= nil
+		and BiomeConfigs.MOBS.CovenArchWitch.rangedAttack.volleyCount == 2,
+	"CovenArchWitch elite fires 2-orb staggered volley"
 )
 assertTrue(
 	BiomeConfigs.MOBS.IceWraith.displayName == "Frost Monster",
-	"Tier-1 Frostbite display name"
+	"Tier-1 Frostbite display name untouched"
 )
 assertTrue(
 	BiomeConfigs.MOBS.CrystalWolf.displayName == "Elder Frost Monster",
-	"Tier-2 Frostbite display name"
+	"Tier-2 Frostbite display name untouched"
 )
 assertTrue(
 	BiomeConfigs.MOBS.CinderImp.displayName == "Magma Monster",
-	"Tier-1 Caldera display name"
+	"Tier-1 Caldera display name untouched"
 )
 assertTrue(
 	BiomeConfigs.MOBS.MagmaHound.displayName == "Elder Magma Monster",
-	"Tier-2 Caldera display name"
+	"Tier-2 Caldera display name untouched"
 )
-assertNear(BiomeConfigs.MOBS.MossSlime.maxHP, 75, "Tier-1 Meadow biome-scaled HP")
-assertNear(BiomeConfigs.MOBS.BrambleBoar.maxHP, 140, "Tier-2 Meadow biome-scaled HP")
+assertNear(BiomeConfigs.MOBS.MossSlime.maxHP, 75, "Base MossSlime HP")
+assertNear(BiomeConfigs.MOBS.BrambleBoar.maxHP, 145, "Base BrambleBoar HP")
+assertNear(BiomeConfigs.MOBS.AncientWarden.maxHP, 350, "Top Emerald Meadow Elite HP")
 assertNear(BiomeConfigs.MOBS.IceWraith.maxHP, 950, "Tier-1 Frostbite biome-scaled HP")
 assertNear(BiomeConfigs.MOBS.CrystalWolf.maxHP, 1650, "Tier-2 Frostbite biome-scaled HP")
 assertNear(BiomeConfigs.MOBS.CinderImp.maxHP, 9000, "Tier-1 Caldera biome-scaled HP")
 assertNear(BiomeConfigs.MOBS.MagmaHound.maxHP, 15500, "Tier-2 Caldera biome-scaled HP")
 assertTrue(
+	#BiomeConfigs.BIOMES.EmeraldMeadow.mobs == 10,
+	"Emerald Meadow registers all 10 Base + Elite mobs"
+)
+for _, mobId in ipairs(BiomeConfigs.BIOMES.EmeraldMeadow.mobs) do
+	local m = BiomeConfigs.MOBS[mobId]
+	assertTrue(m ~= nil and m.biomeId == "EmeraldMeadow", `Emerald Meadow mob exists: {mobId}`)
+	assertTrue(
+		m.maxHP < BiomeConfigs.BOSSES.MossbackGolem.baseHP
+			and m.maxHP < BiomeConfigs.MOBS.IceWraith.maxHP,
+		`{mobId} HP stays strictly below Meadow Boss (900) and Frostbite Tier-1 (950)`
+	)
+end
+assertTrue(
 	BiomeConfigs.MOBS.MossSlime.maxHP < BiomeConfigs.MOBS.BrambleBoar.maxHP
-		and BiomeConfigs.MOBS.BrambleBoar.maxHP < BiomeConfigs.MOBS.IceWraith.maxHP
+		and BiomeConfigs.MOBS.BrambleBoar.maxHP < BiomeConfigs.MOBS.AncientWarden.maxHP
+		and BiomeConfigs.MOBS.AncientWarden.maxHP < BiomeConfigs.MOBS.IceWraith.maxHP
 		and BiomeConfigs.MOBS.IceWraith.maxHP < BiomeConfigs.MOBS.CrystalWolf.maxHP
 		and BiomeConfigs.MOBS.CrystalWolf.maxHP < BiomeConfigs.MOBS.CinderImp.maxHP
 		and BiomeConfigs.MOBS.CinderImp.maxHP < BiomeConfigs.MOBS.MagmaHound.maxHP,

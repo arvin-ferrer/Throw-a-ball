@@ -931,16 +931,35 @@ local function buildPveSpawnsAndLandmarks(
 		local pad = makePart(mobSpawns, {
 			name = string.format("MobSpawn_%02d", idx),
 			size = Vector3.new(8, 0.3, 8),
-			cf = CFrame.new(cx + off[1], 0.15, cz + off[3]),
+			cf = CFrame.new(cx + off[1], off[2] + 0.15, cz + off[3]),
 			color = rgb(vis.accent),
 			canCollide = false,
 			canTouch = false,
 			canQuery = false,
-			transparency = 0.65,
+			transparency = if spec.isPerched then 1 else 0.65,
 			tags = { "MobSpawnZone" },
 		})
 		pad:SetAttribute("BiomeId", biomeCfg.id)
 		pad:SetAttribute("MobType", mType)
+		if spec.spawnCount then
+			pad:SetAttribute("SpawnCount", spec.spawnCount)
+		end
+		if spec.escortMobType then
+			pad:SetAttribute("EscortMobType", spec.escortMobType)
+			pad:SetAttribute("EscortCount", spec.escortCount or 1)
+		end
+		if spec.isPerched then
+			pad:SetAttribute("IsPerched", true)
+			if spec.perchAxis then
+				pad:SetAttribute(
+					"PerchAxis",
+					Vector3.new(spec.perchAxis[1], spec.perchAxis[2], spec.perchAxis[3])
+				)
+			end
+		end
+		if spec.district then
+			pad:SetAttribute("District", spec.district)
+		end
 	end
 end
 

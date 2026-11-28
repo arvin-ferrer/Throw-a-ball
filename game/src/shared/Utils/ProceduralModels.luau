@@ -377,31 +377,62 @@ function ProceduralModels.createPetModel(
 	return model
 end
 
+function ProceduralModels.createMobProjectileVisual(
+	projectileId: string,
+	colorOverride: Color3?
+): Model
+	local prefab = findAssetPrefab("VFX", projectileId)
+	if prefab and prefab:IsA("Model") and prefab.PrimaryPart then
+		local clone = prefab:Clone()
+		local col = colorOverride or clone.PrimaryPart.Color
+		ensureBallTrail(clone.PrimaryPart, col, Color3.fromRGB(255, 255, 255))
+		return clone
+	end
+
+	local fallbackCol = colorOverride or Color3.fromRGB(198, 72, 255)
+	local diam = if projectileId == "Proj_RuneBoulder" then 2.8 else 1.8
+	local model = Instance.new("Model")
+	model.Name = "MobProj_" .. projectileId
+	local core = makePart(
+		model,
+		"Root",
+		Vector3.new(diam, diam, diam),
+		fallbackCol,
+		if projectileId == "Proj_RuneBoulder" then Enum.Material.Rock else Enum.Material.Neon,
+		Enum.PartType.Ball
+	)
+	model.PrimaryPart = core
+	ensureBallTrail(core, fallbackCol, Color3.fromRGB(255, 255, 255))
+	return model
+end
+
 function ProceduralModels.createMobModel(mobId: string): Model
 	local cfg = BiomeConfigs.MOBS[mobId] or BiomeConfigs.MOBS.MossSlime
 	local accent = rgb(cfg.accentColor)
+	local barWidth = if cfg.isElite then 186 else 150
 
 	local prefab = findAssetPrefab("Mobs", cfg.id)
 	if prefab and prefab:IsA("Model") and prefab.PrimaryPart then
 		local clone = prefab:Clone()
 		local hbOffset = tonumber(clone:GetAttribute("HealthBarOffsetY")) or 4.0
-		addHealthBar(clone.PrimaryPart, cfg.displayName, accent, hbOffset, 150)
+		addHealthBar(clone.PrimaryPart, cfg.displayName, accent, hbOffset, barWidth)
 		return clone
 	end
 
 	local model = Instance.new("Model")
 	model.Name = "Mob_" .. cfg.id
+	local scale = if cfg.isElite then 1.25 else 1.0
 	local root = makePart(
 		model,
 		"HumanoidRootPart",
-		Vector3.new(4.2, 4.0, 4.2),
+		Vector3.new(3.6 * scale, 3.8 * scale, 3.6 * scale),
 		rgb(cfg.primaryColor),
 		Enum.Material.SmoothPlastic,
 		Enum.PartType.Ball
 	)
 	root.CanQuery = true
 	model.PrimaryPart = root
-	addHealthBar(root, cfg.displayName, accent, 3.8, 150)
+	addHealthBar(root, cfg.displayName, accent, 3.6 * scale, barWidth)
 	return model
 end
 

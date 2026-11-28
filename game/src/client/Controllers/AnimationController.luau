@@ -547,6 +547,77 @@ local function computeVolcanicTransform(
 	end
 end
 
+local function computeMeadowMobTransform(
+	model: Model?,
+	role: string,
+	now: number,
+	phase: number,
+	isMoving: boolean,
+	atkAlpha: number,
+	hitAlpha: number
+): CFrame
+	local style = if model
+		then tostring(model:GetAttribute("BiomeAnimStyle") or "MeadowSlime")
+		else "MeadowSlime"
+	local isTelegraph = if model then (model:GetAttribute("IsTelegraphing") == true) else false
+	local hitRecoil = if hitAlpha >= 0 then math.sin(hitAlpha * math.pi) else 0
+	local atkSnap = if atkAlpha >= 0 then math.sin(atkAlpha * math.pi) else 0
+	local strideT = now * (if isMoving then 7.2 else 2.5) + phase
+
+	if role == "MeadowOrbit" then
+		local hover = math.sin(now * 3.0 + phase) * 0.25
+		local spd = if isTelegraph then 4.8 else 1.8
+		return CFrame.new(0, hover, 0) * CFrame.Angles(0, now * spd + phase, 0)
+	elseif role == "MeadowStaff" then
+		local lift = if isTelegraph
+			then math.rad(-54) + math.sin(now * 16) * math.rad(8)
+			elseif atkAlpha >= 0 then math.rad(42) * atkSnap
+			else math.sin(strideT) * math.rad(if isMoving then 14 else 5)
+		return CFrame.new(0, if isTelegraph then 0.45 else 0, 0) * CFrame.Angles(lift, 0, 0)
+	elseif role == "MeadowJaw" then
+		local chomp = if isTelegraph
+			then math.rad(26)
+			elseif atkAlpha >= 0 then math.rad(32) * atkSnap
+			else math.abs(math.sin(strideT * 0.5)) * math.rad(8)
+		return CFrame.Angles(chomp, 0, 0)
+	elseif role == "MeadowTail" then
+		local wag = math.sin(now * (if isMoving then 9.5 else 3.2) + phase)
+		return CFrame.Angles(0, wag * math.rad(if isMoving then 22 else 10), 0)
+	elseif role == "MeadowCrown" then
+		local bounce = math.abs(math.sin(strideT)) * (if isMoving then 0.28 else 0.08)
+		return CFrame.new(0, bounce, 0) * CFrame.Angles(math.sin(strideT) * math.rad(7), 0, 0)
+	elseif role == "MeadowHead" then
+		local pitch = if isTelegraph and style == "MeadowBoar"
+			then math.rad(24)
+			elseif atkAlpha >= 0 then math.rad(-18) * atkSnap
+			else math.sin(strideT) * math.rad(if isMoving then 8 else 4)
+		local yaw = math.sin(now * 1.6 + phase) * math.rad(if isMoving then 6 else 10)
+		return CFrame.Angles(pitch - hitRecoil * math.rad(14), yaw, 0)
+	elseif role == "MeadowArms" then
+		local swing = if isTelegraph
+			then math.rad(-62)
+			elseif atkAlpha >= 0 then math.rad(54) * atkSnap
+			else math.sin(strideT) * math.rad(if isMoving then 24 else 6)
+		return CFrame.Angles(swing - hitRecoil * math.rad(16), 0, 0)
+	elseif role == "MeadowLegs" then
+		local lift = if isMoving then math.abs(math.sin(strideT)) * 0.22 else 0
+		local roll = if isMoving then math.cos(strideT) * math.rad(12) else 0
+		return CFrame.new(0, lift, 0) * CFrame.Angles(0, 0, roll)
+	end
+
+	-- MeadowBody (default core motion per archetype)
+	local hopY = if style == "MeadowSlime"
+		then math.abs(math.sin(strideT)) * (if isMoving then 0.65 else 0.18)
+		elseif style == "MeadowWitch" then 0.18 + math.sin(now * 3.0 + phase) * 0.16
+		else (if isMoving then math.abs(math.sin(strideT)) * 0.26 else math.sin(strideT) * 0.08)
+	local leanPitch = (if isTelegraph and style == "MeadowBoar" then math.rad(16) else 0)
+		+ (if isMoving then math.rad(6) else 0)
+		+ atkSnap * math.rad(16)
+		- hitRecoil * math.rad(14)
+	local roll = if isMoving then math.cos(strideT) * math.rad(6) else 0
+	return CFrame.new(0, hopY, -atkSnap * 0.65) * CFrame.Angles(leanPitch, 0, roll)
+end
+
 local function computeBiomeMonsterTransform(
 	model: Model?,
 	role: string,
@@ -639,6 +710,11 @@ local function stepRigMotors(now: number, camPos: Vector3)
 			local atkAlpha, hitAlpha, mPhase = getMobPulse(model, now)
 			motor.Transform =
 				computeBiomeMonsterTransform(model, role, now, mPhase, isMoving, atkAlpha, hitAlpha)
+			continue
+		elseif string.sub(role, 1, 6) == "Meadow" then
+			local atkAlpha, hitAlpha, mPhase = getMobPulse(model, now)
+			motor.Transform =
+				computeMeadowMobTransform(model, role, now, mPhase, isMoving, atkAlpha, hitAlpha)
 			continue
 		end
 		local spd = entry.speed * (if isMoving then 1.45 else 1.0)
