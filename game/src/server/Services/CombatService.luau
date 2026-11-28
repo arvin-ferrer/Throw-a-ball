@@ -757,6 +757,14 @@ local function resolveHomingSweep(
 	return handleProjectileCollision(proj, now, livePos, livePos, -dir, target.hitPart, target)
 end
 
+local function getTargetAimPosition(target: ResolvedTarget, originY: number): Vector3
+	local basePos = target.hitPart.Position
+	if target.mob and (target.mob.isPerched or (basePos.Y - originY) > 12) then
+		return basePos + Vector3.new(0, 1.0, 0)
+	end
+	return basePos
+end
+
 local function stepHomingProjectile(proj: ActiveProjectile, now: number): boolean
 	local target = proj.homingTarget
 	local arrivesAt = proj.homingArrivesAt
@@ -770,7 +778,9 @@ local function stepHomingProjectile(proj: ActiveProjectile, now: number): boolea
 	if not char then
 		return false
 	end
-	local livePos = if target.hitPart.Parent then target.hitPart.Position else proj.pos
+	local livePos = if target.hitPart.Parent
+		then getTargetAimPosition(target, proj.pos.Y)
+		else proj.pos
 	local delta = livePos - proj.pos
 	local dir = if delta.Magnitude > 0.1 then delta.Unit else proj.vel.Unit
 	proj.homingTarget = nil
@@ -896,7 +906,8 @@ local function onThrowBall(player: Player, aimDirection: any, autoAimFlag: any, 
 		else nil
 
 	if homingTarget then
-		local toTarget = homingTarget.hitPart.Position - origin
+		local aimEndPos = getTargetAimPosition(homingTarget, origin.Y)
+		local toTarget = aimEndPos - origin
 		local dist = toTarget.Magnitude
 		local dir = if dist > 0.1 then toTarget.Unit else aimDirection.Unit
 		local travelSec = math.clamp(dist / math.max(55, speed), 0.08, 0.52)
@@ -925,7 +936,7 @@ local function onThrowBall(player: Player, aimDirection: any, autoAimFlag: any, 
 			ballTierId = profile.ballTierId,
 			ballSkin = profile.equippedBallSkin,
 			origin = origin,
-			endPos = homingTarget.hitPart.Position,
+			endPos = aimEndPos,
 			launchVel = launchVel,
 			travelSec = travelSec,
 			speed = speed,

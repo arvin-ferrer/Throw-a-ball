@@ -39,6 +39,7 @@ type VisualBall = {
 	mode: "Homing" | "Ballistic",
 	pos: Vector3,
 	vel: Vector3,
+	gravity: number,
 	startPos: Vector3,
 	serverOrigin: Vector3,
 	launchTime: number,
@@ -583,7 +584,8 @@ local function registerVisualBall(
 	staticEnd: Vector3,
 	launchVel: Vector3,
 	dur: number,
-	homingPart: BasePart?
+	homingPart: BasePart?,
+	gravityOverride: number?
 )
 	local now = os.clock()
 	activeVisualBalls[ballId] = {
@@ -592,6 +594,7 @@ local function registerVisualBall(
 		mode = if homingPart then "Homing" else "Ballistic",
 		pos = serverOrigin,
 		vel = launchVel,
+		gravity = gravityOverride or CombatLogic.BALL_GRAVITY,
 		startPos = startPos,
 		serverOrigin = serverOrigin,
 		launchTime = now,
@@ -731,6 +734,70 @@ local function playEliminationVfx(data: any)
 	end)
 end
 
+local function handleMobLaunchPacket(data: any)
+	local ballId = tonumber(data.ballId)
+	if not ballId or typeof(data.origin) ~= "Vector3" or typeof(data.launchVel) ~= "Vector3" then
+		return
+	end
+	destroyVisualBall(ballId)
+	local colArr = data.color or { 198, 72, 255 }
+	local col = Color3.fromRGB(colArr[1] or 198, colArr[2] or 72, colArr[3] or 255)
+	local ball = ProceduralModels.createMobProjectileVisual(
+		tostring(data.projectileId or "Proj_ArcaneHexOrb"),
+		col
+	)
+	local origin: Vector3 = data.origin
+	local vel: Vector3 = data.launchVel
+	local g = tonumber(data.gravity) or CombatLogic.BALL_GRAVITY
+	local maxFlight = math.clamp(tonumber(data.maxFlight) or 4.0, 0.4, 5.0)
+	ball:PivotTo(CFrame.lookAt(origin, origin + vel))
+	ball.Parent = workspace
+	registerVisualBall(ballId, ball, origin, origin, origin + vel, vel, maxFlight, nil, g)
+end
+
+local function handleMobImpactPacket(data: any)
+	local ballId = tonumber(data.ballId)
+	if ballId then
+		destroyVisualBall(ballId)
+	end
+	if typeof(data.pos) ~= "Vector3" then
+		return
+	end
+	local colArr = data.color or { 198, 72, 255 }
+	local col = Color3.fromRGB(colArr[1] or 198, colArr[2] or 72, colArr[3] or 255)
+	local aoe = math.clamp(tonumber(data.aoeRadius) or 4.0, 2.0, 10.0)
+	AnimationController.playImpactEffect(data.pos, "Mob", data.hitPlayer == true, col, nil)
+	if data.hitPlayer == true then
+		AudioCatalog.play("BossHit", 0.92, 0.32)
+	end
+	local ring = Instance.new("Part")
+	ring.Name = "MobProjSplashRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanTouch = false
+	ring.CanQuery = false
+	ring.CastShadow = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = col
+	ring.Transparency = 0.35
+	ring.Size = Vector3.new(0.22, 1.5, 1.5)
+	ring.CFrame = CFrame.new(data.pos.X, math.max(0.25, data.pos.Y), data.pos.Z)
+		* CFrame.Angles(0, 0, math.rad(90))
+	ring.Parent = workspace
+	TweenService
+		:Create(ring, TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(0.1, aoe * 2, aoe * 2),
+			Transparency = 1,
+		})
+		:Play()
+	task.delay(0.36, function()
+		if ring.Parent then
+			ring:Destroy()
+		end
+	end)
+end
+
 local function onProjectileBroadcast(data: any)
 	if type(data) ~= "table" then
 		return
@@ -742,6 +809,10 @@ local function onProjectileBroadcast(data: any)
 		handleBouncePacket(data)
 	elseif kind == "ImpactDespawn" then
 		handleImpactDespawnPacket(data)
+	elseif kind == "MobLaunch" then
+		handleMobLaunchPacket(data)
+	elseif kind == "MobImpact" then
+		handleMobImpactPacket(data)
 	elseif kind == "Elimination" then
 		playEliminationVfx(data)
 	elseif kind == "Despawn" then
@@ -777,7 +848,7 @@ local function stepVisualBalls(dt: number)
 			if entry.rolling then
 				entry.pos += Vector3.new(entry.vel.X, 0, entry.vel.Z) * stepDt
 			else
-				local g = CombatLogic.BALL_GRAVITY
+				local g = entry.gravity
 				entry.pos += entry.vel * stepDt + Vector3.new(0, -0.5 * g * stepDt * stepDt, 0)
 				entry.vel += Vector3.new(0, -g * stepDt, 0)
 			end

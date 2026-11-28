@@ -277,29 +277,63 @@ run("Emerald Meadow 10x placement, future-proof clearances and 56 spawner integr
 		"Future 10x Frostbite slot clearance >= 1500 studs"
 	)
 
-	-- Validate 56 Emerald Meadow spawners
+	-- Validate 60 Emerald Meadow spawners (56 ground + 4 perched watchtower balcony pads)
 	local emSpawns = WorldMapLayout.getBiomeMobSpawns("EmeraldMeadow")
-	assert(#emSpawns == 56, `expected 56 Emerald Meadow spawners, got {#emSpawns}`)
-	local slimeCount, boarCount = 0, 0
+	assert(#emSpawns == 60, `expected 60 Emerald Meadow spawners, got {#emSpawns}`)
+	local validTypes: { [string]: boolean } = {
+		MossSlime = true,
+		RiverSnapper = true,
+		MeadowWitch = true,
+		BrambleBoar = true,
+		RuinSentinel = true,
+		ElderMossSlime = true,
+		TidecrestSnapper = true,
+		CovenArchWitch = true,
+		ThornbackAlpha = true,
+		AncientWarden = true,
+	}
+	local countsByType: { [string]: number } = {}
+	local groundSpawns: { WorldMapLayout.MobSpawnSpec } = {}
+	local perchedCount = 0
+	local totalMobs = 0
 	local arrival = WorldMapLayout.EMERALD_MEADOW_ARRIVAL_OFFSET
 	for i, sp in ipairs(emSpawns) do
-		if sp.mobType == "MossSlime" then
-			slimeCount += 1
-		elseif sp.mobType == "BrambleBoar" then
-			boarCount += 1
-		else
-			error(`unexpected mobType: {sp.mobType}`)
+		local mt = sp.mobType or ""
+		assert(validTypes[mt], `valid Emerald Meadow mobType at {i}: {mt}`)
+		local sc = sp.spawnCount or 1
+		countsByType[mt] = (countsByType[mt] or 0) + sc
+		totalMobs += sc
+		if sp.escortMobType then
+			assert(validTypes[sp.escortMobType], `valid escort mobType at {i}`)
+			local ec = sp.escortCount or 1
+			countsByType[sp.escortMobType] = (countsByType[sp.escortMobType] or 0) + ec
+			totalMobs += ec
 		end
 		assert(
 			math.abs(sp.offset[1]) <= emSize[1] * 0.5 and math.abs(sp.offset[3]) <= emSize[3] * 0.5,
 			`spawner {i} inside valley`
 		)
 		assert(dist2D(sp.offset, arrival) >= 80, `spawner {i} clear of ArrivalPad`)
-		for j = i + 1, #emSpawns do
-			assert(dist2D(sp.offset, emSpawns[j].offset) >= 50, `spawner {i} vs {j} spacing >= 50`)
+		if sp.isPerched then
+			perchedCount += 1
+			assert(sp.offset[2] >= 29 and sp.offset[2] <= 32, `perched spawner {i} on balcony deck`)
+		else
+			table.insert(groundSpawns, sp)
 		end
 	end
-	assert(slimeCount == 28 and boarCount == 28, "balanced 28 MossSlime + 28 BrambleBoar")
+	assert(#groundSpawns == 56 and perchedCount == 4, "56 ground pads + 4 perched watchtower pads")
+	assert(totalMobs == 127, `expected 127 total Emerald Meadow pack mobs, got {totalMobs}`)
+	for mt in pairs(validTypes) do
+		assert((countsByType[mt] or 0) >= 3, `every Emerald Meadow mob type represented: {mt}`)
+	end
+	for i = 1, #groundSpawns do
+		for j = i + 1, #groundSpawns do
+			assert(
+				dist2D(groundSpawns[i].offset, groundSpawns[j].offset) >= 50,
+				`ground spawner {i} vs {j} spacing >= 50`
+			)
+		end
+	end
 	assert(
 		#WorldMapLayout.getBiomeMobSpawns("FrostbiteCavern") == WorldMapLayout.MOB_SPAWNS_PER_BIOME,
 		"FrostbiteCavern retains default 8 spawns"
