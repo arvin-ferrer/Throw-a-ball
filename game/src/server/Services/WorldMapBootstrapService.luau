@@ -925,8 +925,9 @@ local function buildPveSpawnsAndLandmarks(
 	local mobSpawns = Instance.new("Folder")
 	mobSpawns.Name = "MobSpawns"
 	mobSpawns.Parent = pve
-	for idx, off in ipairs(WorldMapLayout.MOB_SPAWN_OFFSETS) do
-		local mType = biomeCfg.mobs[((idx - 1) % #biomeCfg.mobs) + 1]
+	for idx, spec in ipairs(WorldMapLayout.getBiomeMobSpawns(biomeCfg.id)) do
+		local off = spec.offset
+		local mType = spec.mobType or biomeCfg.mobs[((idx - 1) % #biomeCfg.mobs) + 1]
 		local pad = makePart(mobSpawns, {
 			name = string.format("MobSpawn_%02d", idx),
 			size = Vector3.new(8, 0.3, 8),
@@ -943,10 +944,17 @@ local function buildPveSpawnsAndLandmarks(
 	end
 end
 
-local function buildPveFloorAndPortals(pve: Folder, vis: BiomeVisual, cx: number, cz: number)
+local function buildPveFloorAndPortals(
+	pve: Folder,
+	biomeId: string,
+	vis: BiomeVisual,
+	cx: number,
+	cz: number
+)
+	local arrOff, retOff = WorldMapLayout.getBiomeArrivalAndReturnOffsets(biomeId)
 	makePart(pve, {
 		name = "PvEGround",
-		size = vec3(WorldMapLayout.BIOME_PVE_SIZE),
+		size = vec3(WorldMapLayout.getBiomePveSize(biomeId)),
 		cf = CFrame.new(cx, -2, cz),
 		color = rgb(vis.ground),
 		material = vis.groundMat,
@@ -954,7 +962,10 @@ local function buildPveFloorAndPortals(pve: Folder, vis: BiomeVisual, cx: number
 	makePart(pve, {
 		name = "ArrivalPad",
 		size = Vector3.new(12, 0.5, 12),
-		cf = CFrame.lookAt(Vector3.new(cx, 0.25, cz + 96), Vector3.new(cx, 0.25, cz)),
+		cf = CFrame.lookAt(
+			Vector3.new(cx + arrOff[1], arrOff[2], cz + arrOff[3]),
+			Vector3.new(cx, arrOff[2], cz)
+		),
 		color = rgb(vis.accent),
 		material = Enum.Material.Neon,
 		tags = { "BiomeArrivalPad" },
@@ -962,7 +973,10 @@ local function buildPveFloorAndPortals(pve: Folder, vis: BiomeVisual, cx: number
 	local ret = makePart(pve, {
 		name = "ReturnPortal",
 		size = Vector3.new(10, 10, 2.5),
-		cf = CFrame.lookAt(Vector3.new(cx, 5.2, cz + 114), Vector3.new(cx, 5.2, cz)),
+		cf = CFrame.lookAt(
+			Vector3.new(cx + retOff[1], retOff[2], cz + retOff[3]),
+			Vector3.new(cx, retOff[2], cz)
+		),
 		color = Color3.fromRGB(96, 165, 250),
 		material = Enum.Material.Neon,
 		canCollide = false,
@@ -993,16 +1007,18 @@ local function buildBiomePvE(
 	pve.Parent = biomeFolder
 
 	local cx, _, cz = spatial.pveCenter[1], spatial.pveCenter[2], spatial.pveCenter[3]
-	buildPveFloorAndPortals(pve, vis, cx, cz)
+	buildPveFloorAndPortals(pve, biomeCfg.id, vis, cx, cz)
 	buildPveSpawnsAndLandmarks(pve, biomeCfg, vis, cx, cz)
+	local pveSz = WorldMapLayout.getBiomePveSize(biomeCfg.id)
+	local rimRadius = math.max(WorldMapLayout.BIOME_RIM_RADIUS, math.max(pveSz[1], pveSz[3]) * 0.5)
 	buildRingWalls(
 		pve,
 		"RimWall",
 		spatial.pveCenter,
-		WorldMapLayout.BIOME_RIM_RADIUS,
+		rimRadius,
 		WorldMapLayout.BIOME_WALL_COUNT,
 		24,
-		38,
+		math.max(38, math.ceil((2 * math.pi * rimRadius) / WorldMapLayout.BIOME_WALL_COUNT) + 6),
 		4,
 		rgb(vis.wall),
 		vis.wallMat

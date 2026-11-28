@@ -222,11 +222,11 @@ run("Hub, Vault, Biomes and Boss Arenas have zero AABB overlap", function()
 		{ name = "Vault", minX = vb.minX, maxX = vb.maxX, minZ = vb.minZ, maxZ = vb.maxZ }
 	)
 
-	local pveHalf = WorldMapLayout.BIOME_PVE_SIZE[1] * 0.5
 	local arenaHalf = WorldMapLayout.ARENA_FLOOR_DIAMETER * 0.5
 	for _, biomeId in ipairs({ "EmeraldMeadow", "FrostbiteCavern", "MoltenCaldera" }) do
 		local sp = WorldMapLayout.getBiomeSpatial(biomeId)
-		addBox(`{biomeId}_PvE`, sp.pveCenter[1], sp.pveCenter[3], pveHalf, pveHalf)
+		local pveSz = WorldMapLayout.getBiomePveSize(biomeId)
+		addBox(`{biomeId}_PvE`, sp.pveCenter[1], sp.pveCenter[3], pveSz[1] * 0.5, pveSz[3] * 0.5)
 		addBox(`{biomeId}_Arena`, sp.arenaCenter[1], sp.arenaCenter[3], arenaHalf, arenaHalf)
 	end
 	for i = 1, #boxes do
@@ -239,6 +239,71 @@ run("Hub, Vault, Biomes and Boss Arenas have zero AABB overlap", function()
 			assert(not overlap, `zone overlap: {a.name} vs {b.name}`)
 		end
 	end
+end)
+
+run("Emerald Meadow 10x placement, future-proof clearances and 56 spawner integrity", function()
+	local em = WorldMapLayout.getBiomeSpatial("EmeraldMeadow")
+	assert(
+		em.pveCenter[1] == 2000 and em.pveCenter[2] == 0 and em.pveCenter[3] == -3500,
+		"EmeraldMeadow moved to (2000, 0, -3500)"
+	)
+	assert(
+		em.arenaCenter[1] == 2000 and em.arenaCenter[2] == 0 and em.arenaCenter[3] == 1200,
+		"EmeraldMeadow BossPvPArena stays locked at (2000, 0, 1200)"
+	)
+
+	local emSize = WorldMapLayout.getBiomePveSize("EmeraldMeadow")
+	local areaApprox = emSize[1] * emSize[3]
+	assert(areaApprox >= 2000000, `EmeraldMeadow 10x footprint area ({areaApprox}) >= 2,000,000`)
+
+	-- Verify >= 1,500 stud clearance from Hub, Vault, BossPvPArena, current Frostbite, and reserved 10x slots
+	local rimHX = WorldMapLayout.EMERALD_MEADOW_CLIFF_RIM_SIZE[1] * 0.5
+	local rimHZ = WorldMapLayout.EMERALD_MEADOW_CLIFF_RIM_SIZE[3] * 0.5
+	local emMinX, emMaxX = em.pveCenter[1] - rimHX, em.pveCenter[1] + rimHX
+	local emMinZ, emMaxZ = em.pveCenter[3] - rimHZ, em.pveCenter[3] + rimHZ
+
+	local function boxGap(minX: number, maxX: number, minZ: number, maxZ: number): number
+		local dx = math.max(0, math.max(minX - emMaxX, emMinX - maxX))
+		local dz = math.max(0, math.max(minZ - emMaxZ, emMinZ - maxZ))
+		return math.sqrt(dx * dx + dz * dz)
+	end
+
+	assert(boxGap(-380, 380, -380, 380) >= 1500, "Hub clearance >= 1500 studs")
+	assert(boxGap(-60, 60, -960, -840) >= 1500, "VaultHeist clearance >= 1500 studs")
+	assert(boxGap(1875, 2125, 1075, 1325) >= 3500, "BossPvPArena clearance >= 3500 studs")
+	assert(boxGap(3740, 4260, -260, 260) >= 1500, "Current Frostbite clearance >= 1500 studs")
+	assert(
+		boxGap(5500 - rimHX, 5500 + rimHX, -3500 - rimHZ, -3500 + rimHZ) >= 1500,
+		"Future 10x Frostbite slot clearance >= 1500 studs"
+	)
+
+	-- Validate 56 Emerald Meadow spawners
+	local emSpawns = WorldMapLayout.getBiomeMobSpawns("EmeraldMeadow")
+	assert(#emSpawns == 56, `expected 56 Emerald Meadow spawners, got {#emSpawns}`)
+	local slimeCount, boarCount = 0, 0
+	local arrival = WorldMapLayout.EMERALD_MEADOW_ARRIVAL_OFFSET
+	for i, sp in ipairs(emSpawns) do
+		if sp.mobType == "MossSlime" then
+			slimeCount += 1
+		elseif sp.mobType == "BrambleBoar" then
+			boarCount += 1
+		else
+			error(`unexpected mobType: {sp.mobType}`)
+		end
+		assert(
+			math.abs(sp.offset[1]) <= emSize[1] * 0.5 and math.abs(sp.offset[3]) <= emSize[3] * 0.5,
+			`spawner {i} inside valley`
+		)
+		assert(dist2D(sp.offset, arrival) >= 80, `spawner {i} clear of ArrivalPad`)
+		for j = i + 1, #emSpawns do
+			assert(dist2D(sp.offset, emSpawns[j].offset) >= 50, `spawner {i} vs {j} spacing >= 50`)
+		end
+	end
+	assert(slimeCount == 28 and boarCount == 28, "balanced 28 MossSlime + 28 BrambleBoar")
+	assert(
+		#WorldMapLayout.getBiomeMobSpawns("FrostbiteCavern") == WorldMapLayout.MOB_SPAWNS_PER_BIOME,
+		"FrostbiteCavern retains default 8 spawns"
+	)
 end)
 
 run("Biome lookup errors on unknown ID and mob/landmark offsets stay inside rim", function()
