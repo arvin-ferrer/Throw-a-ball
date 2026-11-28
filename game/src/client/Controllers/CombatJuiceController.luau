@@ -677,7 +677,10 @@ local function stepCameraAndHalos(dt: number)
 			sample.intensity > 0
 			and traumaState.enabled
 			and not GuiService.ReducedMotionEnabled
-			and cam.CameraType ~= Enum.CameraType.Scriptable
+			and (
+				cam.CameraType ~= Enum.CameraType.Scriptable
+				or localPlayer:GetAttribute("LockOnActive") == true
+			)
 		then
 			cam.CFrame = cam.CFrame
 				* CFrame.new(sample.offsetX, sample.offsetY, 0)

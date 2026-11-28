@@ -2,8 +2,8 @@
 --[[
 	CombatService.luau
 	Server-authoritative ball throwing with:
-	- Real stepped ballistic gravity physics for manual throws (arrival-timed impact & surface normal)
-	- Guaranteed-hit server-validated Homing Auto-Aim when Auto-Aim is enabled (tracks Boss/PvP/Mob/Target)
+	- Real stepped ballistic gravity physics for all combat throws (free-aim & Souls-like lock-on)
+	- Pad-validated Training Range auto-fire on the player's own Hub FiringPad
 	- Active Follower Ball Perks (all 13 perk types), Dash cooldown, and strict PvP_EggScramble safety guard.
 ]]
 
@@ -418,92 +418,31 @@ local function collectTrainingCandidates(
 	end
 end
 
-local function collectBossRoomCandidates(
-	player: Player,
-	activeBiome: string,
-	candidates: { CombatLogic.AutoAimCandidate },
-	resolvedById: { [string]: ResolvedTarget }
-)
-	local boss = BossAIService.getActiveBoss(activeBiome)
-	if boss and boss.model.PrimaryPart then
-		local bp = boss.model.PrimaryPart
-		resolvedById.boss = { hitPart = bp, hitKind = "Boss", boss = boss }
-		table.insert(candidates, {
-			id = "boss",
-			kind = "Boss",
-			x = bp.Position.X,
-			y = bp.Position.Y,
-			z = bp.Position.Z,
-		})
-	end
-	for _, enemy in ipairs(Players:GetPlayers()) do
-		if enemy ~= player and ArenaCycleService.canDealPvPDamage(player, enemy) then
-			local eChar = enemy.Character
-			local eHrp = if eChar then eChar:FindFirstChild("HumanoidRootPart") else nil
-			local eHum = if eChar then eChar:FindFirstChildOfClass("Humanoid") else nil
-			if eHrp and eHrp:IsA("BasePart") and eHum and eHum.Health > 0 then
-				local id = `pvp_{enemy.UserId}`
-				resolvedById[id] = { hitPart = eHrp, hitKind = "PvP", victim = enemy }
-				table.insert(candidates, {
-					id = id,
-					kind = "PvP",
-					x = eHrp.Position.X,
-					y = eHrp.Position.Y,
-					z = eHrp.Position.Z,
-				})
-			end
-		end
-	end
-end
-
-local function collectBiomeMobCandidates(
-	activeBiome: string,
-	origin: Vector3,
-	maxRange: number,
-	candidates: { CombatLogic.AutoAimCandidate },
-	resolvedById: { [string]: ResolvedTarget }
-)
-	for i, mob in ipairs(BossAIService.getNearbyMobs(activeBiome, origin, maxRange, nil)) do
-		if mob.model and mob.model.PrimaryPart then
-			local mp = mob.model.PrimaryPart
-			local id = `mob_{i}`
-			resolvedById[id] = { hitPart = mp, hitKind = "Mob", mob = mob }
-			table.insert(candidates, {
-				id = id,
-				kind = "Mob",
-				x = mp.Position.X,
-				y = mp.Position.Y,
-				z = mp.Position.Z,
-			})
-		end
-	end
-end
-
-local function resolveAutoAimTarget(
+local function resolveTrainingPadTarget(
 	player: Player,
 	origin: Vector3,
 	targetHint: any
 ): ResolvedTarget?
+	local zone = tostring(player:GetAttribute("Zone") or "Hub")
+	if zone ~= "Hub" or not PlotService.isPlayerOnAssignedPad(player) then
+		return nil
+	end
 	local maxRange = CombatLogic.AUTO_AIM_MAX_RANGE
 	if typeof(targetHint) == "Instance" and targetHint:IsA("BasePart") and targetHint.Parent then
 		if (targetHint.Position - origin).Magnitude <= maxRange then
 			local hinted = classifyHitPart(player, targetHint)
-			if hinted and isTargetEligibleForPlayer(player, hinted) then
+			if
+				hinted
+				and (hinted.hitKind == "Target" or hinted.hitKind == "GoldTarget")
+				and isTargetEligibleForPlayer(player, hinted)
+			then
 				return hinted
 			end
 		end
 	end
-	local zone = tostring(player:GetAttribute("Zone") or "Hub")
-	local activeBiome = tostring(player:GetAttribute("ActiveBiome") or "")
 	local candidates: { CombatLogic.AutoAimCandidate } = {}
 	local resolvedById: { [string]: ResolvedTarget } = {}
-	if zone == "Hub" and PlotService.isPlayerOnAssignedPad(player) then
-		collectTrainingCandidates(player, candidates, resolvedById)
-	elseif zone == "LockedBossPvP" and activeBiome ~= "" then
-		collectBossRoomCandidates(player, activeBiome, candidates, resolvedById)
-	elseif zone == "BiomePvE" and activeBiome ~= "" then
-		collectBiomeMobCandidates(activeBiome, origin, maxRange, candidates, resolvedById)
-	end
+	collectTrainingCandidates(player, candidates, resolvedById)
 	local chosen =
 		CombatLogic.selectAutoAimTarget(origin.X, origin.Y, origin.Z, candidates, maxRange)
 	return if chosen then resolvedById[chosen.id] else nil
@@ -900,9 +839,9 @@ local function onThrowBall(player: Player, aimDirection: any, autoAimFlag: any, 
 
 	nextBallId += 1
 	local ballId = nextBallId
-	local wantsAutoAim = autoAimFlag == true
-	local homingTarget = if wantsAutoAim
-		then resolveAutoAimTarget(player, origin, targetHint)
+	local wantsTrainingHoming = autoAimFlag == true
+	local homingTarget = if wantsTrainingHoming
+		then resolveTrainingPadTarget(player, origin, targetHint)
 		else nil
 
 	if homingTarget then

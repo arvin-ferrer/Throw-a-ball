@@ -88,10 +88,10 @@ local afkBadgeFrame: Frame? = nil
 
 -- Bottom-right combat thumb-arc
 local actionHolder: Frame? = nil
-local autoAimBtn: TextButton? = nil
-local autoAimReticle: Frame? = nil
-local autoAimTitleLbl: TextLabel? = nil
-local autoAimStateLbl: TextLabel? = nil
+local lockOnBtn: TextButton? = nil
+local lockOnReticle: Frame? = nil
+local lockOnTitleLbl: TextLabel? = nil
+local lockOnStateLbl: TextLabel? = nil
 local dashBtn: TextButton? = nil
 local dashIconFrame: Frame? = nil
 local dashTextLbl: TextLabel? = nil
@@ -103,7 +103,7 @@ local throwHintLbl: TextLabel? = nil
 local jumpActionBtn: TextButton? = nil
 local jumpIconFrame: Frame? = nil
 local jumpTextLbl: TextLabel? = nil
-local isAutoAimOn = false
+local isLockOnActive = false
 local isJumpHeld = false
 local jumpPulseUntil = 0
 local lastIsTouch = UserInputService.PreferredInput == Enum.PreferredInput.Touch
@@ -114,7 +114,7 @@ local isDashOnCooldown = false
 local throwCallback: (() -> ())? = nil
 local throwHoldCallback: ((boolean) -> ())? = nil
 local dashCallback: (() -> ())? = nil
-local toggleAutoAimCallback: (() -> ())? = nil
+local toggleLockOnCallback: (() -> ())? = nil
 local openModalCallback: ((string) -> ())? = nil
 local openDailyCallback: (() -> ())? = nil
 local togglePingCallback: (() -> ())? = nil
@@ -875,36 +875,36 @@ local function setAimButtonPalette(btn: TextButton, enabled: boolean)
 	Theme.addGradient(btn, top, bottom, 90)
 end
 
-local function buildAutoAimButton(holder: Frame)
+local function buildLockOnButton(holder: Frame)
 	local btn =
-		makeCombatButton(holder, "AutoAimBtn", UDim2.fromOffset(88, 48), UDim2.new(1, -66, 1, -12))
+		makeCombatButton(holder, "LockOnBtn", UDim2.fromOffset(88, 48), UDim2.new(1, -66, 1, -12))
 	skinCartoonButton(btn, Theme.Colors.CodexPurpleTop, Theme.Colors.CodexPurpleBot, 12)
 	local reticle = HudIcons.createReticleIcon(btn, 24, Theme.Colors.Danger)
 	reticle.AnchorPoint = Vector2.new(0, 0.5)
 	reticle.Position = UDim2.new(0, 8, 0.5, 0)
-	autoAimReticle = reticle
+	lockOnReticle = reticle
 
-	autoAimTitleLbl = makeControlCaption(
+	lockOnTitleLbl = makeControlCaption(
 		btn,
-		"AimTitle",
-		"AUTO AIM",
+		"LockTitle",
+		"LOCK ON",
 		UDim2.new(1, -38, 0, 17),
 		UDim2.fromOffset(36, 6),
 		10
 	)
-	autoAimStateLbl = makeControlCaption(
+	lockOnStateLbl = makeControlCaption(
 		btn,
-		"AimState",
+		"LockState",
 		"OFF",
 		UDim2.new(1, -38, 0, 17),
 		UDim2.fromOffset(36, 23),
 		12,
 		Theme.Colors.Danger
 	)
-	autoAimBtn = btn
+	lockOnBtn = btn
 	btn.Activated:Connect(function()
-		if toggleAutoAimCallback then
-			toggleAutoAimCallback()
+		if toggleLockOnCallback then
+			toggleLockOnCallback()
 		end
 	end)
 end
@@ -1070,7 +1070,7 @@ local function buildCombatButtons(gui: ScreenGui)
 	holder.Parent = gui
 	actionHolder = holder
 
-	buildAutoAimButton(holder)
+	buildLockOnButton(holder)
 	buildDashButton(holder)
 	buildShootButton(holder)
 	buildJumpButton(holder)
@@ -1219,8 +1219,8 @@ local function applyDashReadyLayout()
 end
 
 local function applyCombatButtonTypography(compact: boolean, isTouch: boolean)
-	if autoAimTitleLbl then
-		autoAimTitleLbl.Text = if isTouch then "AUTO AIM" else "AUTO [F]"
+	if lockOnTitleLbl then
+		lockOnTitleLbl.Text = if isTouch then "LOCK ON" else "LOCK [F/MMB]"
 	end
 	if shootIconFrame then
 		local sIc = if compact then 24 else 28
@@ -1252,7 +1252,7 @@ local function applyCombatButtonTypography(compact: boolean, isTouch: boolean)
 end
 
 local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
-	if not (actionHolder and throwBtn and dashBtn and autoAimBtn and jumpActionBtn) then
+	if not (actionHolder and throwBtn and dashBtn and lockOnBtn and jumpActionBtn) then
 		return
 	end
 	local compact = m.isCompact
@@ -1269,8 +1269,8 @@ local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		throwBtn.Position =
 			UDim2.new(1, if compact then -68 else -84, 1, if compact then -68 else -85)
-		autoAimBtn.Size = UDim2.fromOffset(if compact then 88 else 112, 48)
-		autoAimBtn.Position =
+		lockOnBtn.Size = UDim2.fromOffset(if compact then 88 else 112, 48)
+		lockOnBtn.Position =
 			UDim2.new(1, if compact then -66 else -82, 1, if compact then -12 else -21)
 	else
 		local dS = if compact then 56 else 68
@@ -1280,8 +1280,8 @@ local function applyCombatButtonsResponsive(m: Theme.LayoutMetrics)
 		throwBtn.Size = UDim2.fromOffset(tS, tS)
 		throwBtn.Position =
 			UDim2.new(1, if compact then -24 else -28, 1, if compact then -74 else -92)
-		autoAimBtn.Size = UDim2.fromOffset(if compact then 104 else 122, 48)
-		autoAimBtn.Position =
+		lockOnBtn.Size = UDim2.fromOffset(if compact then 112 else 132, 48)
+		lockOnBtn.Position =
 			UDim2.new(1, if compact then -68 else -82, 1, if compact then -14 else -22)
 	end
 	applyCombatButtonTypography(compact, m.isTouch)
@@ -1512,6 +1512,7 @@ function HudGui.mount(callbacks: {
 	onThrow: () -> (),
 	onThrowHold: ((boolean) -> ())?,
 	onDash: () -> (),
+	onToggleLockOn: (() -> ())?,
 	onToggleAutoAim: (() -> ())?,
 	onOpenModal: (string) -> (),
 	onOpenDaily: (() -> ())?,
@@ -1522,7 +1523,7 @@ function HudGui.mount(callbacks: {
 	throwCallback = callbacks.onThrow
 	throwHoldCallback = callbacks.onThrowHold
 	dashCallback = callbacks.onDash
-	toggleAutoAimCallback = callbacks.onToggleAutoAim
+	toggleLockOnCallback = callbacks.onToggleLockOn or callbacks.onToggleAutoAim
 	openModalCallback = callbacks.onOpenModal
 	openDailyCallback = callbacks.onOpenDaily
 	togglePingCallback = callbacks.onTogglePing
@@ -1659,16 +1660,16 @@ function HudGui.setAfkTrainingActive(active: boolean)
 	end
 end
 
-function HudGui.setAutoAimEnabled(enabled: boolean)
-	isAutoAimOn = enabled
-	if not autoAimBtn or not autoAimStateLbl then
+function HudGui.setLockOnActive(active: boolean)
+	isLockOnActive = active
+	if not lockOnBtn or not lockOnStateLbl then
 		return
 	end
-	local stateColor = if enabled then Theme.Colors.Emerald else Theme.Colors.Danger
-	autoAimStateLbl.Text = if enabled then "ON" else "OFF"
-	autoAimStateLbl.TextColor3 = stateColor
-	HudIcons.setReticleColor(autoAimReticle, stateColor)
-	setAimButtonPalette(autoAimBtn, enabled)
+	local stateColor = if active then Theme.Colors.Emerald else Theme.Colors.Danger
+	lockOnStateLbl.Text = if active then "LOCKED" else "OFF"
+	lockOnStateLbl.TextColor3 = stateColor
+	HudIcons.setReticleColor(lockOnReticle, stateColor)
+	setAimButtonPalette(lockOnBtn, active)
 end
 
 function HudGui.setDashCooldown(remaining: number)
@@ -1715,8 +1716,8 @@ function HudGui.getScreenGui(): ScreenGui?
 	return hudScreen
 end
 
-function HudGui.isAutoAimOn(): boolean
-	return isAutoAimOn
+function HudGui.isLockOnActive(): boolean
+	return isLockOnActive
 end
 
 return HudGui

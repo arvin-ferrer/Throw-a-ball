@@ -1,8 +1,8 @@
 --!strict
 --[[
 	BallThrowController.luau
-	Client movement, 100% FREE AFK Auto-Training Range, Toggleable Guaranteed-Hit Auto-Aim,
-	and real 60 FPS ballistic/homing ball physics with hand launch & post-impact bounce rebound!
+	Client movement, 100% FREE AFK Auto-Training Range, Souls-Like Lock-On Aim Integration,
+	and real 60 FPS ballistic ball physics with hand launch & post-impact bounce rebound!
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -13,9 +13,11 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local EconomyConfigs = require(Shared.Configs.EconomyConfigs)
 local MonetizationConfigs = require(Shared.Configs.MonetizationConfigs)
 local CombatLogic = require(Shared.Utils.CombatLogic)
 local EconomyLogic = require(Shared.Utils.EconomyLogic)
+local LockOnLogic = require(Shared.Utils.LockOnLogic)
 local MathUtil = require(Shared.Utils.MathUtil)
 local ProceduralModels = require(Shared.Utils.ProceduralModels)
 local AudioCatalog = require(Shared.Utils.AudioCatalog)
@@ -23,6 +25,7 @@ local Remotes = require(Shared.Net.Remotes)
 
 local HudGui = require(script.Parent.Parent.UI.HudGui)
 local AnimationController = require(script.Parent.AnimationController)
+local LockOnController = require(script.Parent.LockOnController)
 
 local BallThrowController = {}
 
@@ -61,9 +64,6 @@ local lastDashAt = 0
 local lastThrowAt = 0
 local isHoldingFire = false
 local afkTargetCycle = 0
-local autoAimEnabled = UserInputService.PreferredInput == Enum.PreferredInput.Touch
-local currentLockedPart: BasePart? = nil
-local lockReticleGui: BillboardGui? = nil
 local activeVisualBalls: { [number]: VisualBall } = {}
 local crosshairRayParams = RaycastParams.new()
 crosshairRayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -134,150 +134,6 @@ local function pickAfkTrainingTarget(pad: BasePart, hasTurboPass: boolean): Base
 	end)
 	afkTargetCycle = (afkTargetCycle % #statics) + 1
 	return statics[afkTargetCycle]
-end
-
-local function ensureReticleGui(): BillboardGui
-	if lockReticleGui and lockReticleGui.Parent then
-		return lockReticleGui
-	end
-	local bb = Instance.new("BillboardGui")
-	bb.Name = "AutoAimReticle"
-	bb.Size = UDim2.fromOffset(92, 92)
-	bb.AlwaysOnTop = true
-	bb.MaxDistance = 200
-
-	local lbl = Instance.new("TextLabel")
-	lbl.Name = "Mark"
-	lbl.BackgroundTransparency = 1
-	lbl.Size = UDim2.fromScale(1, 1)
-	lbl.Font = Enum.Font.FredokaOne
-	lbl.TextScaled = true
-	lbl.TextColor3 = Color3.fromRGB(52, 255, 168)
-	lbl.TextStrokeTransparency = 0.15
-	lbl.Text = "◎"
-	lbl.AutoLocalize = false
-	lbl.Parent = bb
-
-	local tag = Instance.new("TextLabel")
-	tag.Name = "Sub"
-	tag.BackgroundTransparency = 1
-	tag.Position = UDim2.fromScale(0, 0.72)
-	tag.Size = UDim2.fromScale(1, 0.28)
-	tag.Font = Enum.Font.GothamBold
-	tag.TextScaled = true
-	tag.TextColor3 = Color3.fromRGB(250, 204, 21)
-	tag.TextStrokeTransparency = 0.2
-	tag.Text = "LOCKED"
-	tag.AutoLocalize = false
-	tag.Parent = bb
-
-	lockReticleGui = bb
-	return bb
-end
-
-local function updateLockReticle(targetPart: BasePart?)
-	currentLockedPart = targetPart
-	if not autoAimEnabled or not targetPart or not targetPart.Parent then
-		if lockReticleGui then
-			lockReticleGui.Adornee = nil
-			lockReticleGui.Parent = nil
-		end
-		return
-	end
-	local bb = ensureReticleGui()
-	bb.Adornee = targetPart
-	bb.Parent = targetPart
-end
-
-local function collectBiomeCandidates(
-	zone: string,
-	activeBiome: string,
-	candidates: { CombatLogic.AutoAimCandidate },
-	partById: { [string]: BasePart }
-)
-	local map = workspace:FindFirstChild("BallBrawl_Map_v2")
-	if map then
-		local idx = 0
-		for _, desc in ipairs(map:GetDescendants()) do
-			if desc:IsA("Model") and desc.PrimaryPart then
-				local kind = desc:GetAttribute("EntityKind")
-				local biome = tostring(desc:GetAttribute("BiomeId") or "")
-				if
-					(kind == "PvEMob" or kind == "BiomeBoss")
-					and (activeBiome == "" or biome == activeBiome)
-				then
-					idx += 1
-					local id = `ent_{idx}`
-					local pp = desc.PrimaryPart
-					partById[id] = pp
-					table.insert(candidates, {
-						id = id,
-						kind = if kind == "BiomeBoss" then "Boss" else "Mob",
-						x = pp.Position.X,
-						y = pp.Position.Y,
-						z = pp.Position.Z,
-					})
-				end
-			end
-		end
-	end
-	if zone == "LockedBossPvP" then
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if
-				plr ~= localPlayer
-				and plr:GetAttribute("Zone") == "LockedBossPvP"
-				and plr.Character
-			then
-				local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-				local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-				if hrp and hrp:IsA("BasePart") and hum and hum.Health > 0 then
-					local id = `plr_{plr.UserId}`
-					partById[id] = hrp
-					table.insert(candidates, {
-						id = id,
-						kind = "PvP",
-						x = hrp.Position.X,
-						y = hrp.Position.Y,
-						z = hrp.Position.Z,
-					})
-				end
-			end
-		end
-	end
-end
-
-local function findAutoAimTarget(origin: Vector3): BasePart?
-	local zone = tostring(localPlayer:GetAttribute("Zone") or "Hub")
-	local activeBiome = tostring(localPlayer:GetAttribute("ActiveBiome") or "")
-	local candidates: { CombatLogic.AutoAimCandidate } = {}
-	local partById: { [string]: BasePart } = {}
-
-	if zone == "Hub" then
-		local pad = findMyFiringPad()
-		local tr = if pad then pad.Parent else nil
-		if tr then
-			for _, child in ipairs(tr:GetChildren()) do
-				if child:IsA("BasePart") then
-					local tk = child:GetAttribute("TargetKind")
-					if tk == "Static" or tk == "MovingGold" then
-						partById[child.Name] = child
-						table.insert(candidates, {
-							id = child.Name,
-							kind = if tk == "MovingGold" then "GoldTarget" else "Target",
-							x = child.Position.X,
-							y = child.Position.Y,
-							z = child.Position.Z,
-						})
-					end
-				end
-			end
-		end
-	else
-		collectBiomeCandidates(zone, activeBiome, candidates, partById)
-	end
-
-	local chosen = CombatLogic.selectAutoAimTarget(origin.X, origin.Y, origin.Z, candidates)
-	return if chosen then partById[chosen.id] else nil
 end
 
 local function isSightlineTargetPart(part: BasePart): boolean
@@ -374,26 +230,37 @@ local function executeThrow(overrideTarget: BasePart?, isAfkShot: boolean)
 	lastThrowAt = now
 
 	local origin = hrp.Position + Vector3.new(0, 1.4, 0)
-	local useHoming = isAfkShot or autoAimEnabled
-	local lockedPart: BasePart? = overrideTarget
-	if not lockedPart and useHoming then
-		lockedPart = findAutoAimTarget(origin)
-		updateLockReticle(lockedPart)
-	end
-
+	local useHoming = isAfkShot
+	local lockedPart: BasePart? = if isAfkShot then overrideTarget else nil
 	local aimDir: Vector3
-	if lockedPart and lockedPart.Parent then
+
+	if isAfkShot and lockedPart and lockedPart.Parent then
 		local delta = lockedPart.Position - origin
 		aimDir = if delta.Magnitude > 0.1 then delta.Unit else hrp.CFrame.LookVector
-		if not isAfkShot then
-			local lookFlat =
-				Vector3.new(lockedPart.Position.X, hrp.Position.Y, lockedPart.Position.Z)
+	else
+		local _, _, lockWorldPos = LockOnController.getLockedTarget()
+		if lockWorldPos then
+			local ballTierId = tostring(localPlayer:GetAttribute("BallTier") or "RubberBall")
+			local ballTier = EconomyConfigs.getBallTierById(ballTierId)
+				or EconomyConfigs.BALL_TIERS[1]
+			local projSpeed = MathUtil.computeProjectileSpeed(ballTier.projectileSpeed, speedStat)
+			local ax, ay, az = LockOnLogic.solveLockedBallisticAimDirection(
+				origin.X,
+				origin.Y,
+				origin.Z,
+				lockWorldPos.X,
+				lockWorldPos.Y,
+				lockWorldPos.Z,
+				projSpeed
+			)
+			aimDir = Vector3.new(ax, ay, az)
+			local lookFlat = Vector3.new(lockWorldPos.X, hrp.Position.Y, lockWorldPos.Z)
 			if (lookFlat - hrp.Position).Magnitude > 0.5 then
 				hrp.CFrame = hrp.CFrame:Lerp(CFrame.lookAt(hrp.Position, lookFlat), 0.72)
 			end
+		else
+			aimDir = castCrosshairSightline(cam, origin)
 		end
-	else
-		aimDir = castCrosshairSightline(cam, origin)
 	end
 
 	AnimationController.playThrowAnim(localPlayer)
@@ -410,23 +277,6 @@ function BallThrowController.setHoldingFire(holding: boolean)
 	if holding then
 		BallThrowController.fireThrow()
 	end
-end
-
-function BallThrowController.setAutoAimEnabled(enabled: boolean)
-	autoAimEnabled = enabled
-	localPlayer:SetAttribute("AutoAimEnabled", enabled)
-	HudGui.setAutoAimEnabled(enabled)
-	if not enabled then
-		updateLockReticle(nil)
-	end
-end
-
-function BallThrowController.toggleAutoAim()
-	BallThrowController.setAutoAimEnabled(not autoAimEnabled)
-end
-
-function BallThrowController.isAutoAimEnabled(): boolean
-	return autoAimEnabled
 end
 
 function BallThrowController.triggerDash()
@@ -919,7 +769,6 @@ local function onBossTelegraph(data: any)
 end
 
 function BallThrowController.start()
-	BallThrowController.setAutoAimEnabled(autoAimEnabled)
 	RunService.RenderStepped:Connect(stepVisualBalls)
 	local remotes = Remotes.waitClient()
 	remotes.ProjectileBroadcast.OnClientEvent:Connect(onProjectileBroadcast)
@@ -953,8 +802,6 @@ function BallThrowController.start()
 			or input.KeyCode == Enum.KeyCode.ButtonR1
 		then
 			BallThrowController.triggerDash()
-		elseif input.KeyCode == Enum.KeyCode.F or input.KeyCode == Enum.KeyCode.ButtonY then
-			BallThrowController.toggleAutoAim()
 		elseif
 			input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.KeyCode == Enum.KeyCode.ButtonR2
@@ -989,12 +836,14 @@ function BallThrowController.start()
 		if nearPad ~= isOnTrainingPad then
 			isOnTrainingPad = nearPad
 			padLocked = nearPad
+			LockOnController.setLockSuppressed(padLocked)
 			remotes.SetTrainingStance:FireServer(padLocked)
 			HudGui.setAfkTrainingActive(padLocked)
 			AnimationController.setTrainingStance(padLocked)
 		end
 		if padLocked and hum.Jump then
 			padLocked = false
+			LockOnController.setLockSuppressed(false)
 			remotes.SetTrainingStance:FireServer(false)
 			HudGui.setAfkTrainingActive(false)
 			AnimationController.setTrainingStance(false)
@@ -1010,15 +859,6 @@ function BallThrowController.start()
 				base *= 0.80
 			end
 			hum.WalkSpeed = base
-		end
-
-		if autoAimEnabled and not padLocked then
-			local lockedPart = findAutoAimTarget(hrp.Position + Vector3.new(0, 1.4, 0))
-			if lockedPart ~= currentLockedPart then
-				updateLockReticle(lockedPart)
-			end
-		elseif currentLockedPart ~= nil then
-			updateLockReticle(nil)
 		end
 
 		if padLocked and pad then

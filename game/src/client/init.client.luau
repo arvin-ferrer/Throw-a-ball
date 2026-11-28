@@ -20,6 +20,7 @@ local HubModalsGui = require(UI.HubModalsGui)
 local ShopCodexGui = require(UI.ShopCodexGui)
 
 local BallThrowController = require(Controllers.BallThrowController)
+local LockOnController = require(Controllers.LockOnController)
 local PlotCashController = require(Controllers.PlotCashController)
 local ArenaHUDController = require(Controllers.ArenaHUDController)
 local HatchVFXController = require(Controllers.HatchVFXController)
@@ -74,7 +75,7 @@ HudGui.mount({
 	onThrow = BallThrowController.fireThrow,
 	onThrowHold = BallThrowController.setHoldingFire,
 	onDash = BallThrowController.triggerDash,
-	onToggleAutoAim = BallThrowController.toggleAutoAim,
+	onToggleLockOn = LockOnController.toggleLockOn,
 	onOpenModal = openPanel,
 	onOpenDaily = function()
 		local state = ViralSocialController.getSyncState()
@@ -95,6 +96,7 @@ ShopCodexGui.mount()
 ArenaHUDController.setServiceModalHandler(openPanel)
 
 AnimationController.start()
+LockOnController.start()
 BallThrowController.start()
 PlotCashController.start()
 ArenaHUDController.start()
