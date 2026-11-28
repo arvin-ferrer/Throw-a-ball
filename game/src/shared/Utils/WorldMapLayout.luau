@@ -63,12 +63,29 @@ export type BiomeSpatialSpec = {
 	arenaCenter: Vec3,
 }
 
+export type MobSpawnSpec = {
+	offset: Vec3,
+	mobType: string?,
+}
+
 local WorldMapLayout = {}
 
 WorldMapLayout.MAP_NAME = "BallBrawl_Map_v2"
-WorldMapLayout.MAP_VERSION = "2.0-detailed"
+WorldMapLayout.MAP_VERSION = "2.1-emerald-10x"
 WorldMapLayout.BIOME_SPACING_X = 2000
 WorldMapLayout.ARENA_OFFSET_Z = 1200
+
+WorldMapLayout.EMERALD_MEADOW_PVE_CENTER = { 2000, 0, -3500 } :: Vec3
+WorldMapLayout.EMERALD_MEADOW_PVE_SIZE = { 1720, 4, 1580 } :: Vec3
+WorldMapLayout.EMERALD_MEADOW_CLIFF_RIM_SIZE = { 1800, 72, 1660 } :: Vec3
+WorldMapLayout.EMERALD_MEADOW_ARRIVAL_OFFSET = { 0, 0.3, -675 } :: Vec3
+WorldMapLayout.EMERALD_MEADOW_RETURN_OFFSET = { 0, 10, -718 } :: Vec3
+
+WorldMapLayout.FUTURE_10X_BIOME_SLOTS = {
+	EmeraldMeadow = { 2000, 0, -3500 },
+	FrostbiteCavern = { 5500, 0, -3500 },
+	MoltenCaldera = { 9000, 0, -3500 },
+} :: { [string]: Vec3 }
 
 WorldMapLayout.HUB_RADIUS = 236
 WorldMapLayout.HUB_FLOOR_SIZE = { 490, 4, 490 }
@@ -260,6 +277,85 @@ WorldMapLayout.MOB_SPAWN_OFFSETS = {
 	{ 58, 0, -68 },
 } :: { Vec3 }
 
+WorldMapLayout.EMERALD_MEADOW_RIVER_WAYPOINTS = {
+	{ -815, 0, -375 },
+	{ -625, 0, -295 },
+	{ -430, 0, -195 },
+	{ -225, 0, -90 },
+	{ -35, 0, -145 },
+	{ 185, 0, -75 },
+	{ 255, 0, 130 },
+	{ 125, 0, 325 },
+	{ 365, 0, 425 },
+	{ 610, 0, 445 },
+	{ 810, 0, 385 },
+} :: { Vec3 }
+
+WorldMapLayout.EMERALD_MEADOW_MOB_SPAWNS = {
+	-- District 1: North Gate & Arrival Commons (6 MossSlime)
+	{ offset = { -185, 0, -565 }, mobType = "MossSlime" },
+	{ offset = { -110, 0, -475 }, mobType = "MossSlime" },
+	{ offset = { 105, 0, -490 }, mobType = "MossSlime" },
+	{ offset = { 215, 0, -545 }, mobType = "MossSlime" },
+	{ offset = { -20, 0, -425 }, mobType = "MossSlime" },
+	{ offset = { 155, 0, -395 }, mobType = "MossSlime" },
+	-- District 2: Whispering Mill Hamlet (7 MossSlime, 3 BrambleBoar)
+	{ offset = { -335, 0, -475 }, mobType = "MossSlime" },
+	{ offset = { -520, 0, -495 }, mobType = "MossSlime" },
+	{ offset = { -690, 0, -255 }, mobType = "MossSlime" },
+	{ offset = { -310, 0, -315 }, mobType = "MossSlime" },
+	{ offset = { -570, 0, -25 }, mobType = "MossSlime" },
+	{ offset = { -715, 0, -30 }, mobType = "MossSlime" },
+	{ offset = { -425, 0, -25 }, mobType = "MossSlime" },
+	{ offset = { -675, 0, 110 }, mobType = "BrambleBoar" },
+	{ offset = { -525, 0, 130 }, mobType = "BrambleBoar" },
+	{ offset = { -360, 0, 125 }, mobType = "BrambleBoar" },
+	-- District 3: Central Emerald Confluence Glade (5 MossSlime, 5 BrambleBoar)
+	{ offset = { -220, 0, 45 }, mobType = "MossSlime" },
+	{ offset = { -145, 0, 145 }, mobType = "MossSlime" },
+	{ offset = { 125, 0, 115 }, mobType = "MossSlime" },
+	{ offset = { -95, 0, -285 }, mobType = "MossSlime" },
+	{ offset = { 85, 0, -280 }, mobType = "MossSlime" },
+	{ offset = { -265, 0, 170 }, mobType = "BrambleBoar" },
+	{ offset = { -65, 0, 235 }, mobType = "BrambleBoar" },
+	{ offset = { 75, 0, 195 }, mobType = "BrambleBoar" },
+	{ offset = { 145, 0, -210 }, mobType = "BrambleBoar" },
+	{ offset = { 15, 0, -345 }, mobType = "BrambleBoar" },
+	-- District 4: East Timber Watch & Sunlit Woods (4 MossSlime, 6 BrambleBoar)
+	{ offset = { 315, 0, -455 }, mobType = "MossSlime" },
+	{ offset = { 440, 0, -430 }, mobType = "MossSlime" },
+	{ offset = { 345, 0, -295 }, mobType = "MossSlime" },
+	{ offset = { 665, 0, -285 }, mobType = "MossSlime" },
+	{ offset = { 365, 0, -110 }, mobType = "BrambleBoar" },
+	{ offset = { 645, 0, -40 }, mobType = "BrambleBoar" },
+	{ offset = { 735, 0, 65 }, mobType = "BrambleBoar" },
+	{ offset = { 600, 0, 145 }, mobType = "BrambleBoar" },
+	{ offset = { 390, 0, 155 }, mobType = "BrambleBoar" },
+	{ offset = { 695, 0, 255 }, mobType = "BrambleBoar" },
+	-- District 5: Bramble Thicket & Mossy Ruins (3 MossSlime, 7 BrambleBoar)
+	{ offset = { -595, 0, 250 }, mobType = "MossSlime" },
+	{ offset = { -310, 0, 230 }, mobType = "MossSlime" },
+	{ offset = { -175, 0, 315 }, mobType = "MossSlime" },
+	{ offset = { -565, 0, 385 }, mobType = "BrambleBoar" },
+	{ offset = { -445, 0, 505 }, mobType = "BrambleBoar" },
+	{ offset = { -330, 0, 550 }, mobType = "BrambleBoar" },
+	{ offset = { -225, 0, 405 }, mobType = "BrambleBoar" },
+	{ offset = { -135, 0, 585 }, mobType = "BrambleBoar" },
+	{ offset = { -50, 0, 470 }, mobType = "BrambleBoar" },
+	{ offset = { -40, 0, 355 }, mobType = "BrambleBoar" },
+	-- District 6: South Shrine & Twin Watchtower (3 MossSlime, 7 BrambleBoar)
+	{ offset = { 485, 0, 285 }, mobType = "MossSlime" },
+	{ offset = { 345, 0, 210 }, mobType = "MossSlime" },
+	{ offset = { 265, 0, 295 }, mobType = "MossSlime" },
+	{ offset = { 585, 0, 315 }, mobType = "BrambleBoar" },
+	{ offset = { 115, 0, 480 }, mobType = "BrambleBoar" },
+	{ offset = { 240, 0, 465 }, mobType = "BrambleBoar" },
+	{ offset = { 510, 0, 525 }, mobType = "BrambleBoar" },
+	{ offset = { 140, 0, 625 }, mobType = "BrambleBoar" },
+	{ offset = { -65, 0, 645 }, mobType = "BrambleBoar" },
+	{ offset = { 315, 0, 645 }, mobType = "BrambleBoar" },
+} :: { MobSpawnSpec }
+
 WorldMapLayout.LANDMARK_OFFSETS = {
 	{ -96, 0, 56 },
 	{ 96, 0, 56 },
@@ -377,12 +473,53 @@ function WorldMapLayout.getBiomeSpatial(biomeId: string): BiomeSpatialSpec
 		error(`Unknown biomeId: {biomeId}`)
 	end
 	local x = order * WorldMapLayout.BIOME_SPACING_X
+	local pveCenter: Vec3 = if biomeId == "EmeraldMeadow"
+		then {
+			WorldMapLayout.EMERALD_MEADOW_PVE_CENTER[1],
+			WorldMapLayout.EMERALD_MEADOW_PVE_CENTER[2],
+			WorldMapLayout.EMERALD_MEADOW_PVE_CENTER[3],
+		}
+		else { x, 0, 0 }
 	return {
 		biomeId = biomeId,
 		order = order,
-		pveCenter = { x, 0, 0 },
+		pveCenter = pveCenter,
 		arenaCenter = { x, 0, WorldMapLayout.ARENA_OFFSET_Z },
 	}
+end
+
+function WorldMapLayout.getBiomePveSize(biomeId: string): Vec3
+	if biomeId == "EmeraldMeadow" then
+		return {
+			WorldMapLayout.EMERALD_MEADOW_PVE_SIZE[1],
+			WorldMapLayout.EMERALD_MEADOW_PVE_SIZE[2],
+			WorldMapLayout.EMERALD_MEADOW_PVE_SIZE[3],
+		}
+	end
+	return {
+		WorldMapLayout.BIOME_PVE_SIZE[1],
+		WorldMapLayout.BIOME_PVE_SIZE[2],
+		WorldMapLayout.BIOME_PVE_SIZE[3],
+	}
+end
+
+function WorldMapLayout.getBiomeMobSpawns(biomeId: string): { MobSpawnSpec }
+	if biomeId == "EmeraldMeadow" then
+		return WorldMapLayout.EMERALD_MEADOW_MOB_SPAWNS
+	end
+	local out: { MobSpawnSpec } = {}
+	for _, off in ipairs(WorldMapLayout.MOB_SPAWN_OFFSETS) do
+		table.insert(out, { offset = off, mobType = nil })
+	end
+	return out
+end
+
+function WorldMapLayout.getBiomeArrivalAndReturnOffsets(biomeId: string): (Vec3, Vec3)
+	if biomeId == "EmeraldMeadow" then
+		return WorldMapLayout.EMERALD_MEADOW_ARRIVAL_OFFSET,
+			WorldMapLayout.EMERALD_MEADOW_RETURN_OFFSET
+	end
+	return { 0, 0.25, 96 }, { 0, 5.2, 114 }
 end
 
 function WorldMapLayout.getRingWallTransforms(

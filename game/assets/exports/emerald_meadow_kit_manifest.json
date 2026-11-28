@@ -1,0 +1,648 @@
+{
+  "palette": {
+    "StoneBase": {
+      "srgb": [
+        96,
+        108,
+        100
+      ],
+      "rough": 0.84,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Cobblestone"
+    },
+    "StoneDark": {
+      "srgb": [
+        64,
+        74,
+        68
+      ],
+      "rough": 0.88,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Rock"
+    },
+    "StoneLight": {
+      "srgb": [
+        152,
+        160,
+        148
+      ],
+      "rough": 0.78,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Slate"
+    },
+    "CliffRock": {
+      "srgb": [
+        82,
+        96,
+        86
+      ],
+      "rough": 0.88,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Rock"
+    },
+    "Plaster": {
+      "srgb": [
+        228,
+        220,
+        198
+      ],
+      "rough": 0.82,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Plaster"
+    },
+    "Timber": {
+      "srgb": [
+        118,
+        76,
+        46
+      ],
+      "rough": 0.76,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Wood"
+    },
+    "TimberDark": {
+      "srgb": [
+        78,
+        50,
+        32
+      ],
+      "rough": 0.82,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "WoodPlanks"
+    },
+    "BarkOak": {
+      "srgb": [
+        86,
+        58,
+        38
+      ],
+      "rough": 0.88,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Wood"
+    },
+    "BarkBirch": {
+      "srgb": [
+        224,
+        218,
+        204
+      ],
+      "rough": 0.8,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Wood"
+    },
+    "RoofEmerald": {
+      "srgb": [
+        38,
+        118,
+        76
+      ],
+      "rough": 0.62,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Slate"
+    },
+    "RoofCrimson": {
+      "srgb": [
+        184,
+        58,
+        50
+      ],
+      "rough": 0.58,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Slate"
+    },
+    "LeafOak": {
+      "srgb": [
+        54,
+        152,
+        68
+      ],
+      "rough": 0.72,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "LeafOakHi": {
+      "srgb": [
+        84,
+        196,
+        88
+      ],
+      "rough": 0.68,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "LeafPine": {
+      "srgb": [
+        32,
+        98,
+        56
+      ],
+      "rough": 0.76,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "LeafBirch": {
+      "srgb": [
+        112,
+        208,
+        76
+      ],
+      "rough": 0.68,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "LeafElder": {
+      "srgb": [
+        36,
+        186,
+        108
+      ],
+      "rough": 0.55,
+      "metal": 0.0,
+      "em": 0.25,
+      "rbx_mat": "Grass"
+    },
+    "MossCap": {
+      "srgb": [
+        62,
+        148,
+        72
+      ],
+      "rough": 0.8,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "Grass"
+    },
+    "FlowerGold": {
+      "srgb": [
+        248,
+        206,
+        58
+      ],
+      "rough": 0.45,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "FlowerCoral": {
+      "srgb": [
+        246,
+        108,
+        134
+      ],
+      "rough": 0.45,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "IronMetal": {
+      "srgb": [
+        68,
+        74,
+        82
+      ],
+      "rough": 0.34,
+      "metal": 0.88,
+      "em": 0.0,
+      "rbx_mat": "Metal"
+    },
+    "GoldTrim": {
+      "srgb": [
+        236,
+        190,
+        56
+      ],
+      "rough": 0.28,
+      "metal": 0.88,
+      "em": 0.0,
+      "rbx_mat": "Metal"
+    },
+    "DoorVoid": {
+      "srgb": [
+        26,
+        22,
+        22
+      ],
+      "rough": 0.92,
+      "metal": 0.0,
+      "em": 0.0,
+      "rbx_mat": "SmoothPlastic"
+    },
+    "WarmGlow": {
+      "srgb": [
+        255,
+        198,
+        92
+      ],
+      "rough": 0.16,
+      "metal": 0.0,
+      "em": 2.3,
+      "rbx_mat": "Neon"
+    },
+    "JadeGlow": {
+      "srgb": [
+        34,
+        232,
+        122
+      ],
+      "rough": 0.14,
+      "metal": 0.0,
+      "em": 2.2,
+      "rbx_mat": "Neon"
+    }
+  },
+  "assets": {
+    "EM_OakTree_Hero": {
+      "glb": "EM_OakTree_Hero.glb",
+      "tris": 852,
+      "size_studs": [
+        20.42,
+        26.52,
+        17.44
+      ],
+      "blender_dims": [
+        20.42,
+        17.44,
+        26.52
+      ],
+      "submeshes": [
+        "EM_OakTree_Hero__BarkOak",
+        "EM_OakTree_Hero__LeafOak",
+        "EM_OakTree_Hero__LeafOakHi"
+      ]
+    },
+    "EM_PineTree_Tall": {
+      "glb": "EM_PineTree_Tall.glb",
+      "tris": 134,
+      "size_studs": [
+        15.99,
+        30.4,
+        15.59
+      ],
+      "blender_dims": [
+        15.99,
+        15.59,
+        30.4
+      ],
+      "submeshes": [
+        "EM_PineTree_Tall__BarkOak",
+        "EM_PineTree_Tall__LeafPine",
+        "EM_PineTree_Tall__LeafOak"
+      ]
+    },
+    "EM_BirchTree_Slender": {
+      "glb": "EM_BirchTree_Slender.glb",
+      "tris": 504,
+      "size_studs": [
+        13.13,
+        22.29,
+        10.46
+      ],
+      "blender_dims": [
+        13.13,
+        10.46,
+        22.29
+      ],
+      "submeshes": [
+        "EM_BirchTree_Slender__BarkBirch",
+        "EM_BirchTree_Slender__StoneDark",
+        "EM_BirchTree_Slender__LeafBirch",
+        "EM_BirchTree_Slender__LeafOakHi"
+      ]
+    },
+    "EM_ElderOak_Landmark": {
+      "glb": "EM_ElderOak_Landmark.glb",
+      "tris": 932,
+      "size_studs": [
+        31.86,
+        37.09,
+        27.44
+      ],
+      "blender_dims": [
+        31.86,
+        27.44,
+        37.09
+      ],
+      "submeshes": [
+        "EM_ElderOak_Landmark__BarkOak",
+        "EM_ElderOak_Landmark__LeafOak",
+        "EM_ElderOak_Landmark__LeafElder",
+        "EM_ElderOak_Landmark__LeafOakHi",
+        "EM_ElderOak_Landmark__JadeGlow"
+      ]
+    },
+    "EM_MeadowCottage_A": {
+      "glb": "EM_MeadowCottage_A.glb",
+      "tris": 976,
+      "size_studs": [
+        29.4,
+        19.85,
+        24.5
+      ],
+      "blender_dims": [
+        29.4,
+        24.5,
+        19.85
+      ],
+      "submeshes": [
+        "EM_MeadowCottage_A__StoneBase",
+        "EM_MeadowCottage_A__Plaster",
+        "EM_MeadowCottage_A__TimberDark",
+        "EM_MeadowCottage_A__RoofEmerald",
+        "EM_MeadowCottage_A__Timber",
+        "EM_MeadowCottage_A__StoneDark",
+        "EM_MeadowCottage_A__StoneLight",
+        "EM_MeadowCottage_A__DoorVoid",
+        "EM_MeadowCottage_A__WarmGlow"
+      ]
+    },
+    "EM_MeadowWatermill_B": {
+      "glb": "EM_MeadowWatermill_B.glb",
+      "tris": 1268,
+      "size_studs": [
+        31.8,
+        19.65,
+        26.0
+      ],
+      "blender_dims": [
+        31.8,
+        26.0,
+        19.65
+      ],
+      "submeshes": [
+        "EM_MeadowWatermill_B__StoneBase",
+        "EM_MeadowWatermill_B__Plaster",
+        "EM_MeadowWatermill_B__TimberDark",
+        "EM_MeadowWatermill_B__RoofEmerald",
+        "EM_MeadowWatermill_B__Timber",
+        "EM_MeadowWatermill_B__DoorVoid",
+        "EM_MeadowWatermill_B__StoneLight",
+        "EM_MeadowWatermill_B__WarmGlow",
+        "EM_MeadowWatermill_B__IronMetal"
+      ]
+    },
+    "EM_Watchtower": {
+      "glb": "EM_Watchtower.glb",
+      "tris": 692,
+      "size_studs": [
+        19.52,
+        47.8,
+        19.52
+      ],
+      "blender_dims": [
+        19.52,
+        19.52,
+        47.8
+      ],
+      "submeshes": [
+        "EM_Watchtower__StoneDark",
+        "EM_Watchtower__StoneBase",
+        "EM_Watchtower__StoneLight",
+        "EM_Watchtower__DoorVoid",
+        "EM_Watchtower__TimberDark",
+        "EM_Watchtower__Timber",
+        "EM_Watchtower__WarmGlow",
+        "EM_Watchtower__RoofCrimson",
+        "EM_Watchtower__GoldTrim"
+      ]
+    },
+    "EM_StoneBridge_Large": {
+      "glb": "EM_StoneBridge_Large.glb",
+      "tris": 1804,
+      "size_studs": [
+        23.2,
+        11.8,
+        75.17
+      ],
+      "blender_dims": [
+        23.2,
+        75.17,
+        11.8
+      ],
+      "submeshes": [
+        "EM_StoneBridge_Large__StoneLight",
+        "EM_StoneBridge_Large__StoneBase",
+        "EM_StoneBridge_Large__StoneDark",
+        "EM_StoneBridge_Large__WarmGlow"
+      ]
+    },
+    "EM_WoodFootbridge_Small": {
+      "glb": "EM_WoodFootbridge_Small.glb",
+      "tris": 1892,
+      "size_studs": [
+        15.9,
+        8.8,
+        66.66
+      ],
+      "blender_dims": [
+        15.9,
+        66.66,
+        8.8
+      ],
+      "submeshes": [
+        "EM_WoodFootbridge_Small__Timber",
+        "EM_WoodFootbridge_Small__TimberDark",
+        "EM_WoodFootbridge_Small__WarmGlow"
+      ]
+    },
+    "EM_AncientRuinArch": {
+      "glb": "EM_AncientRuinArch.glb",
+      "tris": 488,
+      "size_studs": [
+        23.0,
+        20.84,
+        5.83
+      ],
+      "blender_dims": [
+        23.0,
+        5.83,
+        20.84
+      ],
+      "submeshes": [
+        "EM_AncientRuinArch__StoneDark",
+        "EM_AncientRuinArch__StoneBase",
+        "EM_AncientRuinArch__StoneLight",
+        "EM_AncientRuinArch__MossCap",
+        "EM_AncientRuinArch__JadeGlow"
+      ]
+    },
+    "EM_AncientRuinPillar": {
+      "glb": "EM_AncientRuinPillar.glb",
+      "tris": 256,
+      "size_studs": [
+        6.63,
+        17.45,
+        6.51
+      ],
+      "blender_dims": [
+        6.63,
+        6.51,
+        17.45
+      ],
+      "submeshes": [
+        "EM_AncientRuinPillar__StoneDark",
+        "EM_AncientRuinPillar__StoneBase",
+        "EM_AncientRuinPillar__StoneLight",
+        "EM_AncientRuinPillar__MossCap",
+        "EM_AncientRuinPillar__JadeGlow"
+      ]
+    },
+    "EM_ReturnPortalArch": {
+      "glb": "EM_ReturnPortalArch.glb",
+      "tris": 368,
+      "size_studs": [
+        24.4,
+        27.3,
+        10.0
+      ],
+      "blender_dims": [
+        24.4,
+        10.0,
+        27.3
+      ],
+      "submeshes": [
+        "EM_ReturnPortalArch__StoneDark",
+        "EM_ReturnPortalArch__StoneBase",
+        "EM_ReturnPortalArch__GoldTrim",
+        "EM_ReturnPortalArch__JadeGlow"
+      ]
+    },
+    "EM_MossbackShrine": {
+      "glb": "EM_MossbackShrine.glb",
+      "tris": 532,
+      "size_studs": [
+        34.0,
+        28.2,
+        24.0
+      ],
+      "blender_dims": [
+        34.0,
+        24.0,
+        28.2
+      ],
+      "submeshes": [
+        "EM_MossbackShrine__StoneDark",
+        "EM_MossbackShrine__StoneBase",
+        "EM_MossbackShrine__JadeGlow",
+        "EM_MossbackShrine__GoldTrim",
+        "EM_MossbackShrine__StoneLight",
+        "EM_MossbackShrine__WarmGlow",
+        "EM_MossbackShrine__MossCap"
+      ]
+    },
+    "EM_PerimeterCliff_Segment": {
+      "glb": "EM_PerimeterCliff_Segment.glb",
+      "tris": 264,
+      "size_studs": [
+        132.51,
+        56.2,
+        50.78
+      ],
+      "blender_dims": [
+        132.51,
+        50.78,
+        56.2
+      ],
+      "submeshes": [
+        "EM_PerimeterCliff_Segment__CliffRock",
+        "EM_PerimeterCliff_Segment__StoneDark",
+        "EM_PerimeterCliff_Segment__MossCap",
+        "EM_PerimeterCliff_Segment__LeafOak"
+      ]
+    },
+    "EM_MossBoulder_Cluster": {
+      "glb": "EM_MossBoulder_Cluster.glb",
+      "tris": 260,
+      "size_studs": [
+        15.24,
+        8.01,
+        11.01
+      ],
+      "blender_dims": [
+        15.24,
+        11.01,
+        8.01
+      ],
+      "submeshes": [
+        "EM_MossBoulder_Cluster__CliffRock",
+        "EM_MossBoulder_Cluster__StoneDark",
+        "EM_MossBoulder_Cluster__StoneBase",
+        "EM_MossBoulder_Cluster__MossCap"
+      ]
+    },
+    "EM_EmeraldCrystal_Outcrop": {
+      "glb": "EM_EmeraldCrystal_Outcrop.glb",
+      "tris": 156,
+      "size_studs": [
+        9.79,
+        10.67,
+        9.21
+      ],
+      "blender_dims": [
+        9.79,
+        9.21,
+        10.67
+      ],
+      "submeshes": [
+        "EM_EmeraldCrystal_Outcrop__StoneDark",
+        "EM_EmeraldCrystal_Outcrop__JadeGlow"
+      ]
+    },
+    "EM_FoliageCluster": {
+      "glb": "EM_FoliageCluster.glb",
+      "tris": 200,
+      "size_studs": [
+        7.68,
+        3.34,
+        5.51
+      ],
+      "blender_dims": [
+        7.68,
+        5.51,
+        3.34
+      ],
+      "submeshes": [
+        "EM_FoliageCluster__LeafOak",
+        "EM_FoliageCluster__LeafBirch",
+        "EM_FoliageCluster__LeafOakHi",
+        "EM_FoliageCluster__FlowerGold",
+        "EM_FoliageCluster__FlowerCoral"
+      ]
+    },
+    "EM_LanternPost": {
+      "glb": "EM_LanternPost.glb",
+      "tris": 264,
+      "size_studs": [
+        2.0,
+        10.6,
+        4.2
+      ],
+      "blender_dims": [
+        2.0,
+        4.2,
+        10.6
+      ],
+      "submeshes": [
+        "EM_LanternPost__StoneBase",
+        "EM_LanternPost__TimberDark",
+        "EM_LanternPost__Timber",
+        "EM_LanternPost__IronMetal",
+        "EM_LanternPost__WarmGlow"
+      ]
+    }
+  }
+}

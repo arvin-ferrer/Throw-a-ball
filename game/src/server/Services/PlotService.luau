@@ -369,6 +369,15 @@ function PlotService.teleportCharacter(player: Player, targetCF: CFrame)
 	end
 	-- Always land strictly upright (zero pitch/roll even if the pad is a rotated Cylinder!)
 	local pos = targetCF.Position + Vector3.new(0, 4.2, 0)
+	-- Pre-stream distant target regions (e.g. 10x Emerald Meadow at Z = -3500) before pivoting
+	if workspace.StreamingEnabled then
+		pcall(function()
+			player:RequestStreamAroundAsync(pos, 4)
+		end)
+	end
+	if not player.Parent or player.Character ~= char then
+		return
+	end
 	local flatLook = Vector3.new(targetCF.LookVector.X, 0, targetCF.LookVector.Z)
 	local uprightCF = if flatLook.Magnitude > 0.1
 		then CFrame.lookAt(pos, pos + flatLook.Unit)
